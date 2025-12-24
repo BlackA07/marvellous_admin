@@ -31,7 +31,7 @@ class _MetallicTextFieldState extends State<MetallicTextField>
     super.initState();
     _snakeController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 2),
+      duration: const Duration(seconds: 1),
     );
 
     _focusNode.addListener(() {

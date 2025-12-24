@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:marvellous_admin/features/auth/presentation/signup_screen.dart';
 //import 'firebase_options.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/presentation/login_screen.dart';
@@ -29,7 +30,7 @@ class MarvellousAdminApp extends StatelessWidget {
       title: 'Marvellous Admin',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme, // Hamari Dark Metal Theme
-      home: const LoginScreen(),
+      home: const SignUpScreen(),
     );
   }
 }

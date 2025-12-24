@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../theme/pallete.dart';
+import '../theme/pallete.dart'; // Apna path check karlena
 
 class TrapezoidButton extends StatefulWidget {
   final VoidCallback onTap;
   final bool hasGlowingAura;
   final double width;
   final double height;
+  final String imagePath; // <-- NEW PARAMETER
 
   const TrapezoidButton({
     super.key,
@@ -14,6 +15,7 @@ class TrapezoidButton extends StatefulWidget {
     this.hasGlowingAura = true,
     this.width = double.infinity,
     this.height = 100,
+    this.imagePath = 'assets/images/button.png', // Default image
   });
 
   @override
@@ -30,7 +32,7 @@ class _TrapezoidButtonState extends State<TrapezoidButton>
     super.initState();
     _pulseController = AnimationController(
       vsync: this,
-      //duration: const Duration(milliseconds: 200),
+      duration: const Duration(milliseconds: 200),
     )..repeat(reverse: true);
   }
 
@@ -56,7 +58,6 @@ class _TrapezoidButtonState extends State<TrapezoidButton>
         ? 300
         : widget.width;
 
-    // Total Height ko tight kar diya
     final double totalHeight = widget.height + 6;
 
     return Center(
@@ -70,44 +71,31 @@ class _TrapezoidButtonState extends State<TrapezoidButton>
           child: Stack(
             alignment: Alignment.bottomCenter,
             children: [
-              // --- LAYER 1: BASE (Moves with button press) ---
+              // --- LAYER 1: BASE GLOW ---
               AnimatedBuilder(
                 animation: _pulseController,
                 builder: (context, child) {
-                  // Container ko AnimatedContainer bana diya taake ye bhi press ho
                   return AnimatedContainer(
-                    duration: const Duration(
-                      milliseconds: 50,
-                    ), // Speed matching button
+                    duration: const Duration(milliseconds: 50),
                     curve: Curves.easeInOut,
                     width: activeWidth - 40,
                     height: 75,
-
-                    // --- POSITION CONTROL & PRESS LOGIC ---
                     margin: EdgeInsets.only(
-                      // Jab press ho to top margin barhao (neeche dhakelo)
                       top: 15.0 + (_isPressed ? 10.0 : 0.0),
-                      // Bottom margin kam karo taake layout na toote
                       bottom: 22.0 - (_isPressed ? 10.0 : 0.0),
                       left: 3,
                       right: 3,
                     ),
-
                     decoration: BoxDecoration(
-                      borderRadius: const BorderRadius.only(
-                        bottomLeft: Radius.circular(8),
-                        topLeft: Radius.circular(8),
-                        topRight: Radius.circular(8),
-                        bottomRight: Radius.circular(8),
-                      ),
-                      // color: const Color.fromARGB(255, 87, 86, 86),
+                      borderRadius: BorderRadius.circular(8),
                       boxShadow: [
-                        // --- EQUAL GLOW ON 4 SIDES ---
                         if (widget.hasGlowingAura)
                           BoxShadow(
                             color: Pallete.neonBlue.withOpacity(
                               0.6 + (0.4 * _pulseController.value),
                             ),
+                            blurRadius: 15, // Thora zyada glow
+                            spreadRadius: 2,
                             offset: const Offset(0, 0),
                           ),
                       ],
@@ -116,34 +104,18 @@ class _TrapezoidButtonState extends State<TrapezoidButton>
                 },
               ),
 
-              // --- LAYER 2: IMAGE BUTTON (Press Effect) ---
+              // --- LAYER 2: IMAGE BUTTON ---
               AnimatedPositioned(
                 duration: const Duration(milliseconds: 60),
                 curve: Curves.easeInOut,
-                // Jab press ho to image neeche aaye
                 top: _isPressed ? 12 : 0,
                 bottom: _isPressed ? 0 : 2,
                 child: SizedBox(
                   width: activeWidth,
                   height: widget.height,
-                  child: Stack(
-                    children: [
-                      // 1. The Image itself
-                      Container(
-                        width: activeWidth,
-                        height: widget.height,
-                        decoration: const BoxDecoration(
-                          // Shadows...
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(0),
-                          child: Image.asset(
-                            'assets/images/button.png',
-                            fit: BoxFit.fill,
-                          ),
-                        ),
-                      ),
-                    ],
+                  child: Image.asset(
+                    widget.imagePath, // <-- Yahan ab dynamic image ayegi
+                    fit: BoxFit.fill,
                   ),
                 ),
               ),
