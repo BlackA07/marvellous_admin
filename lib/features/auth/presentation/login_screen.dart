@@ -148,6 +148,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     hintText: "Password",
                     icon: Icons.lock,
                     isPassword: true,
+                    height: 65,
+                    width: 700,
                   ),
 
                   const SizedBox(height: 25),
