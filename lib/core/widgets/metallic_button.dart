@@ -70,34 +70,30 @@ class _MetallicButtonState extends State<MetallicButton>
   @override
   Widget build(BuildContext context) {
     // --- FIX: LOGIC FOR GRADIENT STOPS ---
-    // Agar custom colors hain, to stops null rakho (taake crash na ho),
-    // Agar default colors hain, to unke hisaab se stops lagao.
-
     Gradient faceGradient;
 
     if (!widget.isSelected) {
       faceGradient = const LinearGradient(
-        colors: [Color(0xFF404040), Color(0xFF202020)],
+        colors: [Color.fromARGB(255, 172, 170, 170), Color(0xFF202020)],
       );
     } else if (widget.customGradientColors != null) {
-      // Custom Colors provided (No fixed stops to avoid length mismatch error)
+      // Custom Colors provided
       faceGradient = LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
         colors: widget.customGradientColors!,
       );
     } else {
-      // Default Silver Theme (Fixed stops match the 4 colors)
+      // --- UPDATED DEFAULT THEME ---
+      // Top Half White, Bottom Half Light Grey
       faceGradient = const LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
         colors: [
-          Colors.white, // Highlight
-          Color(0xFFD0D5DD), // Light Silver
-          Color(0xFF98A2B3), // Darker Silver
-          Color(0xFF667085), // Shadow Base
+          Colors.white, // Top: Pure White
+          Color(0xFFC0C0C0), // Bottom: Light Grey (Silverish)
         ],
-        stops: [0.0, 0.4, 0.8, 1.0],
+        // Smooth transition
       );
     }
 
@@ -120,11 +116,19 @@ class _MetallicButtonState extends State<MetallicButton>
                 gradient: const LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [Color(0xFFE0E0E0), Color(0xFF808080)],
+                  colors: [
+                    Color.fromARGB(255, 255, 255, 255),
+                    Color.fromARGB(255, 232, 227, 227),
+                  ],
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.6),
+                    color: const Color.fromARGB(
+                      255,
+                      132,
+                      128,
+                      128,
+                    ).withOpacity(0.6),
                     offset: const Offset(0, 8),
                     blurRadius: 10,
                   ),
@@ -155,7 +159,7 @@ class _MetallicButtonState extends State<MetallicButton>
               margin: const EdgeInsets.all(4),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),
-                color: const Color(0xFF151515),
+                color: const Color.fromARGB(255, 62, 61, 61),
                 boxShadow: const [
                   BoxShadow(
                     color: Colors.black,
@@ -167,7 +171,7 @@ class _MetallicButtonState extends State<MetallicButton>
               ),
             ),
 
-            // Layer 4: Face
+            // Layer 4: Face (UPDATED SHAPE & COLOR)
             AnimatedContainer(
               duration: const Duration(milliseconds: 60),
               curve: Curves.easeInOut,
@@ -178,7 +182,8 @@ class _MetallicButtonState extends State<MetallicButton>
                 right: 6,
               ),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(10),
+                // --- UPDATE: More Circular Borders ---
+                borderRadius: BorderRadius.circular(30),
                 gradient: faceGradient,
                 boxShadow: _isPressed
                     ? []
@@ -206,10 +211,9 @@ class _MetallicButtonState extends State<MetallicButton>
                 style: GoogleFonts.comicNeue(
                   fontSize: 18,
                   fontWeight: FontWeight.w900,
-                  // Agar custom color diya he to wo use karo
-                  color:
-                      widget.textColor ??
-                      (_isPressed ? Pallete.neonBlue : Colors.black87),
+                  // --- UPDATE: Black Default, Neon on Press ---
+                  color: Colors.black87,
+
                   letterSpacing: 1.5,
                 ),
               ),

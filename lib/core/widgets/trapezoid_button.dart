@@ -28,12 +28,10 @@ class _TrapezoidButtonState extends State<TrapezoidButton>
   @override
   void initState() {
     super.initState();
-    // --- NEON PULSE ANIMATION ---
-    // Ye controller light ko chamkane (pulse) ke liye hai
     _pulseController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1500), // 1.5 seconds speed
-    )..repeat(reverse: true); // Loop mein chalega (bright -> dim -> bright)
+      //duration: const Duration(milliseconds: 200),
+    )..repeat(reverse: true);
   }
 
   @override
@@ -58,7 +56,7 @@ class _TrapezoidButtonState extends State<TrapezoidButton>
         ? 300
         : widget.width;
 
-    // Total height slightly barha di taake depth adjust ho sake
+    // Total Height ko tight kar diya
     final double totalHeight = widget.height + 6;
 
     return Center(
@@ -72,36 +70,45 @@ class _TrapezoidButtonState extends State<TrapezoidButton>
           child: Stack(
             alignment: Alignment.bottomCenter,
             children: [
-              // --- LAYER 1: ATTACHED BASE & PULSING NEON ---
+              // --- LAYER 1: BASE (Moves with button press) ---
               AnimatedBuilder(
                 animation: _pulseController,
                 builder: (context, child) {
-                  return Container(
-                    // Width thori kam rakhi hai taake trapezoid shape ke neeche fit ho
-                    width: activeWidth - 32,
-                    height: 21, // Height adjust ki taake button se jud jaye
-                    margin: const EdgeInsets.only(bottom: 0), // Margin hataya
+                  // Container ko AnimatedContainer bana diya taake ye bhi press ho
+                  return AnimatedContainer(
+                    duration: const Duration(
+                      milliseconds: 50,
+                    ), // Speed matching button
+                    curve: Curves.easeInOut,
+                    width: activeWidth - 40,
+                    height: 75,
+
+                    // --- POSITION CONTROL & PRESS LOGIC ---
+                    margin: EdgeInsets.only(
+                      // Jab press ho to top margin barhao (neeche dhakelo)
+                      top: 15.0 + (_isPressed ? 10.0 : 0.0),
+                      // Bottom margin kam karo taake layout na toote
+                      bottom: 22.0 - (_isPressed ? 10.0 : 0.0),
+                      left: 3,
+                      right: 3,
+                    ),
+
                     decoration: BoxDecoration(
                       borderRadius: const BorderRadius.only(
-                        bottomLeft: Radius.circular(12),
-                        bottomRight: Radius.circular(12),
+                        bottomLeft: Radius.circular(8),
+                        topLeft: Radius.circular(8),
+                        topRight: Radius.circular(8),
+                        bottomRight: Radius.circular(8),
                       ),
-                      // Dark Metallic Color (Base Thickness)
-                      color: const Color(0xFF2C2C2C),
+                      // color: const Color.fromARGB(255, 87, 86, 86),
                       boxShadow: [
-                        // --- CHAMAKTI HUI NEON LIGHT ---
+                        // --- EQUAL GLOW ON 4 SIDES ---
                         if (widget.hasGlowingAura)
                           BoxShadow(
                             color: Pallete.neonBlue.withOpacity(
                               0.6 + (0.4 * _pulseController.value),
-                            ), // Opacity change hogi
-                            blurRadius:
-                                10 +
-                                (15 * _pulseController.value), // Glow phaile ga
-                            spreadRadius:
-                                1 +
-                                (3 * _pulseController.value), // Light bari hogi
-                            offset: const Offset(0, 4),
+                            ),
+                            offset: const Offset(0, 0),
                           ),
                       ],
                     ),
@@ -109,31 +116,34 @@ class _TrapezoidButtonState extends State<TrapezoidButton>
                 },
               ),
 
-              // --- LAYER 2: THE IMAGE BUTTON ---
+              // --- LAYER 2: IMAGE BUTTON (Press Effect) ---
               AnimatedPositioned(
                 duration: const Duration(milliseconds: 60),
                 curve: Curves.easeInOut,
-                // Movement adjust ki taake gap na aaye
-                top: _isPressed ? 6 : 0,
-                bottom: _isPressed ? 0 : 6,
-                child: Container(
+                // Jab press ho to image neeche aaye
+                top: _isPressed ? 12 : 0,
+                bottom: _isPressed ? 0 : 2,
+                child: SizedBox(
                   width: activeWidth,
                   height: widget.height,
-                  decoration: BoxDecoration(
-                    // Image ka apna Shadow (Realistic contact shadow)
-                    boxShadow: _isPressed
-                        ? []
-                        : [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.5),
-                              blurRadius: 4,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                  ),
-                  child: Image.asset(
-                    'assets/images/button.png',
-                    fit: BoxFit.fill,
+                  child: Stack(
+                    children: [
+                      // 1. The Image itself
+                      Container(
+                        width: activeWidth,
+                        height: widget.height,
+                        decoration: const BoxDecoration(
+                          // Shadows...
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(0),
+                          child: Image.asset(
+                            'assets/images/button.png',
+                            fit: BoxFit.fill,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
