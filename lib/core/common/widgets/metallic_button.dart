@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../theme/pallete.dart';
+import 'package:marvellous_admin/core/theme/pallete.dart';
 
 class MetallicButton extends StatefulWidget {
   final String text;

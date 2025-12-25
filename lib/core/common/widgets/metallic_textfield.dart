@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../theme/pallete.dart'; // Make sure ye path sahi ho aapke project men
+import 'package:marvellous_admin/core/theme/pallete.dart';
 
 class MetallicTextField extends StatefulWidget {
   final String hintText;
