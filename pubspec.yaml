@@ -45,6 +45,7 @@ dependencies:
   flutter_animate: ^4.5.2
   fl_chart: ^1.1.0
   data_table_2: ^2.7.2
+  country_code_picker: ^3.4.1
 
 dev_dependencies:
   flutter_test:
@@ -72,6 +73,7 @@ flutter:
     - assets/images/logo.png
     - assets/images/background.jpeg
     - assets/images/button.png
+    - assets/images/signupbutton.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

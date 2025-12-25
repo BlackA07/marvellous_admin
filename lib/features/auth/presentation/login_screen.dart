@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:marvellous_admin/features/auth/presentation/signup_screen.dart';
 import '../../../../core/theme/pallete.dart';
 import '../../../../core/widgets/metallic_button.dart';
 import '../../../../core/widgets/metallic_textfield.dart';
@@ -191,7 +192,12 @@ class _LoginScreenState extends State<LoginScreen> {
                     ],
                     textColor: Colors.white70,
                     onTap: () {
-                      print("Create Account Pressed");
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const SignUpScreen(),
+                        ),
+                      );
                     },
                   ),
                 ],
