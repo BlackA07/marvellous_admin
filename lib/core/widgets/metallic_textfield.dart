@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../theme/pallete.dart';
+import '../theme/pallete.dart'; // Make sure ye path sahi ho aapke project men
 
 class MetallicTextField extends StatefulWidget {
   final String hintText;
   final IconData icon;
   final bool isPassword;
   final TextEditingController? controller;
+  final double? width; // Added width
+  final double? height; // Added height
 
   const MetallicTextField({
     super.key,
@@ -14,6 +16,8 @@ class MetallicTextField extends StatefulWidget {
     required this.icon,
     this.isPassword = false,
     this.controller,
+    this.width, // Constructor men add kiya
+    this.height, // Constructor men add kiya
   });
 
   @override
@@ -58,19 +62,21 @@ class _MetallicTextFieldState extends State<MetallicTextField>
   Widget build(BuildContext context) {
     // Gradient Setup
     const faceGradient = LinearGradient(
-      begin: Alignment.topCenter,
-      end: Alignment.bottomCenter,
+      begin: Alignment.topRight,
+      end: Alignment.bottomLeft,
       colors: [
         Colors.white, // Top Highlight
-        Color(0xFFD0D5DD), // Light Silver
+        Color.fromARGB(255, 218, 221, 227), // Light Silver
         Color(0xFF98A2B3), // Darker Silver
         Color(0xFF667085), // Shadow Base
       ],
-      stops: [0.0, 0.4, 0.8, 1.0],
+      stops: [0.0, 0.2, 0.6, 1.0],
     );
 
     return Container(
-      height: 65,
+      // Yahan changes kiye hain:
+      width: widget.width,
+      height: widget.height ?? 65, // Agar height pass na ho to default 65
       margin: const EdgeInsets.symmetric(vertical: 10),
       child: Stack(
         alignment: Alignment.center,
@@ -80,9 +86,13 @@ class _MetallicTextFieldState extends State<MetallicTextField>
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
               gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFFE0E0E0), Color(0xFF808080)],
+                begin: Alignment.topRight,
+                end: Alignment.bottomLeft,
+                colors: [
+                  Color.fromARGB(255, 93, 91, 91),
+                  Color.fromARGB(255, 84, 81, 81),
+                  Color.fromARGB(0, 216, 211, 211),
+                ],
               ),
               boxShadow: [
                 BoxShadow(
