@@ -1,14 +1,14 @@
 import 'package:country_code_picker/country_code_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:marvellous_admin/core/common/widgets/metallic_button.dart';
+import 'package:marvellous_admin/core/common/widgets/metallic_textfield.dart';
+import 'package:marvellous_admin/core/common/widgets/trapezoid_button.dart';
 import 'package:marvellous_admin/features/auth/controller/signup_controller.dart';
 import 'package:marvellous_admin/features/auth/presentation/login_screen.dart';
 
 // Imports check karlena apne project k hisab se
 import '../../../../core/theme/pallete.dart';
-import '../../../../core/widgets/metallic_button.dart';
-import '../../../../core/widgets/metallic_textfield.dart';
-import '../../../../core/widgets/trapezoid_button.dart';
 // Controller import
 
 class SignUpScreen extends StatefulWidget {
@@ -237,7 +237,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                       alignLeft:
                                           true, // Left align taake arrow right pe aaye
                                       padding: const EdgeInsets.only(
-                                        left: 4,
+                                        left: 1,
                                       ), // Padding adjust
                                       // Display Text Style (Button k upar)
                                       textStyle: GoogleFonts.comicNeue(

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../theme/pallete.dart'; // Apna path check karlena
+import 'package:marvellous_admin/core/theme/pallete.dart';
 
 class TrapezoidButton extends StatefulWidget {
   final VoidCallback onTap;

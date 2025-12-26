@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:marvellous_admin/core/common/widgets/metallic_button.dart';
+import 'package:marvellous_admin/core/common/widgets/metallic_textfield.dart';
+import 'package:marvellous_admin/core/common/widgets/trapezoid_button.dart';
 import 'package:marvellous_admin/features/auth/presentation/signup_screen.dart';
 import '../../../../core/theme/pallete.dart';
-import '../../../../core/widgets/metallic_button.dart';
-import '../../../../core/widgets/metallic_textfield.dart';
-import '../../../../core/widgets/trapezoid_button.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
