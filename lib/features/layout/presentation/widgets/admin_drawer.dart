@@ -1,41 +1,71 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:marvellous_admin/features/dashboard/presentation/screens/dashboard_screen.dart';
 
 import '../../../../core/theme/pallete.dart';
 import '../../controller/layout_controller.dart';
-import '../../models/layout_model.dart';
 
-class AdminDrawer extends ConsumerWidget {
+// Screens
+import '../../../products/presentation/screens/products_home_screen.dart';
+import '../../../products/presentation/screens/add_product_screen.dart';
+
+class AdminMenuItem {
+  final String title;
+  final IconData icon;
+  final bool hasSubmenu;
+  bool isExpanded;
+  final List<String> subItems;
+
+  AdminMenuItem({
+    required this.title,
+    required this.icon,
+    this.hasSubmenu = false,
+    this.isExpanded = false,
+    this.subItems = const [],
+  });
+}
+
+class AdminDrawer extends ConsumerStatefulWidget {
   const AdminDrawer({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final selectedIndex = ref.watch(pageIndexProvider);
+  ConsumerState<AdminDrawer> createState() => _AdminDrawerState();
+}
 
-    // Items definition
-    final List<AdminMenuItem> menuItems = [
-      const AdminMenuItem(title: "Dashboard", icon: Icons.dashboard_outlined),
-      const AdminMenuItem(
-        title: "Products",
-        icon: Icons.inventory_2_outlined,
-        hasSubmenu: true,
-      ),
-      const AdminMenuItem(title: "Customers", icon: Icons.people_outline),
-      const AdminMenuItem(title: "Orders", icon: Icons.shopping_bag_outlined),
-      const AdminMenuItem(
-        title: "MLM Network",
-        icon: Icons.hub_outlined,
-        hasSubmenu: true,
-      ),
-      const AdminMenuItem(title: "Staff", icon: Icons.badge_outlined),
-      const AdminMenuItem(
-        title: "Finance",
-        icon: Icons.monetization_on_outlined,
-        hasSubmenu: true,
-      ),
-      const AdminMenuItem(title: "Reports", icon: Icons.bar_chart_outlined),
-    ];
+class _AdminDrawerState extends ConsumerState<AdminDrawer> {
+  final List<AdminMenuItem> menuItems = [
+    AdminMenuItem(title: "Dashboard", icon: Icons.dashboard_outlined),
+    AdminMenuItem(
+      title: "Products",
+      icon: Icons.inventory_2_outlined,
+      hasSubmenu: true,
+      subItems: ["All Products", "Add Product", "Categories", "Vendors"],
+    ),
+    // ... baaki items same rahenge
+    AdminMenuItem(title: "Customers", icon: Icons.people_outline),
+    AdminMenuItem(title: "Orders", icon: Icons.shopping_bag_outlined),
+    AdminMenuItem(
+      title: "MLM Network",
+      icon: Icons.hub_outlined,
+      hasSubmenu: true,
+      subItems: ["Tree View", "Commissions"],
+    ),
+    AdminMenuItem(title: "Staff", icon: Icons.badge_outlined),
+    AdminMenuItem(
+      title: "Finance",
+      icon: Icons.monetization_on_outlined,
+      hasSubmenu: true,
+      subItems: ["Earnings", "Payouts"],
+    ),
+    AdminMenuItem(title: "Reports", icon: Icons.bar_chart_outlined),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final activeMain = ref.watch(activeMainItemProvider);
+    final activeSub = ref.watch(activeSubItemProvider);
+    final nav = ref.read(navigationProvider);
 
     return Container(
       width: 260,
@@ -50,18 +80,13 @@ class AdminDrawer extends ConsumerWidget {
       ),
       child: Column(
         children: [
-          // HEADER AREA (Logo & Name)
+          // HEADER (Logo etc) - Same as before
           Container(
-            height: 120, // Height kam ki
+            height: 120,
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
             child: Row(
               children: [
                 Image.asset('assets/images/logo.png', height: 65, width: 65),
-                // const Icon(
-                //   Icons.admin_panel_settings,
-                //   color: Colors.cyanAccent,
-                //   size: 40,
-                // ),
                 const SizedBox(width: 15),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -88,7 +113,6 @@ class AdminDrawer extends ConsumerWidget {
               ],
             ),
           ),
-
           const Divider(color: Colors.white10, height: 1),
 
           // MENU LIST
@@ -98,55 +122,147 @@ class AdminDrawer extends ConsumerWidget {
               itemCount: menuItems.length,
               itemBuilder: (context, index) {
                 final item = menuItems[index];
-                final isSelected = selectedIndex == index;
+                final bool isMainActive = activeMain == item.title;
 
-                return Container(
-                  margin: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(10),
-                    color: isSelected
-                        ? Colors.white.withOpacity(0.1)
-                        : Colors.transparent,
-                    border: isSelected
-                        ? Border.all(color: Colors.white12)
-                        : null,
-                  ),
-                  child: ListTile(
-                    onTap: () {
-                      ref.read(pageIndexProvider.notifier).state = index;
-                      ref.read(appBarTitleProvider.notifier).state = item.title;
+                return Column(
+                  children: [
+                    // PARENT ITEM
+                    ListTile(
+                      onTap: () {
+                        if (item.hasSubmenu) {
+                          setState(() {
+                            item.isExpanded = !item.isExpanded;
+                          });
+                        } else {
+                          // DIRECT NAVIGATION (Dashboard etc)
+                          Widget screen = Center(
+                            child: Text(
+                              "${item.title} Screen",
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                          );
+                          if (item.title == "Dashboard")
+                            screen = DashboardScreen();
 
-                      // Agar mobile drawer khula hai to band kardo
-                      if (Scaffold.of(context).hasDrawer &&
-                          Scaffold.of(context).isDrawerOpen) {
-                        Navigator.pop(context);
-                      }
-                    },
-                    leading: Icon(
-                      item.icon,
-                      color: isSelected ? Pallete.neonBlue : Colors.grey,
-                      size: 22,
-                    ),
-                    title: Text(
-                      item.title,
-                      style: GoogleFonts.comicNeue(
-                        color: isSelected ? Colors.white : Colors.grey.shade400,
-                        fontWeight: isSelected
-                            ? FontWeight.bold
-                            : FontWeight.normal,
+                          nav.navigateTo(
+                            mainItem: item.title,
+                            subItem: null,
+                            screen: screen,
+                            title: item.title,
+                          );
+                          if (Scaffold.of(context).hasDrawer &&
+                              Scaffold.of(context).isDrawerOpen)
+                            Navigator.pop(context);
+                        }
+                      },
+                      leading: Icon(
+                        item.icon,
+                        color: isMainActive ? Pallete.neonBlue : Colors.grey,
+                        size: 22,
                       ),
+                      title: Text(
+                        item.title,
+                        style: GoogleFonts.comicNeue(
+                          color: isMainActive
+                              ? Colors.white
+                              : Colors.grey.shade400,
+                          fontWeight: isMainActive
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                        ),
+                      ),
+                      trailing: item.hasSubmenu
+                          ? Icon(
+                              item.isExpanded
+                                  ? Icons.keyboard_arrow_up
+                                  : Icons.keyboard_arrow_down,
+                              size: 18,
+                              color: Colors.grey.shade600,
+                            )
+                          : null,
                     ),
-                    trailing: item.hasSubmenu
-                        ? Icon(
-                            Icons.chevron_right,
-                            size: 18,
-                            color: Colors.grey.shade600,
-                          )
-                        : null,
-                  ),
+
+                    // SUBMENU ITEMS
+                    if (item.hasSubmenu && item.isExpanded)
+                      ...item.subItems.map((subItem) {
+                        final bool isSubActive = activeSub == subItem;
+                        return InkWell(
+                          onTap: () {
+                            if (Scaffold.of(context).hasDrawer &&
+                                Scaffold.of(context).isDrawerOpen)
+                              Navigator.pop(context);
+
+                            // --- SWITCHING LOGIC ---
+                            Widget targetScreen = Center(
+                              child: Text(
+                                "$subItem Screen",
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                            );
+
+                            if (item.title == "Products") {
+                              if (subItem == "All Products") {
+                                targetScreen =
+                                    ProductsHomeScreen(); // <--- Isme controller inject hoga
+                              } else if (subItem == "Add Product") {
+                                targetScreen =
+                                    const AddProductScreen(); // <--- Isme bhi
+                              }
+                            }
+
+                            nav.navigateTo(
+                              mainItem: item.title,
+                              subItem: subItem,
+                              screen: targetScreen,
+                              title: subItem,
+                            );
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 10,
+                              horizontal: 10,
+                            ),
+                            margin: const EdgeInsets.only(
+                              left: 10,
+                              right: 10,
+                              bottom: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isSubActive
+                                  ? Colors.cyanAccent.withOpacity(0.1)
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: [
+                                const SizedBox(width: 40),
+                                if (isSubActive)
+                                  Container(
+                                    width: 6,
+                                    height: 6,
+                                    margin: const EdgeInsets.only(right: 8),
+                                    decoration: const BoxDecoration(
+                                      color: Colors.cyanAccent,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                Text(
+                                  subItem,
+                                  style: GoogleFonts.comicNeue(
+                                    color: isSubActive
+                                        ? Colors.cyanAccent
+                                        : Colors.white70,
+                                    fontWeight: isSubActive
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                  ],
                 );
               },
             ),

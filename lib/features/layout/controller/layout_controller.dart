@@ -1,13 +1,32 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
-// 1. Page Index State (Kon sa page khula he)
-final pageIndexProvider = StateProvider<int>((ref) => 0);
-// 0 = Dashboard, 1 = Products, etc.
+import '../../dashboard/presentation/screens/dashboard_screen.dart';
 
-// 2. AppBar Title State (Top bar pe kya likha aaye)
+final activeMainItemProvider = StateProvider<String>((ref) => "Dashboard");
+final activeSubItemProvider = StateProvider<String?>((ref) => null);
+final currentContentProvider = StateProvider<Widget>(
+  (ref) => DashboardScreen(),
+);
 final appBarTitleProvider = StateProvider<String>((ref) => "Dashboard");
 
-class LayoutController {
-  // Logic agar complex hui to yahan ayegi, filhal StateProvider kaafi he.
+class NavigationController {
+  final Ref ref;
+
+  NavigationController(this.ref);
+
+  void navigateTo({
+    required String mainItem,
+    String? subItem,
+    required Widget screen,
+    required String title,
+  }) {
+    ref.read(activeMainItemProvider.notifier).state = mainItem;
+    ref.read(activeSubItemProvider.notifier).state = subItem;
+    ref.read(currentContentProvider.notifier).state = screen;
+    ref.read(appBarTitleProvider.notifier).state = title;
+  }
 }
+
+final navigationProvider = Provider((ref) => NavigationController(ref));
