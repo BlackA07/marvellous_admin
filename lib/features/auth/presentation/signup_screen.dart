@@ -1,34 +1,39 @@
 import 'package:country_code_picker/country_code_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart'; // Riverpod
 import 'package:google_fonts/google_fonts.dart';
 import 'package:marvellous_admin/core/common/widgets/metallic_button.dart';
 import 'package:marvellous_admin/core/common/widgets/metallic_textfield.dart';
 import 'package:marvellous_admin/core/common/widgets/trapezoid_button.dart';
-import 'package:marvellous_admin/features/auth/controller/signup_controller.dart';
 import 'package:marvellous_admin/features/auth/presentation/login_screen.dart';
+import '../controller/auth_controller.dart'; // Main Auth Controller
 
-// Imports check karlena apne project k hisab se
-import '../../../../core/theme/pallete.dart';
-// Controller import
-
-class SignUpScreen extends StatefulWidget {
+class SignUpScreen extends ConsumerStatefulWidget {
   const SignUpScreen({super.key});
 
   @override
-  State<SignUpScreen> createState() => _SignUpScreenState();
+  ConsumerState<SignUpScreen> createState() => _SignUpScreenState();
 }
 
-class _SignUpScreenState extends State<SignUpScreen> {
-  // Controller ka instance banaya
-  final SignUpController _controller = SignUpController();
+class _SignUpScreenState extends ConsumerState<SignUpScreen> {
+  // Text Controllers
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _passController = TextEditingController();
+  final TextEditingController _confirmPassController = TextEditingController();
+  String _selectedCountryCode = "+92";
 
   @override
   void dispose() {
-    _controller.dispose(); // Memory leak na ho
+    _nameController.dispose();
+    _emailController.dispose();
+    _phoneController.dispose();
+    _passController.dispose();
+    _confirmPassController.dispose();
     super.dispose();
   }
 
-  // Error dikhane k liye helper function
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -42,20 +47,47 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
   }
 
+  void _signUp() {
+    // 1. Validation Logic
+    if (_nameController.text.isEmpty ||
+        _emailController.text.isEmpty ||
+        _phoneController.text.isEmpty ||
+        _passController.text.isEmpty) {
+      _showError("All fields are required!");
+      return;
+    }
+
+    if (_passController.text != _confirmPassController.text) {
+      _showError("Passwords do not match!");
+      return;
+    }
+
+    // 2. Call Firebase Auth Controller
+    ref
+        .read(authControllerProvider)
+        .signUp(
+          name: _nameController.text.trim(),
+          email: _emailController.text.trim(),
+          password: _passController.text.trim(),
+          phone: "$_selectedCountryCode${_phoneController.text.trim()}",
+          context: context,
+        );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isLoading = ref.watch(authLoadingProvider);
     final size = MediaQuery.of(context).size;
     final isWeb = size.width > 600;
 
-    // Background Gradient
     const bgGradient = LinearGradient(
       begin: Alignment.topRight,
       end: Alignment.bottomLeft,
       colors: [
-        Colors.white, // Top Highlight
+        Colors.white,
         Color.fromARGB(255, 90, 87, 87),
         Color(0xFF606060),
-        Color(0xFF1A1A1A), // Deep Dark Base
+        Color(0xFF1A1A1A),
       ],
       stops: [0.0, 0.4, 0.75, 1.0],
     );
@@ -63,19 +95,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: Scaffold(
-        // --- FIX 1: Background Color match kiya taake scroll pe white na aaye ---
         backgroundColor: const Color(0xFF1A1A1A),
-
         body: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
               return SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
                 child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    // Ensure container fills at least the screen height
-                    minHeight: constraints.maxHeight,
-                  ),
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
                   child: Container(
                     width: isWeb ? 450 : size.width,
                     margin: isWeb
@@ -87,8 +114,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       horizontal: 25,
                       vertical: 10,
                     ),
-
-                    // Gradient yahan lagaya he taake poore scroll area pe ho
                     decoration: BoxDecoration(
                       borderRadius: isWeb
                           ? BorderRadius.circular(30)
@@ -104,13 +129,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             ]
                           : null,
                     ),
-
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.start,
                       children: [
                         const SizedBox(height: 10),
 
-                        // --- 1. LOGO SECTION ---
+                        // --- LOGO ---
                         SizedBox(
                           height: 120,
                           width: 120,
@@ -146,6 +170,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           ),
                         ),
 
+                        // --- TITLE ---
                         Transform.translate(
                           offset: const Offset(0, -10),
                           child: ShaderMask(
@@ -178,24 +203,24 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
                         const SizedBox(height: 30),
 
-                        // --- 2. INPUT FIELDS (Using Controller) ---
+                        // --- INPUT FIELDS ---
                         MetallicTextField(
                           hintText: "Full Name",
                           icon: Icons.person_outline,
-                          controller: _controller.nameController,
+                          controller: _nameController,
                         ),
 
                         MetallicTextField(
                           hintText: "Email Address",
                           icon: Icons.email_outlined,
-                          controller: _controller.emailController,
+                          controller: _emailController,
                         ),
 
-                        // --- FIX 2: Phone Section with Arrow & Colors ---
+                        // Phone Row
                         Row(
                           children: [
                             Container(
-                              width: 105, // Thora size barhaya arrow k liye
+                              width: 105,
                               height: 65,
                               margin: const EdgeInsets.only(right: 8),
                               decoration: BoxDecoration(
@@ -220,13 +245,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
                               child: Stack(
                                 alignment: Alignment.center,
                                 children: [
-                                  // Country Code Picker
                                   ClipRRect(
                                     borderRadius: BorderRadius.circular(10),
                                     child: CountryCodePicker(
                                       onChanged: (code) {
                                         setState(() {
-                                          _controller.selectedCountryCode =
+                                          _selectedCountryCode =
                                               code.dialCode ?? "+92";
                                         });
                                       },
@@ -234,31 +258,21 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                       favorite: const ['PK', 'US', 'IN'],
                                       showCountryOnly: false,
                                       showOnlyCountryWhenClosed: false,
-                                      alignLeft:
-                                          true, // Left align taake arrow right pe aaye
-                                      padding: const EdgeInsets.only(
-                                        left: 1,
-                                      ), // Padding adjust
-                                      // Display Text Style (Button k upar)
+                                      alignLeft: true,
+                                      padding: const EdgeInsets.only(left: 1),
                                       textStyle: GoogleFonts.comicNeue(
                                         fontSize: 16,
                                         fontWeight: FontWeight.bold,
                                         color: Colors.black87,
                                       ),
-
-                                      // --- FIX: Dialog Text Colors (Dropdown k andar) ---
                                       dialogTextStyle: const TextStyle(
-                                        color:
-                                            Colors.black, // Ab text black hoga
+                                        color: Colors.black,
                                         fontWeight: FontWeight.w500,
                                       ),
                                       searchStyle: const TextStyle(
-                                        color:
-                                            Colors.black, // Search text black
+                                        color: Colors.black,
                                       ),
-                                      dialogBackgroundColor:
-                                          Colors.white, // Dialog bg white
-
+                                      dialogBackgroundColor: Colors.white,
                                       searchDecoration: InputDecoration(
                                         prefixIcon: const Icon(
                                           Icons.search,
@@ -276,8 +290,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                       ),
                                     ),
                                   ),
-
-                                  // Down Arrow Icon (Manually added for look)
                                   const Positioned(
                                     right: 8,
                                     child: Icon(
@@ -289,12 +301,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                 ],
                               ),
                             ),
-
                             Expanded(
                               child: MetallicTextField(
                                 hintText: "Phone Number",
                                 icon: Icons.phone_android,
-                                controller: _controller.phoneController,
+                                controller: _phoneController,
                               ),
                             ),
                           ],
@@ -304,41 +315,33 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           hintText: "Password",
                           icon: Icons.lock_outline,
                           isPassword: true,
-                          controller: _controller.passController,
+                          controller: _passController,
                         ),
 
                         MetallicTextField(
                           hintText: "Confirm Password",
                           icon: Icons.verified_user_outlined,
                           isPassword: true,
-                          controller: _controller.confirmPassController,
+                          controller: _confirmPassController,
                         ),
 
                         const SizedBox(height: 30),
 
-                        // --- 3. MAIN SIGN UP BUTTON ---
-                        TrapezoidButton(
-                          imagePath: 'assets/images/signupbutton.png',
-                          hasGlowingAura: true,
-                          height: 90,
-                          width: 300,
-                          onTap: () {
-                            // --- FIX 3: Validation Logic ---
-                            String? error = _controller.validateInputs();
-                            if (error != null) {
-                              _showError(error); // Error dikhao
-                            } else {
-                              // Sab theek he - Proceed to Signup
-                              print("Validation Successful!");
-                              print("Code: ${_controller.selectedCountryCode}");
-                              // Yahan API call ya next screen logic lagao
-                            }
-                          },
-                        ),
+                        // --- SIGN UP BUTTON ---
+                        if (isLoading)
+                          const CircularProgressIndicator(color: Colors.white)
+                        else
+                          TrapezoidButton(
+                            imagePath: 'assets/images/signupbutton.png',
+                            hasGlowingAura: true,
+                            height: 90,
+                            width: 300,
+                            onTap: _signUp, // Firebase Call
+                          ),
 
                         const SizedBox(height: 30),
 
-                        // --- 4. DIVIDER ---
+                        // --- DIVIDER ---
                         Row(
                           children: [
                             Expanded(
@@ -368,7 +371,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
                         const SizedBox(height: 20),
 
-                        // --- 5. LOGIN NOW BUTTON (Navigation Fix) ---
+                        // --- LOGIN NOW BUTTON ---
                         MetallicButton(
                           text: "LOGIN NOW",
                           hasGlowingAura: false,
@@ -379,7 +382,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           ],
                           textColor: Colors.white70,
                           onTap: () {
-                            // Login Screen pe wapis jao
                             Navigator.pushReplacement(
                               context,
                               MaterialPageRoute(
@@ -388,7 +390,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             );
                           },
                         ),
-
                         const SizedBox(height: 40),
                       ],
                     ),

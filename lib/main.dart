@@ -2,11 +2,11 @@ import 'package:flutter/foundation.dart'; // kReleaseMode ke liye
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // Import Auth
 import 'package:get/get.dart'; // Import GetX
 import 'package:marvellous_admin/firebase_options.dart';
 
 // import 'package:device_preview/device_preview.dart';
-import 'features/layout/presentation/screens/main_layout_screen.dart';
 import 'core/routes/app_router.dart'; // Import AppRouter
 import 'core/theme/app_theme.dart';
 
@@ -22,15 +22,21 @@ void main() async {
     debugPrint("Firebase Error (Ignored for UI Testing): $e");
   }
 
+  // --- CHECK LOGIN STATUS ---
+  // Agar user pehle se logged in hai (null nahi hai), to Home par bhejo
+  User? currentUser = FirebaseAuth.instance.currentUser;
+  String startRoute = (currentUser != null) ? AppRoutes.home : AppRoutes.login;
+
   runApp(
     // 2. ProviderScope abhi bhi chahiye state management ke liye
-    const ProviderScope(
+    ProviderScope(
       // DevicePreview ko comment out kar diya aur direct App laga di
-      child: MarvellousAdminApp(),
+      // startRoute pass kar rahe hain
+      child: MarvellousAdminApp(initialRoute: startRoute),
 
       /* child: DevicePreview(
         enabled: !kReleaseMode,
-        builder: (context) => const MarvellousAdminApp(),
+        builder: (context) => const MarvellousAdminApp(initialRoute: AppRoutes.login),
       ),
       */
     ),
@@ -38,7 +44,10 @@ void main() async {
 }
 
 class MarvellousAdminApp extends StatelessWidget {
-  const MarvellousAdminApp({super.key});
+  final String initialRoute;
+
+  // Constructor updated to accept initialRoute
+  const MarvellousAdminApp({super.key, required this.initialRoute});
 
   @override
   Widget build(BuildContext context) {
@@ -53,9 +62,8 @@ class MarvellousAdminApp extends StatelessWidget {
       theme: AppTheme.darkTheme,
 
       // ROUTING SETUP
-      initialRoute: AppRoutes.home, // Pehli screen
+      initialRoute: initialRoute, // Dynamic Route (Login or Home)
       getPages: AppRoutes.routes, // Saare routes yahan se ayenge
-      // home: MainLayoutScreen(), // Iski zaroorat nahi kyunki initialRoute set hai
     );
   }
 }

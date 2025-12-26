@@ -1,16 +1,19 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class ProductModel {
   String? id;
   String name;
   String modelNumber;
   String description;
   String category;
-  String subCategory;
+  String subCategory; // Already thi, ab UI se connect hogi
+  String brand; // NEW FIELD
   double purchasePrice;
   double salePrice;
   int stockQuantity;
   String vendorId;
-  List<String> images; // Paths to images
-  String? video; // Path to video
+  List<String> images;
+  String? video;
   DateTime dateAdded;
 
   ProductModel({
@@ -20,6 +23,7 @@ class ProductModel {
     required this.description,
     required this.category,
     required this.subCategory,
+    required this.brand, // New
     required this.purchasePrice,
     required this.salePrice,
     required this.stockQuantity,
@@ -29,41 +33,40 @@ class ProductModel {
     required this.dateAdded,
   });
 
-  // Convert to Map (for Database/API)
   Map<String, dynamic> toMap() {
     return {
-      'id': id,
       'name': name,
       'modelNumber': modelNumber,
       'description': description,
       'category': category,
       'subCategory': subCategory,
+      'brand': brand, // New
       'purchasePrice': purchasePrice,
       'salePrice': salePrice,
       'stockQuantity': stockQuantity,
       'vendorId': vendorId,
       'images': images,
       'video': video,
-      'dateAdded': dateAdded.toIso8601String(),
+      'dateAdded': Timestamp.fromDate(dateAdded),
     };
   }
 
-  // Create from Map
-  factory ProductModel.fromMap(Map<String, dynamic> map, String id) {
+  factory ProductModel.fromMap(Map<String, dynamic> map, String docId) {
     return ProductModel(
-      id: id,
+      id: docId,
       name: map['name'] ?? '',
       modelNumber: map['modelNumber'] ?? '',
       description: map['description'] ?? '',
       category: map['category'] ?? '',
       subCategory: map['subCategory'] ?? '',
+      brand: map['brand'] ?? '', // New
       purchasePrice: (map['purchasePrice'] ?? 0).toDouble(),
       salePrice: (map['salePrice'] ?? 0).toDouble(),
       stockQuantity: map['stockQuantity'] ?? 0,
       vendorId: map['vendorId'] ?? '',
       images: List<String>.from(map['images'] ?? []),
       video: map['video'],
-      dateAdded: DateTime.parse(map['dateAdded']),
+      dateAdded: (map['dateAdded'] as Timestamp).toDate(),
     );
   }
 }
