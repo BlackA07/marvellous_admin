@@ -1,21 +1,55 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart'; // Riverpod Import
 import 'package:google_fonts/google_fonts.dart';
 import 'package:marvellous_admin/core/common/widgets/metallic_button.dart';
 import 'package:marvellous_admin/core/common/widgets/metallic_textfield.dart';
 import 'package:marvellous_admin/core/common/widgets/trapezoid_button.dart';
 import 'package:marvellous_admin/features/auth/presentation/signup_screen.dart';
 import '../../../../core/theme/pallete.dart';
+import '../controller/auth_controller.dart'; // Controller Import
 
-class LoginScreen extends StatefulWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen> {
+  // Text Controllers
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  void login() {
+    // Basic Validation
+    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please fill all fields')));
+      return;
+    }
+
+    // Call Auth Controller via Riverpod
+    ref
+        .read(authControllerProvider)
+        .login(
+          email: _emailController.text.trim(),
+          password: _passwordController.text.trim(),
+        );
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Watch Loading State
+    final isLoading = ref.watch(authLoadingProvider);
+
     final size = MediaQuery.of(context).size;
     final isWeb = size.width > 600;
 
@@ -27,13 +61,9 @@ class _LoginScreenState extends State<LoginScreen> {
           child: SingleChildScrollView(
             physics: const BouncingScrollPhysics(),
             child: Container(
-              // Web: 450 width, Mobile: Full Width
               width: isWeb ? 450 : size.width,
-              // Web: Auto height, Mobile: Full Height
               height: isWeb ? null : size.height,
-
               padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 30),
-
               decoration: BoxDecoration(
                 borderRadius: isWeb
                     ? BorderRadius.circular(30)
@@ -41,25 +71,17 @@ class _LoginScreenState extends State<LoginScreen> {
                 border: isWeb
                     ? Border.all(color: Colors.white.withOpacity(0.2), width: 1)
                     : null,
-
-                // --- UPDATED GRADIENT ---
                 gradient: const LinearGradient(
-                  begin: Alignment.topRight, // Top Right se shuru (White)
-                  end: Alignment.bottomLeft, // Bottom Left pe khatam (Dark)
+                  begin: Alignment.topRight,
+                  end: Alignment.bottomLeft,
                   colors: [
-                    Colors.white, // Top Right: Full White
-                    Color.fromARGB(
-                      255,
-                      90,
-                      87,
-                      87,
-                    ), // Thora sa left aake: Light Grey
-                    Color(0xFF606060), // Neeche aate hue: Dark Grey
-                    Color(0xFF1A1A1A), // Bilkul neeche: Deep Dark
+                    Colors.white,
+                    Color.fromARGB(255, 90, 87, 87),
+                    Color(0xFF606060),
+                    Color(0xFF1A1A1A),
                   ],
                   stops: [0.0, 0.4, 0.75, 1.0],
                 ),
-
                 boxShadow: isWeb
                     ? [
                         const BoxShadow(
@@ -70,7 +92,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       ]
                     : null,
               ),
-
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
@@ -141,30 +162,32 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 10),
 
                   // --- FIELDS ---
-                  const MetallicTextField(
+                  MetallicTextField(
                     hintText: "Email / Username",
                     icon: Icons.person,
+                    controller: _emailController, // Controller attached
                   ),
-                  const MetallicTextField(
+                  MetallicTextField(
                     hintText: "Password",
                     icon: Icons.lock,
                     isPassword: true,
                     height: 65,
                     width: 700,
+                    controller: _passwordController, // Controller attached
                   ),
 
                   const SizedBox(height: 25),
 
                   // --- LOGIN BUTTON ---
-                  TrapezoidButton(
-                    hasGlowingAura: true,
-                    height: 90,
-                    width: 300,
-                    onTap: () {
-                      print("Login Pressed");
-                      FocusScope.of(context).unfocus();
-                    },
-                  ),
+                  if (isLoading)
+                    const CircularProgressIndicator(color: Colors.white)
+                  else
+                    TrapezoidButton(
+                      hasGlowingAura: true,
+                      height: 90,
+                      width: 300,
+                      onTap: login, // Call login function
+                    ),
 
                   const SizedBox(height: 20),
 

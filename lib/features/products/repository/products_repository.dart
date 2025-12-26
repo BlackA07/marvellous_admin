@@ -1,51 +1,52 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/product_model.dart';
 
 class ProductsRepository {
-  // Simulate API Call
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  CollectionReference get _products => _firestore.collection('products');
+
+  // 1. Fetch
   Future<List<ProductModel>> fetchProducts() async {
-    await Future.delayed(const Duration(seconds: 1)); // Fake Delay
-
-    return [
-      ProductModel(
-        id: '1',
-        name: 'Smart Fridge X1',
-        modelNumber: 'SF-2024',
-        description: 'Double door smart fridge with wifi.',
-        category: 'Electronics',
-        subCategory: 'Refrigerator',
-        purchasePrice: 120000,
-        salePrice: 150000,
-        stockQuantity: 15,
-        vendorId: 'v1',
-        images: ['assets/images/fridge.png'], // Placeholder
-        dateAdded: DateTime.now(),
-      ),
-      ProductModel(
-        id: '2',
-        name: 'Gaming Laptop Pro',
-        modelNumber: 'GL-990',
-        description: 'High performance gaming laptop.',
-        category: 'Electronics',
-        subCategory: 'Laptops',
-        purchasePrice: 250000,
-        salePrice: 280000,
-        stockQuantity: 5, // Low Stock Example
-        vendorId: 'v2',
-        images: ['assets/images/laptop.png'], // Placeholder
-        dateAdded: DateTime.now().subtract(const Duration(days: 2)),
-      ),
-    ];
+    try {
+      QuerySnapshot snapshot = await _products
+          .orderBy('dateAdded', descending: true)
+          .get();
+      return snapshot.docs.map((doc) {
+        return ProductModel.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+      }).toList();
+    } catch (e) {
+      throw Exception("Failed to load products: $e");
+    }
   }
 
-  // Simulate Add Product
+  // 2. Add
   Future<void> addProduct(ProductModel product) async {
-    await Future.delayed(const Duration(seconds: 2));
-    print("Product Added: ${product.name}");
+    try {
+      await _products.add(product.toMap());
+    } catch (e) {
+      throw Exception("Failed to add product: $e");
+    }
   }
 
-  // Simulate Delete
+  // 3. Update (Ye Missing tha - Ab add hogaya hai)
+  Future<void> updateProduct(ProductModel product) async {
+    try {
+      if (product.id == null) {
+        throw Exception("Product ID is missing for update");
+      }
+      // Firestore men specific document ID dhoond kar update karega
+      await _products.doc(product.id).update(product.toMap());
+    } catch (e) {
+      throw Exception("Failed to update product: $e");
+    }
+  }
+
+  // 4. Delete
   Future<void> deleteProduct(String id) async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    print("Product Deleted: $id");
+    try {
+      await _products.doc(id).delete();
+    } catch (e) {
+      throw Exception("Failed to delete product: $e");
+    }
   }
 }
