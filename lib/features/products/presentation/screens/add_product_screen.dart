@@ -5,22 +5,39 @@ import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:marvellous_admin/features/categories/models/category_model.dart';
+import 'package:marvellous_admin/features/layout/presentation/screens/main_layout_screen.dart';
+import 'package:marvellous_admin/features/products/presentation/screens/products_home_screen.dart';
 
+// Controllers
+import '../../../categories/controllers/category_controller.dart';
+import '../../../vendors/controllers/vendor_controller.dart';
 import '../../controller/products_controller.dart';
+
+// Models
 import '../../models/product_model.dart';
 
 class AddProductScreen extends StatefulWidget {
   final ProductModel? productToEdit; // Data for Edit Mode
+  final String?
+  preSelectedVendorId; // For auto-selecting vendor from detail screen
 
-  const AddProductScreen({Key? key, this.productToEdit}) : super(key: key);
+  const AddProductScreen({
+    Key? key,
+    this.productToEdit,
+    this.preSelectedVendorId,
+  }) : super(key: key);
 
   @override
   State<AddProductScreen> createState() => _AddProductScreenState();
 }
 
 class _AddProductScreenState extends State<AddProductScreen> {
-  // FORCE INJECT CONTROLLER
-  final ProductsController controller = Get.put(ProductsController());
+  // FORCE INJECT CONTROLLERS
+  final ProductsController productController = Get.put(ProductsController());
+  final CategoryController categoryController = Get.put(CategoryController());
+  final VendorController vendorController = Get.put(VendorController());
+
   final _formKey = GlobalKey<FormState>();
   final ImagePicker _picker = ImagePicker();
 
@@ -28,6 +45,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final TextEditingController nameCtrl = TextEditingController();
   final TextEditingController modelCtrl = TextEditingController();
   final TextEditingController descCtrl = TextEditingController();
+  final TextEditingController brandCtrl = TextEditingController();
   final TextEditingController purchasePriceCtrl = TextEditingController();
   final TextEditingController salePriceCtrl = TextEditingController();
   final TextEditingController stockCtrl = TextEditingController();
@@ -36,31 +54,19 @@ class _AddProductScreenState extends State<AddProductScreen> {
   DateTime selectedDate = DateTime.now();
   String? selectedCategory;
   String? selectedSubCategory;
-  String? selectedBrand;
-  String? selectedVendor;
+  String? selectedVendorId;
   List<String> selectedImagesBase64 = [];
-
-  // Data Lists
-  List<String> vendors = ["Ali Suppliers", "Global Tech", "+ Add New"];
-  List<String> brands = ["Samsung", "Apple", "Haier", "+ Add New"];
-  List<String> categories = [
-    "Electronics",
-    "Furniture",
-    "Clothing",
-    "+ Add New",
-  ];
-
-  Map<String, List<String>> categorySubCategoryMap = {
-    "Electronics": ["Mobile", "Laptop", "Refrigerator"],
-    "Furniture": ["Chair", "Table"],
-    "Clothing": ["Men", "Women"],
-  };
 
   @override
   void initState() {
     super.initState();
     if (widget.productToEdit != null) {
       _loadProductData(widget.productToEdit!);
+    } else {
+      // Logic for pre-selected vendor
+      if (widget.preSelectedVendorId != null) {
+        selectedVendorId = widget.preSelectedVendorId;
+      }
     }
   }
 
@@ -68,26 +74,14 @@ class _AddProductScreenState extends State<AddProductScreen> {
     nameCtrl.text = product.name;
     modelCtrl.text = product.modelNumber;
     descCtrl.text = product.description;
+    brandCtrl.text = product.brand;
     purchasePriceCtrl.text = product.purchasePrice.toString();
     salePriceCtrl.text = product.salePrice.toString();
     stockCtrl.text = product.stockQuantity.toString();
 
-    // Ensure lists contain the loaded values (in case they are new)
-    if (!categories.contains(product.category))
-      categories.insert(0, product.category);
-    // Initialize sub-category map for this category if needed
-    if (!categorySubCategoryMap.containsKey(product.category)) {
-      categorySubCategoryMap[product.category] = [product.subCategory];
-    } else if (!categorySubCategoryMap[product.category]!.contains(
-      product.subCategory,
-    )) {
-      categorySubCategoryMap[product.category]!.add(product.subCategory);
-    }
-
     selectedCategory = product.category;
     selectedSubCategory = product.subCategory;
-    selectedBrand = product.brand;
-    selectedVendor = product.vendorId;
+    selectedVendorId = product.vendorId;
     selectedImagesBase64 = List.from(product.images);
     selectedDate = product.dateAdded;
   }
@@ -119,6 +113,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
     nameCtrl.clear();
     modelCtrl.clear();
     descCtrl.clear();
+    brandCtrl.clear();
     purchasePriceCtrl.clear();
     salePriceCtrl.clear();
     stockCtrl.clear();
@@ -126,39 +121,30 @@ class _AddProductScreenState extends State<AddProductScreen> {
       selectedImagesBase64.clear();
       selectedCategory = null;
       selectedSubCategory = null;
-      selectedBrand = null;
-      selectedVendor = null;
+      // Keep vendor selected if it was pre-selected
+      if (widget.preSelectedVendorId == null) selectedVendorId = null;
     });
-  }
-
-  void _showAddDialog(String title, Function(String) onAdd) {
-    TextEditingController addCtrl = TextEditingController();
-    Get.defaultDialog(
-      title: "Add New $title",
-      titleStyle: GoogleFonts.orbitron(color: Colors.white),
-      backgroundColor: const Color(0xFF2A2D3E),
-      content: TextField(
-        controller: addCtrl,
-        style: const TextStyle(color: Colors.white),
-        decoration: InputDecoration(filled: true, fillColor: Colors.black12),
-      ),
-      textConfirm: "Add",
-      textCancel: "Cancel",
-      confirmTextColor: Colors.black,
-      buttonColor: Colors.cyanAccent,
-      onConfirm: () {
-        if (addCtrl.text.isNotEmpty) {
-          onAdd(addCtrl.text);
-          Get.back();
-        }
-      },
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF1E1E2C),
+      appBar: AppBar(
+        title: Text(
+          widget.productToEdit == null ? "Add New Product" : "Edit Product",
+          style: GoogleFonts.orbitron(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        // leading: IconButton(
+        //   icon: const Icon(Icons.arrow_back, color: Colors.white),
+        //   onPressed: () => Get.off(() => MainLayoutScreen()),
+        // ),
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Form(
@@ -286,69 +272,110 @@ class _AddProductScreenState extends State<AddProductScreen> {
               // ================= SECTION 3: CATEGORIZATION =================
               _buildSectionTitle("Categorization"),
 
-              // 1. Category Dropdown with FIX
-              _buildDropdown("Category", categories, (val) {
-                if (val == "+ Add New") {
-                  _showAddDialog(
-                    "Category",
-                    (v) => setState(() {
-                      categories.insert(0, v);
-                      // Initialize new category list
-                      if (!categorySubCategoryMap.containsKey(v)) {
-                        categorySubCategoryMap[v] = [];
-                      }
-                      selectedCategory = v;
-                      selectedSubCategory = null; // IMPORTANT: Reset Sub
-                    }),
+              // 1. DYNAMIC CATEGORY DROPDOWN
+              Obx(() {
+                final _ = categoryController.categories.length;
+
+                if (categoryController.isLoading.value) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                List<CategoryModel> cats = categoryController.categories;
+
+                if (cats.isEmpty) {
+                  return _buildDynamicDropdown<String>(
+                    label: "Category",
+                    hint: "No Categories Found",
+                    value: null,
+                    items: [],
+                    onChanged: (val) {},
                   );
-                } else {
-                  setState(() {
-                    selectedCategory = val;
-                    selectedSubCategory =
-                        null; // IMPORTANT: Reset Sub to avoid conflict
+                }
+
+                if (selectedCategory == null && widget.productToEdit == null) {
+                  Future.microtask(() {
+                    if (mounted && selectedCategory == null) {
+                      setState(() {
+                        selectedCategory = cats.first.name;
+                      });
+                    }
                   });
                 }
-              }, selectedValue: selectedCategory),
 
-              const SizedBox(height: 15),
+                String? validSelectedCategory =
+                    cats.any((c) => c.name == selectedCategory)
+                    ? selectedCategory
+                    : null;
 
-              // 2. Sub-Category
-              if (selectedCategory != null)
-                _buildDropdown(
-                  "Sub Category",
-                  (categorySubCategoryMap[selectedCategory] ?? []) +
-                      ["+ Add New"],
-                  (val) {
-                    if (val == "+ Add New") {
-                      _showAddDialog(
-                        "Sub Category",
-                        (v) => setState(() {
-                          categorySubCategoryMap[selectedCategory]!.add(v);
-                          selectedSubCategory = v;
-                        }),
-                      );
-                    } else {
-                      setState(() => selectedSubCategory = val);
-                    }
+                return _buildDynamicDropdown<String>(
+                  label: "Category",
+                  hint: "Select Category",
+                  value: validSelectedCategory,
+                  items: cats
+                      .map(
+                        (c) => DropdownMenuItem(
+                          value: c.name,
+                          child: Text(
+                            c.name,
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (val) {
+                    setState(() {
+                      selectedCategory = val;
+                      selectedSubCategory = null;
+                    });
                   },
-                  selectedValue: selectedSubCategory,
-                ),
+                );
+              }),
 
               const SizedBox(height: 15),
 
-              // 3. Brand
-              _buildDropdown("Brand", brands, (val) {
-                if (val == "+ Add New")
-                  _showAddDialog(
-                    "Brand",
-                    (v) => setState(() {
-                      brands.insert(0, v);
-                      selectedBrand = v;
-                    }),
+              // 2. DYNAMIC SUB-CATEGORY DROPDOWN
+              Obx(() {
+                List<CategoryModel> allCats = categoryController.categories;
+
+                List<String> subCats = [];
+                if (selectedCategory != null) {
+                  var catObj = allCats.firstWhere(
+                    (c) => c.name == selectedCategory,
+                    orElse: () => CategoryModel(name: '', subCategories: []),
                   );
-                else
-                  setState(() => selectedBrand = val);
-              }, selectedValue: selectedBrand),
+                  subCats = catObj.subCategories;
+                }
+
+                String? validSelectedSubCategory =
+                    subCats.contains(selectedSubCategory)
+                    ? selectedSubCategory
+                    : null;
+
+                return _buildDynamicDropdown<String>(
+                  label: "Sub Category",
+                  hint: selectedCategory == null
+                      ? "Select Category First"
+                      : "Select Sub-Category",
+                  value: validSelectedSubCategory,
+                  items: subCats
+                      .map(
+                        (s) => DropdownMenuItem(
+                          value: s,
+                          child: Text(
+                            s,
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (val) => setState(() => selectedSubCategory = val),
+                );
+              }),
+
+              const SizedBox(height: 15),
+
+              // 3. BRAND TEXT FIELD
+              _buildTextField("Brand", "e.g. Samsung", brandCtrl),
 
               const SizedBox(height: 30),
 
@@ -387,19 +414,67 @@ class _AddProductScreenState extends State<AddProductScreen> {
                     ),
                   ),
                   const SizedBox(width: 15),
+
+                  // DYNAMIC VENDOR DROPDOWN
                   Expanded(
-                    child: _buildDropdown("Vendor", vendors, (val) {
-                      if (val == "+ Add New")
-                        _showAddDialog(
-                          "Vendor",
-                          (newVen) => setState(() {
-                            vendors.insert(vendors.length - 1, newVen);
-                            selectedVendor = newVen;
-                          }),
+                    child: Obx(() {
+                      final _ = vendorController.vendors.length;
+
+                      if (vendorController.isLoading.value) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+
+                      var vendorsList = vendorController.vendors;
+
+                      if (vendorsList.isEmpty) {
+                        return _buildDynamicDropdown<String>(
+                          label: "Vendor",
+                          hint: "No Vendors Found",
+                          value: null,
+                          items: [],
+                          onChanged: (val) {},
                         );
-                      else
-                        setState(() => selectedVendor = val);
-                    }, selectedValue: selectedVendor),
+                      }
+
+                      // AUTO SELECT LOGIC (Prioritize preSelectedVendorId)
+                      if (selectedVendorId == null) {
+                        Future.microtask(() {
+                          if (mounted && selectedVendorId == null) {
+                            setState(() {
+                              // Use preSelectedVendorId if passed, else first from list
+                              selectedVendorId =
+                                  widget.preSelectedVendorId ??
+                                  vendorsList.first.id;
+                            });
+                          }
+                        });
+                      }
+
+                      String? validSelectedVendorId =
+                          vendorsList.any((v) => v.id == selectedVendorId)
+                          ? selectedVendorId
+                          : null;
+
+                      return _buildDynamicDropdown<String>(
+                        label: "Vendor",
+                        hint: "Select Vendor",
+                        value: validSelectedVendorId,
+                        items: vendorsList
+                            .map(
+                              (v) => DropdownMenuItem(
+                                value: v.id, // Storing ID
+                                child: Text(
+                                  v.storeName,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (val) =>
+                            setState(() => selectedVendorId = val),
+                      );
+                    }),
                   ),
                 ],
               ),
@@ -412,18 +487,40 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 height: 55,
                 child: Obx(
                   () => ElevatedButton(
-                    onPressed: controller.isLoading.value
+                    onPressed: productController.isLoading.value
                         ? null
                         : () async {
                             if (_formKey.currentState!.validate()) {
+                              // Validations
+                              if (selectedCategory == null) {
+                                Get.snackbar(
+                                  "Error",
+                                  "Please select a Category",
+                                  backgroundColor: Colors.red,
+                                  colorText: Colors.white,
+                                );
+                                return;
+                              }
+                              if (selectedVendorId == null) {
+                                Get.snackbar(
+                                  "Error",
+                                  "Please select a Vendor",
+                                  backgroundColor: Colors.red,
+                                  colorText: Colors.white,
+                                );
+                                return;
+                              }
+
                               ProductModel newProduct = ProductModel(
                                 id: widget.productToEdit?.id,
                                 name: nameCtrl.text,
                                 modelNumber: modelCtrl.text,
                                 description: descCtrl.text,
-                                category: selectedCategory ?? "Uncategorized",
+                                category: selectedCategory!,
                                 subCategory: selectedSubCategory ?? "General",
-                                brand: selectedBrand ?? "Generic",
+                                brand: brandCtrl.text.isEmpty
+                                    ? "Generic"
+                                    : brandCtrl.text,
                                 purchasePrice:
                                     double.tryParse(purchasePriceCtrl.text) ??
                                     0,
@@ -431,21 +528,25 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                     double.tryParse(salePriceCtrl.text) ?? 0,
                                 stockQuantity:
                                     int.tryParse(stockCtrl.text) ?? 0,
-                                vendorId: selectedVendor ?? "Unknown",
+                                vendorId: selectedVendorId!,
                                 images: selectedImagesBase64,
                                 dateAdded: selectedDate,
                               );
 
                               bool success;
                               if (widget.productToEdit == null) {
-                                success = await controller.addNewProduct(
+                                success = await productController.addNewProduct(
                                   newProduct,
                                 );
-                                if (success) _clearForm(); // Only clear on Add
+                                if (success) _clearForm();
                               } else {
-                                success = await controller.updateProduct(
+                                success = await productController.updateProduct(
                                   newProduct,
                                 );
+                              }
+
+                              if (success && widget.productToEdit != null) {
+                                Get.back();
                               }
                             }
                           },
@@ -456,7 +557,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                       ),
                       elevation: 5,
                     ),
-                    child: controller.isLoading.value
+                    child: productController.isLoading.value
                         ? const CircularProgressIndicator(color: Colors.black)
                         : Text(
                             widget.productToEdit == null
@@ -472,7 +573,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 40), // Bottom padding
+              const SizedBox(height: 40),
             ],
           ),
         ),
@@ -482,7 +583,45 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
   // --- HELPER WIDGETS ---
 
-  // Section Title with Divider Look
+  Widget _buildDynamicDropdown<T>({
+    required String label,
+    required String hint,
+    required T? value,
+    required List<DropdownMenuItem<T>> items,
+    required Function(T?) onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.comicNeue(
+            color: Colors.white70,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<T>(
+          value: value,
+          dropdownColor: const Color(0xFF2A2D3E),
+          style: const TextStyle(color: Colors.white),
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: const Color(0xFF2A2D3E),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide.none,
+            ),
+          ),
+          hint: Text(hint, style: const TextStyle(color: Colors.white24)),
+          items: items,
+          onChanged: onChanged,
+          validator: (val) => val == null ? "Required" : null,
+        ),
+      ],
+    );
+  }
+
   Widget _buildSectionTitle(String title) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -550,56 +689,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
               borderSide: const BorderSide(color: Colors.cyanAccent),
             ),
           ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildDropdown(
-    String label,
-    List<String> items,
-    Function(String?) onChanged, {
-    String? selectedValue,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: GoogleFonts.comicNeue(
-            color: Colors.white70,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 8),
-        DropdownButtonFormField<String>(
-          value: selectedValue,
-          dropdownColor: const Color(0xFF2A2D3E),
-          style: const TextStyle(color: Colors.white),
-          decoration: InputDecoration(
-            filled: true,
-            fillColor: const Color(0xFF2A2D3E),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide.none,
-            ),
-          ),
-          items: items
-              .map(
-                (e) => DropdownMenuItem(
-                  value: e,
-                  child: Text(
-                    e,
-                    style: TextStyle(
-                      color: e.startsWith("+")
-                          ? Colors.cyanAccent
-                          : Colors.white,
-                    ),
-                  ),
-                ),
-              )
-              .toList(),
-          onChanged: onChanged,
         ),
       ],
     );

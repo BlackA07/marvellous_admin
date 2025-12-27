@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:marvellous_admin/features/categories/screens/categories_screen.dart';
 import 'package:marvellous_admin/features/dashboard/presentation/screens/dashboard_screen.dart';
+import 'package:marvellous_admin/features/vendors/screens/vendors_list_screen.dart';
 
 import '../../../../core/theme/pallete.dart';
 import '../../controller/layout_controller.dart';
@@ -207,6 +209,12 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
                               } else if (subItem == "Add Product") {
                                 targetScreen =
                                     const AddProductScreen(); // <--- Isme bhi
+                              } else if (subItem == "Categories") {
+                                targetScreen =
+                                    CategoriesScreen(); // <--- Isme bhi
+                              } else if (subItem == "Vendors") {
+                                targetScreen =
+                                    VendorsListScreen(); // <--- Isme bhi
                               }
                             }
 

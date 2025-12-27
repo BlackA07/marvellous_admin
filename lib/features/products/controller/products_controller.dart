@@ -116,11 +116,11 @@ class ProductsController extends GetxController {
     }
   }
 
-  // 2. Update Product (Ye Missing tha - Ab add kardiya hai)
+  // 2. Update Product
   Future<bool> updateProduct(ProductModel product) async {
     try {
       isLoading(true);
-      // Repository call (Make sure repository has updateProduct method too)
+      // Repository call
       await _repository.updateProduct(product);
 
       // Local List Update
