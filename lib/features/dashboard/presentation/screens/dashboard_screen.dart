@@ -8,23 +8,29 @@ import '../widgets/recent_activity_table.dart';
 import '../widgets/sales_chart_card.dart';
 
 class DashboardScreen extends StatelessWidget {
-  final DashboardController controller = Get.put(DashboardController());
-
-  DashboardScreen({Key? key}) : super(key: key);
+  const DashboardScreen({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    // FIX: Controller ko yahan initialize kar rahe hain taake 'Controller not found' error na aaye
+    final DashboardController controller = Get.put(DashboardController());
+
     return SafeArea(
       child: Obx(() {
+        // Loading State
         if (controller.isLoading.value) {
           return const Center(
             child: CircularProgressIndicator(color: Colors.cyanAccent),
           );
         }
 
+        // Error/Empty State
         if (controller.dashboardData.value == null) {
           return const Center(
-            child: Text("No Data", style: TextStyle(color: Colors.white)),
+            child: Text(
+              "No Data Available",
+              style: TextStyle(color: Colors.white),
+            ),
           );
         }
 
@@ -101,6 +107,7 @@ class DashboardScreen extends StatelessWidget {
                       children: [
                         SalesChartCard(),
                         const SizedBox(height: 20),
+                        // GridView for Stats
                         GridView.builder(
                           physics: const NeverScrollableScrollPhysics(),
                           shrinkWrap: true,

@@ -33,8 +33,7 @@ class DashboardController extends GetxController {
       isLoading(true);
 
       // --- 1. Fetch Real Counts (Current Month) ---
-      // Note: Real apps use 'created_at' to filter by month.
-      // Here we assume total count for simplicity MVP.
+      // Using .count() for efficiency
       var usersSnapshot = await _firestore.collection('users').count().get();
       var vendorsSnapshot = await _firestore
           .collection('vendors')
@@ -54,14 +53,19 @@ class DashboardController extends GetxController {
         if (data['status'] == 'Pending') {
           pendingOrders++;
         }
+        // Assuming status names are consistent
         if (data['status'] == 'Delivered' || data['status'] == 'Completed') {
-          totalRevenue += (data['totalAmount'] ?? 0).toDouble();
+          var amount = data['totalAmount'];
+          if (amount is int) {
+            totalRevenue += amount.toDouble();
+          } else if (amount is double) {
+            totalRevenue += amount;
+          }
         }
       }
 
-      // --- 3. Mock Previous Month Data (Since we don't have history yet) ---
-      // In real app, you would fetch count where createdAt < startOfThisMonth
-      int prevUsers = 0; // Example: Last month 0
+      // --- 3. Mock Previous Month Data (Since we don't have historical data stored yet) ---
+      int prevUsers = 0;
       int prevVendors = 0;
       double prevRevenue = 0.0;
       int prevPending = 0;
@@ -89,24 +93,28 @@ class DashboardController extends GetxController {
       );
       String formattedRevenue = currencyFormatter.format(totalRevenue);
 
-      // --- 4. Fetch Recent Activity ---
+      // --- 4. Fetch Recent Activity (Products) ---
       var productsSnapshot = await _firestore
           .collection('products')
-          .orderBy('dateAdded', descending: true)
+          .orderBy(
+            'createdAt',
+            descending: true,
+          ) // Ensure your DB has 'createdAt' or change to 'dateAdded'
           .limit(5)
           .get();
 
       List<RecentActivityModel> activities = productsSnapshot.docs.map((doc) {
         var data = doc.data();
-        Timestamp? ts = data['dateAdded'];
+        // Handle different timestamp field names if necessary
+        Timestamp? ts = data['createdAt'] ?? data['dateAdded'];
         String timeAgo = ts != null
             ? _formatTimestamp(ts.toDate())
             : "Just now";
 
         return RecentActivityModel(
           id: doc.id,
-          user: "Admin",
-          action: "Added ${data['name']}",
+          user: "Admin", // Since products are added by admin/vendor
+          action: "Added ${data['name'] ?? 'Product'}",
           timestamp: timeAgo,
           status: "Completed",
         );
@@ -154,7 +162,7 @@ class DashboardController extends GetxController {
       );
     } catch (e) {
       print("Error fetching dashboard data: $e");
-      Get.snackbar("Error", "Failed to load data");
+      // Optional: Get.snackbar("Error", "Failed to load data: $e");
     } finally {
       isLoading(false);
     }

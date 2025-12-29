@@ -1,8 +1,10 @@
 import 'dart:convert'; // Image decode k liye
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:badges/badges.dart' as badges;
+import 'package:marvellous_admin/features/auth/presentation/login_screen.dart';
 import 'package:marvellous_admin/features/profile/presentation/controllers/profile_controller.dart';
 
 // Theme Import
@@ -201,9 +203,22 @@ class AdminAppBar extends StatelessWidget {
               icon: Icons.logout_outlined,
               tooltip: "Logout",
               isLogout: true,
-              onTap: () {
-                Get.snackbar("Logout", "Logged out successfully (Demo)");
-                // Get.offAll(() => LoginScreen()); // Real logout
+              onTap: () async {
+                // async lagaya kyunke logout future function hai
+
+                // 1. Firebase se session khatam karo
+                await FirebaseAuth.instance.signOut();
+
+                // 2. Navigation Stack clear karo aur Login pe bhejo
+                Get.offAll(() => const LoginScreen());
+
+                // 3. Optional: User ko batao
+                Get.snackbar(
+                  "Logged Out",
+                  "See you soon!",
+                  backgroundColor: Colors.green,
+                  colorText: Colors.white,
+                );
               },
             ),
           ],
