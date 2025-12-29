@@ -3,6 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:marvellous_admin/features/categories/screens/categories_screen.dart';
 import 'package:marvellous_admin/features/dashboard/presentation/screens/dashboard_screen.dart';
+import 'package:marvellous_admin/features/finance/presentation/screens/earnings_dashboard_screen.dart';
+import 'package:marvellous_admin/features/finance/presentation/screens/payouts_screen.dart';
+import 'package:marvellous_admin/features/mlm/presentation/screens/commission_setup_screen.dart';
+import 'package:marvellous_admin/features/mlm/presentation/screens/mlm_tree_view.dart';
+import 'package:marvellous_admin/features/orders/presentation/screens/orders_dashboard_screen.dart';
+import 'package:marvellous_admin/features/profile/presentation/screens/admin_profile_screen.dart'; // Profile Screen Import
 import 'package:marvellous_admin/features/vendors/screens/vendors_list_screen.dart';
 
 import '../../../../core/theme/pallete.dart';
@@ -61,6 +67,8 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
       subItems: ["Earnings", "Payouts"],
     ),
     AdminMenuItem(title: "Reports", icon: Icons.bar_chart_outlined),
+    // Profile Item
+    AdminMenuItem(title: "Profile", icon: Icons.person_outlined),
   ];
 
   @override
@@ -143,8 +151,17 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
                               style: const TextStyle(color: Colors.white),
                             ),
                           );
-                          if (item.title == "Dashboard")
+
+                          // --- MAIN ITEMS NAVIGATION LOGIC ---
+                          if (item.title == "Dashboard") {
                             screen = DashboardScreen();
+                          } else if (item.title == "Orders") {
+                            screen = const OrdersDashboardScreen();
+                          } else if (item.title == "Profile") {
+                            // --- FIX: Added Profile Navigation ---
+                            screen = const AdminProfileScreen();
+                          }
+                          // -------------------------------------
 
                           nav.navigateTo(
                             mainItem: item.title,
@@ -153,8 +170,9 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
                             title: item.title,
                           );
                           if (Scaffold.of(context).hasDrawer &&
-                              Scaffold.of(context).isDrawerOpen)
+                              Scaffold.of(context).isDrawerOpen) {
                             Navigator.pop(context);
+                          }
                         }
                       },
                       leading: Icon(
@@ -204,17 +222,27 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
 
                             if (item.title == "Products") {
                               if (subItem == "All Products") {
-                                targetScreen =
-                                    ProductsHomeScreen(); // <--- Isme controller inject hoga
+                                targetScreen = ProductsHomeScreen();
                               } else if (subItem == "Add Product") {
-                                targetScreen =
-                                    const AddProductScreen(); // <--- Isme bhi
+                                targetScreen = const AddProductScreen();
                               } else if (subItem == "Categories") {
-                                targetScreen =
-                                    CategoriesScreen(); // <--- Isme bhi
+                                targetScreen = CategoriesScreen();
                               } else if (subItem == "Vendors") {
-                                targetScreen =
-                                    VendorsListScreen(); // <--- Isme bhi
+                                targetScreen = VendorsListScreen();
+                              }
+                            } else if (item.title == "Orders") {
+                              targetScreen = const OrdersDashboardScreen();
+                            } else if (item.title == "MLM Network") {
+                              if (subItem == "Tree View") {
+                                targetScreen = const MLMTreeViewScreen();
+                              } else if (subItem == "Commissions") {
+                                targetScreen = const CommissionSetupScreen();
+                              }
+                            } else if (item.title == "Finance") {
+                              if (subItem == "Earnings") {
+                                targetScreen = const EarningsDashboardScreen();
+                              } else if (subItem == "Payouts") {
+                                targetScreen = const PayoutsScreen();
                               }
                             }
 

@@ -30,7 +30,7 @@ android {
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         
         // FIX 2: Min SDK increased to 23 for Firebase Support
-        minSdk = 23
+        minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
