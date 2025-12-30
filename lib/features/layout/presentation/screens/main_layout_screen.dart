@@ -24,7 +24,7 @@ class MainLayoutScreen extends ConsumerWidget {
       drawer: !isDesktop
           ? const Drawer(
               width: 260,
-              backgroundColor: Colors.transparent,
+              backgroundColor: Color.fromARGB(0, 128, 124, 124),
               child: AdminDrawer(),
             )
           : null,
@@ -32,10 +32,15 @@ class MainLayoutScreen extends ConsumerWidget {
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF353A50), Color(0xFF252836), Color(0xFF1B1B26)],
-            stops: [0.0, 0.5, 1.0],
+            begin: Alignment.topRight,
+            end: Alignment.bottomLeft,
+            colors: [
+              Colors.white,
+              Color.fromARGB(255, 90, 87, 87),
+              Color(0xFF606060),
+              Color(0xFF1A1A1A),
+            ],
+            stops: [0.0, 0.4, 0.75, 1.0],
           ),
         ),
         child: Row(

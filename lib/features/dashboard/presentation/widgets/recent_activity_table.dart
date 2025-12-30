@@ -31,91 +31,120 @@ class RecentActivityTable extends StatelessWidget {
           ),
           const SizedBox(height: 20),
 
-          // SingleChildScrollView added for Horizontal Scrolling
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: ConstrainedBox(
-              // Minimum width taake web pe full stretch ho, mobile pe scroll ho
-              constraints: BoxConstraints(minWidth: 600),
-              child: DataTable(
-                horizontalMargin: 0,
-                columnSpacing: 20,
-                columns: const [
-                  DataColumn(
-                    label: Text(
-                      'User',
-                      style: TextStyle(
-                        fontFamily: 'Comic Sans MS',
-                        color: Colors.white54,
-                      ),
-                    ),
-                  ),
-                  DataColumn(
-                    label: Text(
-                      'Action',
-                      style: TextStyle(
-                        fontFamily: 'Comic Sans MS',
-                        color: Colors.white54,
-                      ),
-                    ),
-                  ),
-                  DataColumn(
-                    label: Text(
-                      'Time',
-                      style: TextStyle(
-                        fontFamily: 'Comic Sans MS',
-                        color: Colors.white54,
-                      ),
-                    ),
-                  ),
-                  DataColumn(
-                    label: Text(
-                      'Status',
-                      style: TextStyle(
-                        fontFamily: 'Comic Sans MS',
-                        color: Colors.white54,
-                      ),
-                    ),
-                  ),
-                ],
-                rows: activities.map((activity) {
-                  return DataRow(
-                    cells: [
-                      DataCell(
-                        Text(
-                          activity.user,
-                          style: const TextStyle(
-                            fontFamily: 'Comic Sans MS',
-                            color: Colors.white,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                      DataCell(
-                        Text(
-                          activity.action,
-                          style: const TextStyle(
-                            fontFamily: 'Comic Sans MS',
-                            color: Colors.white70,
-                          ),
-                        ),
-                      ),
-                      DataCell(
-                        Text(
-                          activity.timestamp,
-                          style: const TextStyle(
-                            fontFamily: 'Comic Sans MS',
-                            color: Colors.white38,
-                          ),
-                        ),
-                      ),
-                      DataCell(_buildStatusBadge(activity.status)),
-                    ],
-                  );
-                }).toList(),
+          // Check if list is empty
+          if (activities.isEmpty)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(20.0),
+                child: Text(
+                  "No recent activity found.",
+                  style: TextStyle(color: Colors.white54),
+                ),
               ),
+            )
+          else
+            // LayoutBuilder se hum available width nikalenge
+            LayoutBuilder(
+              builder: (context, constraints) {
+                // Agar Available Width 600 se ziada hai (Laptop), to width match karo.
+                // Agar kam hai (Phone), to minimum 600 rakho taake scroll ho.
+                double minWidth = constraints.maxWidth < 600
+                    ? 600
+                    : constraints.maxWidth;
+
+                return SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(minWidth: minWidth),
+                    child: DataTable(
+                      horizontalMargin: 10, // Thora gap side se
+                      columnSpacing: 20,
+                      // Heading Row Color
+                      headingRowColor: MaterialStateProperty.resolveWith(
+                        (states) => Colors.white.withOpacity(0.02),
+                      ),
+                      columns: const [
+                        DataColumn(
+                          label: Text(
+                            'User',
+                            style: TextStyle(
+                              fontFamily: 'Comic Sans MS',
+                              color: Colors.white54,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        DataColumn(
+                          label: Text(
+                            'Action',
+                            style: TextStyle(
+                              fontFamily: 'Comic Sans MS',
+                              color: Colors.white54,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        DataColumn(
+                          label: Text(
+                            'Time',
+                            style: TextStyle(
+                              fontFamily: 'Comic Sans MS',
+                              color: Colors.white54,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        DataColumn(
+                          label: Text(
+                            'Status',
+                            style: TextStyle(
+                              fontFamily: 'Comic Sans MS',
+                              color: Colors.white54,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                      rows: activities.map((activity) {
+                        return DataRow(
+                          cells: [
+                            DataCell(
+                              Text(
+                                activity.user,
+                                style: const TextStyle(
+                                  fontFamily: 'Comic Sans MS',
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            DataCell(
+                              Text(
+                                activity.action,
+                                style: const TextStyle(
+                                  fontFamily: 'Comic Sans MS',
+                                  color: Colors.white70,
+                                ),
+                              ),
+                            ),
+                            DataCell(
+                              Text(
+                                activity.timestamp,
+                                style: const TextStyle(
+                                  fontFamily: 'Comic Sans MS',
+                                  color: Colors.white38,
+                                ),
+                              ),
+                            ),
+                            DataCell(_buildStatusBadge(activity.status)),
+                          ],
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                );
+              },
             ),
-          ),
         ],
       ),
     );
@@ -149,6 +178,7 @@ class RecentActivityTable extends StatelessWidget {
           fontFamily: 'Comic Sans MS',
           color: color,
           fontSize: 12,
+          fontWeight: FontWeight.bold,
         ),
       ),
     );

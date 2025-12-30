@@ -45,7 +45,7 @@ class _StatSummaryCardState extends State<StatSummaryCard> {
           border: Border.all(
             color: isHovered
                 ? widget.info.color.withOpacity(0.5)
-                : Colors.white.withOpacity(0.1),
+                : const Color.fromARGB(255, 0, 0, 0).withOpacity(0.1),
           ),
         ),
         child: Column(
@@ -139,7 +139,7 @@ class _StatSummaryCardState extends State<StatSummaryCard> {
                     "vs last month",
                     style: TextStyle(
                       fontFamily: 'Comic Sans MS',
-                      color: Colors.white38,
+                      color: const Color.fromARGB(97, 245, 6, 6),
                       fontSize: isDesktop ? 11 : 8,
                     ),
                   ),

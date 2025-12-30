@@ -13,13 +13,34 @@ class SalesChartCard extends StatelessWidget {
     double width = MediaQuery.of(context).size.width;
     bool isDesktop = width > 1100;
 
+    // Metallic Gradient from TextField
+    const faceGradient = LinearGradient(
+      begin: Alignment.topRight,
+      end: Alignment.bottomLeft,
+      colors: [
+        Colors.white, // Top Highlight
+        Color.fromARGB(255, 218, 221, 227), // Light Silver
+        Color(0xFF98A2B3), // Darker Silver
+        Color(0xFF667085), // Shadow Base
+      ],
+      stops: [0.0, 0.2, 0.6, 1.0],
+    );
+
     return Container(
       height: 350,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF2A2D3E),
+        // Applied Gradient Here
+        gradient: faceGradient,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        border: Border.all(color: Colors.white.withOpacity(0.6)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            offset: const Offset(0, 4),
+            blurRadius: 6,
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -32,9 +53,10 @@ class SalesChartCard extends StatelessWidget {
                   "Sales Overview (PKR)",
                   style: TextStyle(
                     fontFamily: 'Comic Sans MS',
-                    color: Colors.white,
+                    color: Colors.black87, // Font Black
                     fontSize: isDesktop ? 16 : 13,
-                    fontWeight: FontWeight.bold,
+                    fontWeight:
+                        FontWeight.w900, // Thora aur bold metallic look k liye
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -56,23 +78,24 @@ class SalesChartCard extends StatelessWidget {
                             vertical: 5,
                           ),
                           decoration: BoxDecoration(
+                            // Selected: Cyan bg, Unselected: Transparent
                             color: isSelected
-                                ? Colors.cyanAccent.withOpacity(0.2)
+                                ? Colors.cyanAccent.withOpacity(0.3)
                                 : Colors.transparent,
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(
                               color: isSelected
-                                  ? Colors.cyanAccent
-                                  : Colors.white12,
+                                  ? Colors
+                                        .cyan[700]! // Darker border for visibility
+                                  : Colors.black12,
                             ),
                           ),
                           child: Text(
                             filter,
                             style: TextStyle(
                               fontFamily: 'Comic Sans MS',
-                              color: isSelected
-                                  ? Colors.cyanAccent
-                                  : Colors.white54,
+                              // Font Black
+                              color: isSelected ? Colors.black : Colors.black54,
                               fontSize: isDesktop ? 13 : 10,
                               fontWeight: FontWeight.bold,
                             ),
@@ -95,7 +118,8 @@ class SalesChartCard extends StatelessWidget {
                   show: true,
                   drawVerticalLine: false,
                   getDrawingHorizontalLine: (value) {
-                    return FlLine(color: Colors.white10, strokeWidth: 1);
+                    // Grid lines dark taake silver pe dikhen
+                    return FlLine(color: Colors.black12, strokeWidth: 1);
                   },
                 ),
                 titlesData: FlTitlesData(
@@ -113,7 +137,7 @@ class SalesChartCard extends StatelessWidget {
                       interval: 1,
                       getTitlesWidget: (value, meta) {
                         const style = TextStyle(
-                          color: Colors.white54,
+                          color: Colors.black87, // Font Black
                           fontWeight: FontWeight.bold,
                           fontSize: 12,
                         );
@@ -134,10 +158,9 @@ class SalesChartCard extends StatelessWidget {
                           default:
                             return Container();
                         }
-                        // FIX: Updated SideTitleWidget usage
                         return SideTitleWidget(
+                          meta: meta, // Updated for newer fl_chart
                           space: 8.0,
-                          meta: meta, // Required parameter passed here
                           child: Text(text, style: style),
                         );
                       },
@@ -151,8 +174,9 @@ class SalesChartCard extends StatelessWidget {
                         return Text(
                           "${(value / 1000).toStringAsFixed(0)}k",
                           style: const TextStyle(
-                            color: Colors.white54,
+                            color: Colors.black87, // Font Black
                             fontSize: 10,
+                            fontWeight: FontWeight.bold,
                           ),
                         );
                       },
@@ -162,10 +186,10 @@ class SalesChartCard extends StatelessWidget {
                 ),
                 borderData: FlBorderData(
                   show: true,
-                  // L-Shape Border (Bottom and Left only)
+                  // L-Shape Border Dark
                   border: const Border(
-                    bottom: BorderSide(color: Colors.white24, width: 1),
-                    left: BorderSide(color: Colors.white24, width: 1),
+                    bottom: BorderSide(color: Colors.black26, width: 1),
+                    left: BorderSide(color: Colors.black26, width: 1),
                     top: BorderSide(color: Colors.transparent),
                     right: BorderSide(color: Colors.transparent),
                   ),
@@ -173,7 +197,7 @@ class SalesChartCard extends StatelessWidget {
                 minX: 0,
                 maxX: 6,
                 minY: 0,
-                maxY: 50000, // Dynamic max logic can be added
+                maxY: 50000,
                 lineBarsData: [
                   LineChartBarData(
                     spots: const [
@@ -186,8 +210,9 @@ class SalesChartCard extends StatelessWidget {
                       FlSpot(6, 42000),
                     ],
                     isCurved: true,
+                    // Line Gradient thora dark kiya taake silver pe shine kare
                     gradient: const LinearGradient(
-                      colors: [Colors.cyanAccent, Colors.purpleAccent],
+                      colors: [Colors.blueAccent, Colors.purpleAccent],
                     ),
                     barWidth: 3,
                     isStrokeCapRound: true,
@@ -196,7 +221,7 @@ class SalesChartCard extends StatelessWidget {
                       show: true,
                       gradient: LinearGradient(
                         colors: [
-                          Colors.cyanAccent.withOpacity(0.2),
+                          Colors.blueAccent.withOpacity(0.3),
                           Colors.purpleAccent.withOpacity(0.0),
                         ],
                         begin: Alignment.topCenter,
