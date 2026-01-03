@@ -40,8 +40,41 @@ class AllOrdersScreen extends StatelessWidget {
                 return RequestCard(
                   request: req,
                   onView: () => Get.to(() => RequestDetailScreen(request: req)),
-                  onAccept: () => controller.acceptRequest(req.id),
-                  onReject: () => controller.rejectRequest(req.id),
+
+                  // --- ACCEPT BUTTON LOGIC ---
+                  onAccept: () {
+                    Get.defaultDialog(
+                      title: "Approve Request",
+                      middleText:
+                          "Are you sure you want to approve this product?",
+                      textConfirm: "Yes, Approve",
+                      textCancel: "Cancel",
+                      confirmTextColor: Colors.white,
+                      buttonColor: Colors.green,
+                      onConfirm: () {
+                        Get.back(); // Close Dialog
+                        controller.acceptRequest(
+                          req.id,
+                        ); // Call Controller (Undo logic is inside controller)
+                      },
+                    );
+                  },
+
+                  // --- REJECT BUTTON LOGIC ---
+                  onReject: () {
+                    Get.defaultDialog(
+                      title: "Reject Request",
+                      middleText: "Are you sure you want to reject?",
+                      textConfirm: "Yes, Reject",
+                      textCancel: "Cancel",
+                      confirmTextColor: Colors.white,
+                      buttonColor: Colors.red,
+                      onConfirm: () {
+                        Get.back(); // Close Dialog
+                        controller.rejectRequest(req.id); // Call Controller
+                      },
+                    );
+                  },
                 );
               },
             );
