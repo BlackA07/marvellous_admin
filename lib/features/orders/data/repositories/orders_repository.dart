@@ -26,7 +26,7 @@ class OrdersRepository {
   Stream<List<OrderModel>> getOrderHistory() {
     return _db
         .collection('orders')
-        .where('status', whereIn: ['accepted', 'rejected'])
+        .where('status', whereIn: ['accepted', 'rejected', 'delivered'])
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map(
@@ -44,8 +44,6 @@ class OrdersRepository {
 
   // Get Top 10 Pending Requests
   Stream<List<VendorRequestModel>> getPendingRequests({int limit = 10}) {
-    // Assuming requests are stored in 'products' with status 'pending_approval'
-    // Or a separate 'vendor_requests' collection.
     return _db
         .collection('vendor_requests')
         .where('status', isEqualTo: 'pending')
@@ -73,10 +71,37 @@ class OrdersRepository {
         );
   }
 
+  // UPDATED LOGIC: Agar Approve ho to Product Create bhi karo
   Future<void> updateRequestStatus(String reqId, String newStatus) async {
-    // Agar approve hua to product ko 'published' bhi karna parega logic men
+    // 1. Status Update karo Request table men
     await _db.collection('vendor_requests').doc(reqId).update({
       'status': newStatus,
     });
+
+    // 2. Agar Approved hai, to is request ka data utha kar 'products' men dalo
+    if (newStatus == 'approved') {
+      var docSnapshot = await _db
+          .collection('vendor_requests')
+          .doc(reqId)
+          .get();
+      if (docSnapshot.exists) {
+        var data = docSnapshot.data()!;
+
+        // Add to Products Collection (Customer App men show hone k liye)
+        await _db.collection('products').add({
+          'vendorId': data['vendorId'],
+          'name': data['productName'],
+          'description':
+              data['description'], // Field names model se match kar lena
+          'price': data['price'],
+          'image': data['image'],
+          'category': 'General', // Default category ya request se uthao
+          'rating': 0.0,
+          'reviews': 0,
+          'isPopular': false,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+    }
   }
 }
