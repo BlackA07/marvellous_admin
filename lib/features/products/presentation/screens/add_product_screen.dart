@@ -6,8 +6,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:marvellous_admin/features/categories/models/category_model.dart';
-import 'package:marvellous_admin/features/layout/presentation/screens/main_layout_screen.dart';
-import 'package:marvellous_admin/features/products/presentation/screens/products_home_screen.dart';
 
 // Controllers
 import '../../../categories/controllers/category_controller.dart';
@@ -18,9 +16,8 @@ import '../../controller/products_controller.dart';
 import '../../models/product_model.dart';
 
 class AddProductScreen extends StatefulWidget {
-  final ProductModel? productToEdit; // Data for Edit Mode
-  final String?
-  preSelectedVendorId; // For auto-selecting vendor from detail screen
+  final ProductModel? productToEdit;
+  final String? preSelectedVendorId;
 
   const AddProductScreen({
     Key? key,
@@ -33,7 +30,6 @@ class AddProductScreen extends StatefulWidget {
 }
 
 class _AddProductScreenState extends State<AddProductScreen> {
-  // FORCE INJECT CONTROLLERS
   final ProductsController productController = Get.put(ProductsController());
   final CategoryController categoryController = Get.put(CategoryController());
   final VendorController vendorController = Get.put(VendorController());
@@ -46,16 +42,42 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final TextEditingController modelCtrl = TextEditingController();
   final TextEditingController descCtrl = TextEditingController();
   final TextEditingController brandCtrl = TextEditingController();
+
+  // Pricing
   final TextEditingController purchasePriceCtrl = TextEditingController();
   final TextEditingController salePriceCtrl = TextEditingController();
+  final TextEditingController originalPriceCtrl =
+      TextEditingController(); // FAKE PRICE
+
   final TextEditingController stockCtrl = TextEditingController();
+  final TextEditingController warrantyCtrl = TextEditingController();
 
   // State Variables
   DateTime selectedDate = DateTime.now();
   String? selectedCategory;
   String? selectedSubCategory;
   String? selectedVendorId;
+  String? selectedLocation; // New Location Field
   List<String> selectedImagesBase64 = [];
+
+  double calculatedPoints = 0.0;
+
+  // Options
+  final List<String> locationOptions = [
+    "Karachi Only",
+    "Pakistan",
+    "Worldwide",
+    "Store Pickup Only",
+  ];
+
+  final List<String> warrantyOptions = [
+    "No Warranty",
+    "6 Months",
+    "1 Year",
+    "2 Years",
+    "3 Years",
+    "5 Years",
+  ];
 
   @override
   void initState() {
@@ -63,11 +85,23 @@ class _AddProductScreenState extends State<AddProductScreen> {
     if (widget.productToEdit != null) {
       _loadProductData(widget.productToEdit!);
     } else {
-      // Logic for pre-selected vendor
       if (widget.preSelectedVendorId != null) {
         selectedVendorId = widget.preSelectedVendorId;
       }
+      selectedLocation = locationOptions[1]; // Default Pakistan
     }
+
+    // Listener for Points Calculation
+    purchasePriceCtrl.addListener(_calculatePoints);
+    salePriceCtrl.addListener(_calculatePoints);
+  }
+
+  void _calculatePoints() {
+    double buy = double.tryParse(purchasePriceCtrl.text) ?? 0;
+    double sell = double.tryParse(salePriceCtrl.text) ?? 0;
+    setState(() {
+      calculatedPoints = productController.calculatePoints(buy, sell);
+    });
   }
 
   void _loadProductData(ProductModel product) {
@@ -77,13 +111,17 @@ class _AddProductScreenState extends State<AddProductScreen> {
     brandCtrl.text = product.brand;
     purchasePriceCtrl.text = product.purchasePrice.toString();
     salePriceCtrl.text = product.salePrice.toString();
+    originalPriceCtrl.text = product.originalPrice.toString();
     stockCtrl.text = product.stockQuantity.toString();
+    warrantyCtrl.text = product.warranty;
 
     selectedCategory = product.category;
     selectedSubCategory = product.subCategory;
     selectedVendorId = product.vendorId;
+    selectedLocation = product.deliveryLocation;
     selectedImagesBase64 = List.from(product.images);
     selectedDate = product.dateAdded;
+    calculatedPoints = product.productPoints;
   }
 
   Future<void> _pickImages() async {
@@ -116,12 +154,14 @@ class _AddProductScreenState extends State<AddProductScreen> {
     brandCtrl.clear();
     purchasePriceCtrl.clear();
     salePriceCtrl.clear();
+    originalPriceCtrl.clear();
     stockCtrl.clear();
+    warrantyCtrl.clear();
     setState(() {
       selectedImagesBase64.clear();
       selectedCategory = null;
       selectedSubCategory = null;
-      // Keep vendor selected if it was pre-selected
+      calculatedPoints = 0.0;
       if (widget.preSelectedVendorId == null) selectedVendorId = null;
     });
   }
@@ -140,10 +180,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        // leading: IconButton(
-        //   icon: const Icon(Icons.arrow_back, color: Colors.white),
-        //   onPressed: () => Get.off(() => MainLayoutScreen()),
-        // ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
@@ -260,28 +296,113 @@ class _AddProductScreenState extends State<AddProductScreen> {
               const SizedBox(height: 15),
               _buildTextField("Model Number", "e.g. SF-2024", modelCtrl),
               const SizedBox(height: 15),
+
+              // BRAND AUTOCOMPLETE
+              Text(
+                "Brand",
+                style: GoogleFonts.comicNeue(
+                  color: Colors.white70,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Autocomplete<String>(
+                initialValue: TextEditingValue(text: brandCtrl.text),
+                optionsBuilder: (TextEditingValue textEditingValue) {
+                  if (textEditingValue.text == '') {
+                    return const Iterable<String>.empty();
+                  }
+                  return productController.existingBrands.where((
+                    String option,
+                  ) {
+                    return option.toLowerCase().contains(
+                      textEditingValue.text.toLowerCase(),
+                    );
+                  });
+                },
+                onSelected: (String selection) {
+                  brandCtrl.text = selection;
+                },
+                fieldViewBuilder:
+                    (context, controller, focusNode, onEditingComplete) {
+                      // Bind the local controller to the passed controller from Autocomplete
+                      controller.addListener(() {
+                        brandCtrl.text = controller.text;
+                      });
+                      return TextFormField(
+                        controller: controller,
+                        focusNode: focusNode,
+                        onEditingComplete: onEditingComplete,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          hintText: "Select or type brand",
+                          hintStyle: const TextStyle(color: Colors.white24),
+                          filled: true,
+                          fillColor: const Color(0xFF2A2D3E),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide.none,
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(
+                              color: Colors.cyanAccent,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                optionsViewBuilder: (context, onSelected, options) {
+                  return Align(
+                    alignment: Alignment.topLeft,
+                    child: Material(
+                      elevation: 4.0,
+                      color: const Color(0xFF2A2D3E),
+                      child: SizedBox(
+                        width: 300,
+                        child: ListView.builder(
+                          padding: EdgeInsets.zero,
+                          shrinkWrap: true,
+                          itemCount: options.length,
+                          itemBuilder: (BuildContext context, int index) {
+                            final String option = options.elementAt(index);
+                            return InkWell(
+                              onTap: () => onSelected(option),
+                              child: Padding(
+                                padding: const EdgeInsets.all(16.0),
+                                child: Text(
+                                  option,
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+
+              const SizedBox(height: 15),
+
+              // DESCRIPTION
               _buildTextField(
                 "Description",
                 "Enter full product details...",
                 descCtrl,
-                maxLines: 4,
+                maxLines: 5,
+                isMultiline: true,
               ),
 
               const SizedBox(height: 30),
 
-              // ================= SECTION 3: CATEGORIZATION =================
-              _buildSectionTitle("Categorization"),
+              // ================= SECTION 3: CATEGORIZATION & LOCATION =================
+              _buildSectionTitle("Logistics"),
 
-              // 1. DYNAMIC CATEGORY DROPDOWN
+              // CATEGORY (Auto-Selects First, but not Sub-Category)
               Obx(() {
-                final _ = categoryController.categories.length;
-
-                if (categoryController.isLoading.value) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
                 List<CategoryModel> cats = categoryController.categories;
-
                 if (cats.isEmpty) {
                   return _buildDynamicDropdown<String>(
                     label: "Category",
@@ -292,11 +413,13 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   );
                 }
 
+                // Auto Select First Category if none selected
                 if (selectedCategory == null && widget.productToEdit == null) {
                   Future.microtask(() {
                     if (mounted && selectedCategory == null) {
                       setState(() {
                         selectedCategory = cats.first.name;
+                        selectedSubCategory = null; // Ensure Sub is empty
                       });
                     }
                   });
@@ -325,7 +448,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   onChanged: (val) {
                     setState(() {
                       selectedCategory = val;
-                      selectedSubCategory = null;
+                      selectedSubCategory =
+                          null; // Always reset sub-cat on category change
                     });
                   },
                 );
@@ -333,10 +457,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
               const SizedBox(height: 15),
 
-              // 2. DYNAMIC SUB-CATEGORY DROPDOWN
+              // SUB-CATEGORY (Remains empty initially)
               Obx(() {
                 List<CategoryModel> allCats = categoryController.categories;
-
                 List<String> subCats = [];
                 if (selectedCategory != null) {
                   var catObj = allCats.firstWhere(
@@ -346,6 +469,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   subCats = catObj.subCategories;
                 }
 
+                // Validate selectedSubCategory against list
                 String? validSelectedSubCategory =
                     subCats.contains(selectedSubCategory)
                     ? selectedSubCategory
@@ -355,7 +479,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   label: "Sub Category",
                   hint: selectedCategory == null
                       ? "Select Category First"
-                      : "Select Sub-Category",
+                      : "Select Sub-Category", // Will show this hint
                   value: validSelectedSubCategory,
                   items: subCats
                       .map(
@@ -374,13 +498,65 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
               const SizedBox(height: 15),
 
-              // 3. BRAND TEXT FIELD
-              _buildTextField("Brand", "e.g. Samsung", brandCtrl),
+              // LOCATION TO DELIVER
+              _buildDynamicDropdown<String>(
+                label: "Location to Deliver",
+                hint: "Select Region",
+                value: selectedLocation,
+                items: locationOptions
+                    .map(
+                      (l) => DropdownMenuItem(
+                        value: l,
+                        child: Text(
+                          l,
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (val) => setState(() => selectedLocation = val),
+              ),
 
               const SizedBox(height: 30),
 
-              // ================= SECTION 4: PRICING & INVENTORY =================
+              // ================= SECTION 4: WARRANTY =================
+              _buildSectionTitle("Warranty"),
+
+              // Warranty Chips
+              Wrap(
+                spacing: 8,
+                children: warrantyOptions.map((option) {
+                  return ActionChip(
+                    label: Text(option),
+                    backgroundColor: warrantyCtrl.text == option
+                        ? Colors.purpleAccent
+                        : const Color(0xFF2A2D3E),
+                    labelStyle: TextStyle(
+                      color: warrantyCtrl.text == option
+                          ? Colors.white
+                          : Colors.white70,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        warrantyCtrl.text = option;
+                      });
+                    },
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 10),
+              _buildTextField(
+                "Custom Warranty",
+                "Or type custom warranty (e.g. 10 Years)",
+                warrantyCtrl,
+              ),
+
+              const SizedBox(height: 30),
+
+              // ================= SECTION 5: PRICING & INVENTORY =================
               _buildSectionTitle("Pricing & Inventory"),
+
               Row(
                 children: [
                   Expanded(
@@ -394,9 +570,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   const SizedBox(width: 15),
                   Expanded(
                     child: _buildTextField(
-                      "Sale Price",
-                      "0.00",
-                      salePriceCtrl,
+                      "Quantity",
+                      "0",
+                      stockCtrl,
                       isNumber: true,
                     ),
                   ),
@@ -407,81 +583,105 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 children: [
                   Expanded(
                     child: _buildTextField(
-                      "Quantity",
-                      "0",
-                      stockCtrl,
+                      "Original Price (Fake)",
+                      "High Price",
+                      originalPriceCtrl,
                       isNumber: true,
                     ),
                   ),
                   const SizedBox(width: 15),
-
-                  // DYNAMIC VENDOR DROPDOWN
                   Expanded(
-                    child: Obx(() {
-                      final _ = vendorController.vendors.length;
-
-                      if (vendorController.isLoading.value) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
-
-                      var vendorsList = vendorController.vendors;
-
-                      if (vendorsList.isEmpty) {
-                        return _buildDynamicDropdown<String>(
-                          label: "Vendor",
-                          hint: "No Vendors Found",
-                          value: null,
-                          items: [],
-                          onChanged: (val) {},
-                        );
-                      }
-
-                      // AUTO SELECT LOGIC (Prioritize preSelectedVendorId)
-                      if (selectedVendorId == null) {
-                        Future.microtask(() {
-                          if (mounted && selectedVendorId == null) {
-                            setState(() {
-                              // Use preSelectedVendorId if passed, else first from list
-                              selectedVendorId =
-                                  widget.preSelectedVendorId ??
-                                  vendorsList.first.id;
-                            });
-                          }
-                        });
-                      }
-
-                      String? validSelectedVendorId =
-                          vendorsList.any((v) => v.id == selectedVendorId)
-                          ? selectedVendorId
-                          : null;
-
-                      return _buildDynamicDropdown<String>(
-                        label: "Vendor",
-                        hint: "Select Vendor",
-                        value: validSelectedVendorId,
-                        items: vendorsList
-                            .map(
-                              (v) => DropdownMenuItem(
-                                value: v.id, // Storing ID
-                                child: Text(
-                                  v.storeName,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(color: Colors.white),
-                                ),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (val) =>
-                            setState(() => selectedVendorId = val),
-                      );
-                    }),
+                    child: _buildTextField(
+                      "Sale Price (Discounted)",
+                      "Actual Price",
+                      salePriceCtrl,
+                      isNumber: true,
+                    ),
                   ),
                 ],
               ),
 
+              const SizedBox(height: 20),
+
+              // POINTS DISPLAY
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(15),
+                decoration: BoxDecoration(
+                  color: Colors.purpleAccent.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.purpleAccent),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      "Customer Points Reward:",
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                    Text(
+                      "${calculatedPoints.toStringAsFixed(1)} Pts",
+                      style: const TextStyle(
+                        color: Colors.purpleAccent,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 15),
+
+              // DYNAMIC VENDOR DROPDOWN
+              Obx(() {
+                var vendorsList = vendorController.vendors;
+                if (vendorsList.isEmpty) {
+                  return _buildDynamicDropdown<String>(
+                    label: "Vendor",
+                    hint: "No Vendors Found",
+                    value: null,
+                    items: [],
+                    onChanged: (val) {},
+                  );
+                }
+                if (selectedVendorId == null) {
+                  Future.microtask(() {
+                    if (mounted && selectedVendorId == null) {
+                      setState(() {
+                        selectedVendorId =
+                            widget.preSelectedVendorId ?? vendorsList.first.id;
+                      });
+                    }
+                  });
+                }
+                String? validSelectedVendorId =
+                    vendorsList.any((v) => v.id == selectedVendorId)
+                    ? selectedVendorId
+                    : null;
+                return _buildDynamicDropdown<String>(
+                  label: "Vendor",
+                  hint: "Select Vendor",
+                  value: validSelectedVendorId,
+                  items: vendorsList
+                      .map(
+                        (v) => DropdownMenuItem(
+                          value: v.id,
+                          child: Text(
+                            v.storeName,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (val) => setState(() => selectedVendorId = val),
+                );
+              }),
+
               const SizedBox(height: 40),
 
-              // ================= SECTION 5: ACTION BUTTON =================
+              // ================= SECTION 6: ACTION BUTTON =================
               SizedBox(
                 width: double.infinity,
                 height: 55,
@@ -491,20 +691,11 @@ class _AddProductScreenState extends State<AddProductScreen> {
                         ? null
                         : () async {
                             if (_formKey.currentState!.validate()) {
-                              // Validations
-                              if (selectedCategory == null) {
+                              if (selectedCategory == null ||
+                                  selectedVendorId == null) {
                                 Get.snackbar(
                                   "Error",
-                                  "Please select a Category",
-                                  backgroundColor: Colors.red,
-                                  colorText: Colors.white,
-                                );
-                                return;
-                              }
-                              if (selectedVendorId == null) {
-                                Get.snackbar(
-                                  "Error",
-                                  "Please select a Vendor",
+                                  "Please select Category and Vendor",
                                   backgroundColor: Colors.red,
                                   colorText: Colors.white,
                                 );
@@ -526,11 +717,20 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                     0,
                                 salePrice:
                                     double.tryParse(salePriceCtrl.text) ?? 0,
+                                originalPrice:
+                                    double.tryParse(originalPriceCtrl.text) ??
+                                    0,
                                 stockQuantity:
                                     int.tryParse(stockCtrl.text) ?? 0,
                                 vendorId: selectedVendorId!,
                                 images: selectedImagesBase64,
                                 dateAdded: selectedDate,
+                                deliveryLocation:
+                                    selectedLocation ?? 'Worldwide',
+                                warranty: warrantyCtrl.text.isEmpty
+                                    ? "No Warranty"
+                                    : warrantyCtrl.text,
+                                productPoints: calculatedPoints,
                               );
 
                               bool success;
@@ -657,6 +857,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
     TextEditingController ctrl, {
     int maxLines = 1,
     bool isNumber = false,
+    bool isMultiline = false,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -672,7 +873,12 @@ class _AddProductScreenState extends State<AddProductScreen> {
         TextFormField(
           controller: ctrl,
           maxLines: maxLines,
-          keyboardType: isNumber ? TextInputType.number : TextInputType.text,
+          keyboardType: isNumber
+              ? TextInputType.number
+              : (isMultiline ? TextInputType.multiline : TextInputType.text),
+          textInputAction: isMultiline
+              ? TextInputAction.newline
+              : TextInputAction.next,
           style: const TextStyle(color: Colors.white),
           validator: (val) => val!.isEmpty ? "Required" : null,
           decoration: InputDecoration(

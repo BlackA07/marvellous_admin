@@ -8,17 +8,37 @@ class ProductsController extends GetxController {
 
   var isLoading = true.obs;
 
-  // Master list (jo DB se ayegi)
+  // Master list
   var productList = <ProductModel>[].obs;
 
   // Search & Filter Variables
   var searchQuery = ''.obs;
   var selectedCategory = 'All'.obs;
 
-  // --- FILTERED LIST LOGIC (Table men ye use hoga) ---
+  // --- GLOBAL SETTING FOR POINTS ---
+  // Admin logic: 100 Rs Profit = 1 Point
+  // You can change this variable or fetch it from a SettingsController
+  double profitPerPoint = 100.0;
+
+  // --- BRAND SUGGESTION LOGIC ---
+  List<String> get existingBrands {
+    return productList
+        .map((p) => p.brand)
+        .where((b) => b.isNotEmpty)
+        .toSet() // Removes duplicates
+        .toList();
+  }
+
+  // --- POINTS CALCULATION ---
+  double calculatePoints(double purchase, double sale) {
+    if (purchase >= sale) return 0; // No profit, no points
+    double profit = sale - purchase;
+    return (profit / profitPerPoint);
+  }
+
+  // --- FILTERED LIST LOGIC ---
   List<ProductModel> get filteredProducts {
     return productList.where((product) {
-      // 1. Apply Search
       String search = searchQuery.value.toLowerCase();
       bool matchesSearch =
           search.isEmpty ||
@@ -26,7 +46,6 @@ class ProductsController extends GetxController {
           product.modelNumber.toLowerCase().contains(search) ||
           product.category.toLowerCase().contains(search);
 
-      // 2. Apply Category Filter
       bool matchesCategory =
           selectedCategory.value == 'All' ||
           product.category == selectedCategory.value;
@@ -35,7 +54,6 @@ class ProductsController extends GetxController {
     }).toList();
   }
 
-  // --- Dynamic Categories ---
   List<String> get availableCategories {
     Set<String> categories = productList.map((p) => p.category).toSet();
     return ['All', ...categories];
@@ -73,12 +91,10 @@ class ProductsController extends GetxController {
     }
   }
 
-  // Search Function
   void updateSearch(String val) {
     searchQuery.value = val;
   }
 
-  // Filter Functions
   void updateCategoryFilter(String category) {
     selectedCategory.value = category;
   }
@@ -90,7 +106,6 @@ class ProductsController extends GetxController {
 
   // --- CRUD Operations ---
 
-  // 1. Add Product
   Future<bool> addNewProduct(ProductModel product) async {
     try {
       isLoading(true);
@@ -116,18 +131,15 @@ class ProductsController extends GetxController {
     }
   }
 
-  // 2. Update Product
   Future<bool> updateProduct(ProductModel product) async {
     try {
       isLoading(true);
-      // Repository call
       await _repository.updateProduct(product);
 
-      // Local List Update
       int index = productList.indexWhere((p) => p.id == product.id);
       if (index != -1) {
         productList[index] = product;
-        productList.refresh(); // UI Refresh
+        productList.refresh();
       }
 
       Get.snackbar(
@@ -150,7 +162,6 @@ class ProductsController extends GetxController {
     }
   }
 
-  // 3. Delete Product
   Future<void> deleteProduct(String id) async {
     try {
       await _repository.deleteProduct(id);
