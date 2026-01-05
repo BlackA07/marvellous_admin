@@ -3,7 +3,11 @@ name: Flutter Web Deploy
 on:
   push:
     branches:
-      - Working  # Ya agar aapki branch ka naam 'master' hai to wo likhein
+      - Working  # Aapki branch ka naam
+
+# ---> YE HAI WO NAYA HISSA (PERMISSIONS) <---
+permissions:
+  contents: write
 
 jobs:
   build:
