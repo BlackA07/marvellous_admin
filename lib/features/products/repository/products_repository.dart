@@ -28,13 +28,12 @@ class ProductsRepository {
     }
   }
 
-  // 3. Update (Ye Missing tha - Ab add hogaya hai)
+  // 3. Update
   Future<void> updateProduct(ProductModel product) async {
     try {
       if (product.id == null) {
         throw Exception("Product ID is missing for update");
       }
-      // Firestore men specific document ID dhoond kar update karega
       await _products.doc(product.id).update(product.toMap());
     } catch (e) {
       throw Exception("Failed to update product: $e");
