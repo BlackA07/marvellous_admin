@@ -38,7 +38,6 @@ class _ProductsHomeScreenState extends ConsumerState<ProductsHomeScreen> {
   void initState() {
     super.initState();
     // REAL-TIME SEARCH LOGIC:
-    // Ye listener har keystroke par controller ko update karega
     _searchController.addListener(() {
       controller.updateSearch(_searchController.text);
     });
@@ -81,13 +80,9 @@ class _ProductsHomeScreenState extends ConsumerState<ProductsHomeScreen> {
         color: Colors.cyanAccent,
         backgroundColor: const Color(0xFF2A2D3E),
         onRefresh: () async {
-          // 1. Clear Search UI
           _searchController.clear();
-          // 2. Clear Search Logic (Empty string resets list)
           controller.updateSearch("");
-          // 3. Clear Filters
           controller.clearAllFilters();
-          // 4. Refresh Data form API/Database
           controller.onInit();
         },
         child: Obx(() {
@@ -99,10 +94,11 @@ class _ProductsHomeScreenState extends ConsumerState<ProductsHomeScreen> {
 
           return LayoutBuilder(
             builder: (context, constraints) {
+              // Responsive Breakpoints
               bool isDesktop = constraints.maxWidth > 1100;
+              bool isMobile = constraints.maxWidth < 800; // Mobile check
 
               return SingleChildScrollView(
-                // AlwaysScrollable is needed for RefreshIndicator to work on empty lists
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(20),
                 child: Column(
@@ -145,9 +141,10 @@ class _ProductsHomeScreenState extends ConsumerState<ProductsHomeScreen> {
                         crossAxisCount: 2,
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
-                        crossAxisSpacing: 15,
-                        mainAxisSpacing: 15,
-                        childAspectRatio: 1.5,
+                        crossAxisSpacing: 10, // Reduced spacing for mobile
+                        mainAxisSpacing: 10,
+                        // Fix for overflow: Taller cards on mobile
+                        childAspectRatio: isMobile ? 1.2 : 1.5,
                         children: [
                           ProductStatsCard(
                             title: "Total Products",
@@ -174,11 +171,7 @@ class _ProductsHomeScreenState extends ConsumerState<ProductsHomeScreen> {
 
                     // 2. SEARCH & FILTER BAR
                     ProductFilterBar(
-                      // Agar apka custom widget controller accept karta he to ye pass karein,
-                      // warna onSearch callback se bhi kam chalega kyunki humne listener lagaya he.
-                      // controller: _searchController,
                       onSearch: (val) {
-                        // Ye backup ke liye he, agar listener miss kare (mostly listener will handle realtime)
                         controller.updateSearch(val);
                       },
                       onFilterTap: () {
@@ -197,10 +190,12 @@ class _ProductsHomeScreenState extends ConsumerState<ProductsHomeScreen> {
                           backgroundColor: Colors.cyanAccent.withOpacity(0.2),
                           label: Text(
                             "Filtered by: ${controller.selectedCategory.value}",
-                            style: const TextStyle(color: Colors.cyanAccent),
+                            style: TextStyle(
+                              color: Colors.cyanAccent,
+                              fontSize: isMobile ? 12 : 14,
+                            ),
                           ),
                           onDeleted: () {
-                            // Cross click -> Instant remove
                             controller.updateCategoryFilter('All');
                           },
                           deleteIcon: const Icon(
@@ -229,7 +224,8 @@ class _ProductsHomeScreenState extends ConsumerState<ProductsHomeScreen> {
                               "Inventory List",
                               style: GoogleFonts.orbitron(
                                 color: Colors.white,
-                                fontSize: 18,
+                                fontSize: isMobile ? 16 : 18,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
                           ),
@@ -241,9 +237,9 @@ class _ProductsHomeScreenState extends ConsumerState<ProductsHomeScreen> {
                               child: Center(
                                 child: Column(
                                   children: [
-                                    const Icon(
+                                    Icon(
                                       Icons.search_off,
-                                      size: 50,
+                                      size: isMobile ? 40 : 50,
                                       color: Colors.white24,
                                     ),
                                     const SizedBox(height: 10),
@@ -251,7 +247,7 @@ class _ProductsHomeScreenState extends ConsumerState<ProductsHomeScreen> {
                                       "No products found",
                                       style: GoogleFonts.comicNeue(
                                         color: Colors.white54,
-                                        fontSize: 18,
+                                        fontSize: isMobile ? 16 : 18,
                                       ),
                                     ),
                                   ],
@@ -268,24 +264,41 @@ class _ProductsHomeScreenState extends ConsumerState<ProductsHomeScreen> {
                                 physics: const BouncingScrollPhysics(),
                                 child: ConstrainedBox(
                                   constraints: BoxConstraints(
+                                    // Ensure min width is at least screen width
                                     minWidth: constraints.maxWidth,
                                   ),
                                   child: DataTable(
                                     headingRowColor: MaterialStateProperty.all(
                                       Colors.white.withOpacity(0.05),
                                     ),
-                                    dataRowHeight: 70,
+                                    dataRowHeight: isMobile ? 60 : 70,
+                                    columnSpacing: isMobile
+                                        ? 20
+                                        : 56, // Tighter spacing on mobile
                                     columns: [
                                       DataColumn(
-                                        label: _tableHeader("Product"),
+                                        label: _tableHeader(
+                                          "Product",
+                                          isMobile,
+                                        ),
                                       ),
                                       DataColumn(
-                                        label: _tableHeader("Category"),
+                                        label: _tableHeader(
+                                          "Category",
+                                          isMobile,
+                                        ),
                                       ),
-                                      DataColumn(label: _tableHeader("Price")),
-                                      DataColumn(label: _tableHeader("Stock")),
                                       DataColumn(
-                                        label: _tableHeader("Actions"),
+                                        label: _tableHeader("Price", isMobile),
+                                      ),
+                                      DataColumn(
+                                        label: _tableHeader("Stock", isMobile),
+                                      ),
+                                      DataColumn(
+                                        label: _tableHeader(
+                                          "Actions",
+                                          isMobile,
+                                        ),
                                       ),
                                     ],
                                     rows: controller.filteredProducts.map((
@@ -298,8 +311,8 @@ class _ProductsHomeScreenState extends ConsumerState<ProductsHomeScreen> {
                                             Row(
                                               children: [
                                                 Container(
-                                                  width: 45,
-                                                  height: 45,
+                                                  width: isMobile ? 35 : 45,
+                                                  height: isMobile ? 35 : 45,
                                                   decoration: BoxDecoration(
                                                     color: Colors.grey[800],
                                                     borderRadius:
@@ -323,10 +336,12 @@ class _ProductsHomeScreenState extends ConsumerState<ProductsHomeScreen> {
                                                         : null,
                                                   ),
                                                   child: product.images.isEmpty
-                                                      ? const Icon(
+                                                      ? Icon(
                                                           Icons.image,
                                                           color: Colors.white54,
-                                                          size: 20,
+                                                          size: isMobile
+                                                              ? 16
+                                                              : 20,
                                                         )
                                                       : null,
                                                 ),
@@ -344,7 +359,9 @@ class _ProductsHomeScreenState extends ConsumerState<ProductsHomeScreen> {
                                                             color: Colors.white,
                                                             fontWeight:
                                                                 FontWeight.bold,
-                                                            fontSize: 15,
+                                                            fontSize: isMobile
+                                                                ? 13
+                                                                : 15,
                                                           ),
                                                     ),
                                                     Text(
@@ -353,7 +370,9 @@ class _ProductsHomeScreenState extends ConsumerState<ProductsHomeScreen> {
                                                           GoogleFonts.comicNeue(
                                                             color:
                                                                 Colors.white54,
-                                                            fontSize: 12,
+                                                            fontSize: isMobile
+                                                                ? 10
+                                                                : 12,
                                                           ),
                                                     ),
                                                   ],
@@ -365,8 +384,9 @@ class _ProductsHomeScreenState extends ConsumerState<ProductsHomeScreen> {
                                           DataCell(
                                             Text(
                                               product.category,
-                                              style: const TextStyle(
+                                              style: TextStyle(
                                                 color: Colors.white70,
+                                                fontSize: isMobile ? 12 : 14,
                                               ),
                                             ),
                                           ),
@@ -374,9 +394,10 @@ class _ProductsHomeScreenState extends ConsumerState<ProductsHomeScreen> {
                                           DataCell(
                                             Text(
                                               "\$${product.salePrice}",
-                                              style: const TextStyle(
+                                              style: TextStyle(
                                                 color: Colors.cyanAccent,
                                                 fontWeight: FontWeight.bold,
+                                                fontSize: isMobile ? 12 : 14,
                                               ),
                                             ),
                                           ),
@@ -408,13 +429,13 @@ class _ProductsHomeScreenState extends ConsumerState<ProductsHomeScreen> {
                                                 ),
                                               ),
                                               child: Text(
-                                                "${product.stockQuantity} Units",
+                                                "${product.stockQuantity}",
                                                 style: TextStyle(
                                                   color:
                                                       product.stockQuantity < 10
                                                       ? Colors.redAccent
                                                       : Colors.greenAccent,
-                                                  fontSize: 12,
+                                                  fontSize: isMobile ? 10 : 12,
                                                   fontWeight: FontWeight.bold,
                                                 ),
                                               ),
@@ -425,10 +446,10 @@ class _ProductsHomeScreenState extends ConsumerState<ProductsHomeScreen> {
                                             Row(
                                               children: [
                                                 IconButton(
-                                                  icon: const Icon(
+                                                  icon: Icon(
                                                     Icons.visibility,
                                                     color: Colors.blueAccent,
-                                                    size: 20,
+                                                    size: isMobile ? 18 : 20,
                                                   ),
                                                   onPressed: () {
                                                     Navigator.push(
@@ -443,10 +464,10 @@ class _ProductsHomeScreenState extends ConsumerState<ProductsHomeScreen> {
                                                   },
                                                 ),
                                                 IconButton(
-                                                  icon: const Icon(
+                                                  icon: Icon(
                                                     Icons.edit,
                                                     color: Colors.orangeAccent,
-                                                    size: 20,
+                                                    size: isMobile ? 18 : 20,
                                                   ),
                                                   onPressed: () {
                                                     ref
@@ -467,10 +488,10 @@ class _ProductsHomeScreenState extends ConsumerState<ProductsHomeScreen> {
                                                   },
                                                 ),
                                                 IconButton(
-                                                  icon: const Icon(
+                                                  icon: Icon(
                                                     Icons.delete,
                                                     color: Colors.redAccent,
-                                                    size: 20,
+                                                    size: isMobile ? 18 : 20,
                                                   ),
                                                   onPressed: () {
                                                     Get.defaultDialog(
@@ -478,6 +499,7 @@ class _ProductsHomeScreenState extends ConsumerState<ProductsHomeScreen> {
                                                       titleStyle:
                                                           GoogleFonts.orbitron(
                                                             color: Colors.white,
+                                                            fontSize: 16,
                                                           ),
                                                       backgroundColor:
                                                           const Color(
@@ -533,13 +555,13 @@ class _ProductsHomeScreenState extends ConsumerState<ProductsHomeScreen> {
     );
   }
 
-  Widget _tableHeader(String text) {
+  Widget _tableHeader(String text, bool isMobile) {
     return Text(
       text,
       style: GoogleFonts.comicNeue(
         color: Colors.white54,
         fontWeight: FontWeight.bold,
-        fontSize: 14,
+        fontSize: isMobile ? 12 : 14, // Smaller font for mobile
       ),
     );
   }
