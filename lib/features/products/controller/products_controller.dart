@@ -8,81 +8,38 @@ class ProductsController extends GetxController {
 
   var isLoading = true.obs;
 
-  // Master list
+  // --- MASTER LIST ---
   var productList = <ProductModel>[].obs;
 
-  // Search & Filter Variables
+  // --- SEARCH & HISTORY ---
   var searchQuery = ''.obs;
   var selectedCategory = 'All'.obs;
+  var searchHistoryList = <String>[].obs; // Used for Name/Brand history too
+  var showHistory = false.obs;
 
-  // --- GLOBAL SETTING FOR POINTS ---
-  // Admin logic: 100 Rs Profit = 1 Point
-  // You can change this variable or fetch it from a SettingsController
-  double profitPerPoint = 100.0;
+  // --- SETTINGS ---
+  var profitPerPoint = 100.0.obs;
 
-  // --- BRAND SUGGESTION LOGIC ---
-  List<String> get existingBrands {
-    return productList
-        .map((p) => p.brand)
-        .where((b) => b.isNotEmpty)
-        .toSet() // Removes duplicates
-        .toList();
-  }
-
-  // --- POINTS CALCULATION ---
-  double calculatePoints(double purchase, double sale) {
-    if (purchase >= sale) return 0; // No profit, no points
-    double profit = sale - purchase;
-    return (profit / profitPerPoint);
-  }
-
-  // --- FILTERED LIST LOGIC ---
-  List<ProductModel> get filteredProducts {
-    return productList.where((product) {
-      String search = searchQuery.value.toLowerCase();
-      bool matchesSearch =
-          search.isEmpty ||
-          product.name.toLowerCase().contains(search) ||
-          product.modelNumber.toLowerCase().contains(search) ||
-          product.category.toLowerCase().contains(search);
-
-      bool matchesCategory =
-          selectedCategory.value == 'All' ||
-          product.category == selectedCategory.value;
-
-      return matchesSearch && matchesCategory;
-    }).toList();
-  }
-
-  List<String> get availableCategories {
-    Set<String> categories = productList.map((p) => p.category).toSet();
-    return ['All', ...categories];
-  }
-
-  // --- Stats ---
-  int get totalProducts => productList.length;
-  int get lowStockCount =>
-      productList.where((p) => p.stockQuantity < 10).length;
-  double get totalInventoryValue => productList.fold(
-    0,
-    (sum, p) => sum + (p.purchasePrice * p.stockQuantity),
-  );
+  // --- PACKAGES ---
+  var selectedProductsForPackage = <ProductModel>[].obs;
 
   @override
   void onInit() {
     super.onInit();
     fetchProducts();
+    fetchHistory();
   }
 
+  // Fetching
   void fetchProducts() async {
     try {
       isLoading(true);
-      var products = await _repository.fetchProducts();
-      productList.assignAll(products);
+      var items = await _repository.fetchProducts();
+      productList.assignAll(items);
     } catch (e) {
       Get.snackbar(
         "Error",
-        "Failed to fetch products: $e",
+        "Failed to fetch: $e",
         backgroundColor: Colors.redAccent,
         colorText: Colors.white,
       );
@@ -91,26 +48,80 @@ class ProductsController extends GetxController {
     }
   }
 
-  void updateSearch(String val) {
-    searchQuery.value = val;
+  void fetchHistory() async {
+    var history = await _repository.fetchSearchHistory();
+    searchHistoryList.assignAll(history);
   }
 
-  void updateCategoryFilter(String category) {
-    selectedCategory.value = category;
+  // Helper Getters
+  List<ProductModel> get _onlyRealProducts =>
+      productList.where((p) => !p.isPackage).toList();
+  int get totalProducts => _onlyRealProducts.length;
+  int get lowStockCount =>
+      _onlyRealProducts.where((p) => p.stockQuantity < 10).length;
+  double get totalInventoryValue => _onlyRealProducts.fold(
+    0,
+    (sum, p) => sum + (p.purchasePrice * p.stockQuantity),
+  );
+
+  List<String> get availableCategories {
+    Set<String> categories = productList.map((p) => p.category).toSet();
+    return ['All', ...categories];
   }
 
-  void clearAllFilters() {
-    searchQuery.value = '';
-    selectedCategory.value = 'All';
+  // Combined History + Existing Brands/Names for suggestions
+  List<String> getSuggestions(String query) {
+    Set<String> suggestions = {...searchHistoryList};
+    // Add existing brands from products
+    suggestions.addAll(
+      productList.map((p) => p.brand).where((b) => b.isNotEmpty),
+    );
+    // Add existing names from products
+    suggestions.addAll(
+      productList.map((p) => p.name).where((n) => n.isNotEmpty),
+    );
+
+    if (query.isEmpty) return suggestions.toList();
+    return suggestions
+        .where((s) => s.toLowerCase().contains(query.toLowerCase()))
+        .toList();
   }
 
-  // --- CRUD Operations ---
+  // Filter Logic
+  List<ProductModel> get filteredProducts {
+    return productList.where((product) {
+      String search = searchQuery.value.toLowerCase();
+      bool matchesSearch =
+          search.isEmpty ||
+          product.name.toLowerCase().contains(search) ||
+          product.modelNumber.toLowerCase().contains(search) ||
+          product.category.toLowerCase().contains(search);
+      bool matchesCategory =
+          selectedCategory.value == 'All' ||
+          product.category == selectedCategory.value;
+      return matchesSearch && matchesCategory;
+    }).toList();
+  }
+
+  // Points
+  double calculatePoints(double purchase, double sale) {
+    if (purchase >= sale) return 0;
+    double profit = sale - purchase;
+    return (profit / profitPerPoint.value);
+  }
+
+  // --- CRUD Operations (Updated with History Saving) ---
 
   Future<bool> addNewProduct(ProductModel product) async {
     try {
       isLoading(true);
       await _repository.addProduct(product);
       productList.insert(0, product);
+
+      // SAVE HISTORY (Name & Brand)
+      addToHistory(product.name);
+      addToHistory(product.brand);
+
       Get.snackbar(
         "Success",
         "Product Added",
@@ -135,12 +146,15 @@ class ProductsController extends GetxController {
     try {
       isLoading(true);
       await _repository.updateProduct(product);
-
       int index = productList.indexWhere((p) => p.id == product.id);
       if (index != -1) {
         productList[index] = product;
         productList.refresh();
       }
+
+      // SAVE HISTORY
+      addToHistory(product.name);
+      addToHistory(product.brand);
 
       Get.snackbar(
         "Success",
@@ -180,5 +194,55 @@ class ProductsController extends GetxController {
         colorText: Colors.white,
       );
     }
+  }
+
+  // --- History Logic ---
+  void updateSearch(String val) {
+    searchQuery.value = val;
+  }
+
+  void addToHistory(String term) async {
+    if (term.trim().isNotEmpty && !searchHistoryList.contains(term)) {
+      searchHistoryList.add(term);
+      await _repository.addSearchTerm(term);
+    }
+  }
+
+  void removeHistoryItem(String term) async {
+    searchHistoryList.remove(term);
+    await _repository.deleteSearchTerm(term);
+  }
+
+  void clearAllHistory() async {
+    searchHistoryList.clear();
+    await _repository.clearAllHistory();
+  }
+
+  void clearAllFilters() {
+    searchQuery.value = '';
+    selectedCategory.value = 'All';
+  }
+
+  void updateCategoryFilter(String category) {
+    selectedCategory.value = category;
+  }
+
+  // --- Packages ---
+  void toggleProductForPackage(ProductModel product) {
+    if (selectedProductsForPackage.contains(product)) {
+      selectedProductsForPackage.remove(product);
+    } else {
+      selectedProductsForPackage.add(product);
+    }
+  }
+
+  double get packageTotalPurchasePrice => selectedProductsForPackage.fold(
+    0,
+    (sum, item) => sum + item.purchasePrice,
+  );
+  String get generatePackageName =>
+      selectedProductsForPackage.map((e) => e.name).join(' + ');
+  void clearPackageSelection() {
+    selectedProductsForPackage.clear();
   }
 }

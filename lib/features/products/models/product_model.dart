@@ -9,18 +9,27 @@ class ProductModel {
   String subCategory;
   String brand;
   double purchasePrice;
-  double salePrice; // The actual selling price (Discounted)
-  double originalPrice; // The fake/high price (to be crossed out)
+  double salePrice;
+  double originalPrice; // Optional: 0.0 means hidden
   int stockQuantity;
   String vendorId;
   List<String> images;
   String? video;
   DateTime dateAdded;
 
-  // New Fields
-  String deliveryLocation; // e.g., "Karachi Only", "Pakistan"
-  String warranty; // e.g., "1 Year"
-  double productPoints; // Points earned by user on this product
+  // --- Existing Extra Fields ---
+  String deliveryLocation;
+  String warranty;
+  double productPoints;
+
+  // --- NEW FIELDS FOR PACKAGES & SETTINGS ---
+  bool isPackage;
+  List<String> includedItemIds;
+  bool showDecimalPoints;
+
+  // --- NEW FIELDS FOR MOBILE SPECS ---
+  String? ram; // e.g. "8GB"
+  String? storage; // e.g. "128GB"
 
   ProductModel({
     this.id,
@@ -32,15 +41,21 @@ class ProductModel {
     required this.brand,
     required this.purchasePrice,
     required this.salePrice,
-    required this.originalPrice, // New
+    required this.originalPrice,
     required this.stockQuantity,
     required this.vendorId,
     required this.images,
     this.video,
     required this.dateAdded,
-    required this.deliveryLocation, // New
-    required this.warranty, // New
-    required this.productPoints, // New
+    required this.deliveryLocation,
+    required this.warranty,
+    required this.productPoints,
+    this.isPackage = false,
+    this.includedItemIds = const [],
+    this.showDecimalPoints = true,
+    // New Params
+    this.ram,
+    this.storage,
   });
 
   Map<String, dynamic> toMap() {
@@ -53,15 +68,21 @@ class ProductModel {
       'brand': brand,
       'purchasePrice': purchasePrice,
       'salePrice': salePrice,
-      'originalPrice': originalPrice, // New
+      'originalPrice': originalPrice,
       'stockQuantity': stockQuantity,
       'vendorId': vendorId,
       'images': images,
       'video': video,
       'dateAdded': Timestamp.fromDate(dateAdded),
-      'deliveryLocation': deliveryLocation, // New
-      'warranty': warranty, // New
-      'productPoints': productPoints, // New
+      'deliveryLocation': deliveryLocation,
+      'warranty': warranty,
+      'productPoints': productPoints,
+      'isPackage': isPackage,
+      'includedItemIds': includedItemIds,
+      'showDecimalPoints': showDecimalPoints,
+      // New Fields
+      'ram': ram,
+      'storage': storage,
     };
   }
 
@@ -76,15 +97,21 @@ class ProductModel {
       brand: map['brand'] ?? '',
       purchasePrice: (map['purchasePrice'] ?? 0).toDouble(),
       salePrice: (map['salePrice'] ?? 0).toDouble(),
-      originalPrice: (map['originalPrice'] ?? 0).toDouble(), // New
+      originalPrice: (map['originalPrice'] ?? 0).toDouble(),
       stockQuantity: map['stockQuantity'] ?? 0,
       vendorId: map['vendorId'] ?? '',
       images: List<String>.from(map['images'] ?? []),
       video: map['video'],
       dateAdded: (map['dateAdded'] as Timestamp).toDate(),
-      deliveryLocation: map['deliveryLocation'] ?? 'Worldwide', // New
-      warranty: map['warranty'] ?? 'No Warranty', // New
-      productPoints: (map['productPoints'] ?? 0).toDouble(), // New
+      deliveryLocation: map['deliveryLocation'] ?? 'Worldwide',
+      warranty: map['warranty'] ?? 'No Warranty',
+      productPoints: (map['productPoints'] ?? 0).toDouble(),
+      isPackage: map['isPackage'] ?? false,
+      includedItemIds: List<String>.from(map['includedItemIds'] ?? []),
+      showDecimalPoints: map['showDecimalPoints'] ?? true,
+      // New Fields Extraction
+      ram: map['ram'],
+      storage: map['storage'],
     );
   }
 }
