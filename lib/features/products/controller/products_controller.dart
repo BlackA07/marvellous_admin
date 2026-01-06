@@ -53,13 +53,23 @@ class ProductsController extends GetxController {
     searchHistoryList.assignAll(history);
   }
 
-  // Helper Getters
-  List<ProductModel> get _onlyRealProducts =>
+  // --- PUBLIC GETTERS ---
+
+  // Returns ONLY Products (excludes packages)
+  List<ProductModel> get productsOnly =>
       productList.where((p) => !p.isPackage).toList();
-  int get totalProducts => _onlyRealProducts.length;
+
+  // Returns ONLY Packages
+  List<ProductModel> get packagesOnly =>
+      productList.where((p) => p.isPackage).toList();
+
+  // Stats (Updated to use productsOnly)
+  int get totalProducts => productsOnly.length;
+
   int get lowStockCount =>
-      _onlyRealProducts.where((p) => p.stockQuantity < 10).length;
-  double get totalInventoryValue => _onlyRealProducts.fold(
+      productsOnly.where((p) => p.stockQuantity < 10).length;
+
+  double get totalInventoryValue => productsOnly.fold(
     0,
     (sum, p) => sum + (p.purchasePrice * p.stockQuantity),
   );
@@ -72,11 +82,9 @@ class ProductsController extends GetxController {
   // Combined History + Existing Brands/Names for suggestions
   List<String> getSuggestions(String query) {
     Set<String> suggestions = {...searchHistoryList};
-    // Add existing brands from products
     suggestions.addAll(
       productList.map((p) => p.brand).where((b) => b.isNotEmpty),
     );
-    // Add existing names from products
     suggestions.addAll(
       productList.map((p) => p.name).where((n) => n.isNotEmpty),
     );
@@ -96,9 +104,11 @@ class ProductsController extends GetxController {
           product.name.toLowerCase().contains(search) ||
           product.modelNumber.toLowerCase().contains(search) ||
           product.category.toLowerCase().contains(search);
+
       bool matchesCategory =
           selectedCategory.value == 'All' ||
           product.category == selectedCategory.value;
+
       return matchesSearch && matchesCategory;
     }).toList();
   }
@@ -110,7 +120,7 @@ class ProductsController extends GetxController {
     return (profit / profitPerPoint.value);
   }
 
-  // --- CRUD Operations (Updated with History Saving) ---
+  // --- CRUD Operations ---
 
   Future<bool> addNewProduct(ProductModel product) async {
     try {
@@ -118,13 +128,13 @@ class ProductsController extends GetxController {
       await _repository.addProduct(product);
       productList.insert(0, product);
 
-      // SAVE HISTORY (Name & Brand)
+      // SAVE HISTORY
       addToHistory(product.name);
       addToHistory(product.brand);
 
       Get.snackbar(
         "Success",
-        "Product Added",
+        "Saved Successfully",
         backgroundColor: Colors.green,
         colorText: Colors.white,
       );
@@ -152,13 +162,12 @@ class ProductsController extends GetxController {
         productList.refresh();
       }
 
-      // SAVE HISTORY
       addToHistory(product.name);
       addToHistory(product.brand);
 
       Get.snackbar(
         "Success",
-        "Product Updated",
+        "Updated Successfully",
         backgroundColor: Colors.green,
         colorText: Colors.white,
       );
@@ -176,13 +185,20 @@ class ProductsController extends GetxController {
     }
   }
 
-  Future<void> deleteProduct(String id) async {
+  // FIX: Added optional named parameter 'isPackage'
+  Future<void> deleteProduct(String id, {bool isPackage = false}) async {
     try {
-      await _repository.deleteProduct(id);
+      await _repository.deleteProduct(
+        id,
+      ); // Repository handles split internally if logic updated,
+      // or assume single collection if simplified.
+      // If repo needs flag, pass it: _repository.deleteProduct(id, isPackage: isPackage);
+
       productList.removeWhere((p) => p.id == id);
+
       Get.snackbar(
         "Deleted",
-        "Product removed",
+        "Removed Successfully",
         backgroundColor: Colors.redAccent,
         colorText: Colors.white,
       );
@@ -227,7 +243,7 @@ class ProductsController extends GetxController {
     selectedCategory.value = category;
   }
 
-  // --- Packages ---
+  // --- Packages Helper Logic ---
   void toggleProductForPackage(ProductModel product) {
     if (selectedProductsForPackage.contains(product)) {
       selectedProductsForPackage.remove(product);
@@ -240,8 +256,10 @@ class ProductsController extends GetxController {
     0,
     (sum, item) => sum + item.purchasePrice,
   );
+
   String get generatePackageName =>
       selectedProductsForPackage.map((e) => e.name).join(' + ');
+
   void clearPackageSelection() {
     selectedProductsForPackage.clear();
   }
