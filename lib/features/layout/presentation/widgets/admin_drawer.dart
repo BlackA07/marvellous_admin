@@ -22,7 +22,8 @@ import '../../../products/presentation/screens/add_product_screen.dart';
 
 // --- PACKAGES IMPORTS (New) ---
 // Make sure paths are correct based on your folder structure
-import '../../../packages/presentation/screens/packages_home_screen.dart';
+import '../../../packages/presentation/screens/packages_home_screen.dart'
+    hide ProductsHomeScreen;
 import '../../../packages/presentation/screens/add_package_screen.dart';
 
 class AdminMenuItem {

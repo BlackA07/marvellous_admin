@@ -14,7 +14,7 @@ class ProductsController extends GetxController {
   // --- SEARCH & HISTORY ---
   var searchQuery = ''.obs;
   var selectedCategory = 'All'.obs;
-  var searchHistoryList = <String>[].obs; // Used for Name/Brand history too
+  var searchHistoryList = <String>[].obs;
   var showHistory = false.obs;
 
   // --- SETTINGS ---
@@ -54,16 +54,12 @@ class ProductsController extends GetxController {
   }
 
   // --- PUBLIC GETTERS ---
-
-  // Returns ONLY Products (excludes packages)
   List<ProductModel> get productsOnly =>
       productList.where((p) => !p.isPackage).toList();
 
-  // Returns ONLY Packages
   List<ProductModel> get packagesOnly =>
       productList.where((p) => p.isPackage).toList();
 
-  // Stats (Updated to use productsOnly)
   int get totalProducts => productsOnly.length;
 
   int get lowStockCount =>
@@ -113,7 +109,6 @@ class ProductsController extends GetxController {
     }).toList();
   }
 
-  // Points
   double calculatePoints(double purchase, double sale) {
     if (purchase >= sale) return 0;
     double profit = sale - purchase;
@@ -128,7 +123,6 @@ class ProductsController extends GetxController {
       await _repository.addProduct(product);
       productList.insert(0, product);
 
-      // SAVE HISTORY
       addToHistory(product.name);
       addToHistory(product.brand);
 
@@ -185,23 +179,17 @@ class ProductsController extends GetxController {
     }
   }
 
-  // FIX: Added optional named parameter 'isPackage'
+  // FIX: Added 'isPackage' parameter and passed it to repository
   Future<void> deleteProduct(String id, {bool isPackage = false}) async {
     try {
-      await _repository.deleteProduct(
-        id,
-      ); // Repository handles split internally if logic updated,
-      // or assume single collection if simplified.
-      // If repo needs flag, pass it: _repository.deleteProduct(id, isPackage: isPackage);
+      // 1. Delete from Firebase
+      await _repository.deleteProduct(id, isPackage: isPackage);
 
+      // 2. Remove from Local List
       productList.removeWhere((p) => p.id == id);
 
-      Get.snackbar(
-        "Deleted",
-        "Removed Successfully",
-        backgroundColor: Colors.redAccent,
-        colorText: Colors.white,
-      );
+      // NOTE: Removed Get.snackbar here to avoid double popups
+      // (Screen handles the Undo Snackbar)
     } catch (e) {
       Get.snackbar(
         "Error",
@@ -243,7 +231,6 @@ class ProductsController extends GetxController {
     selectedCategory.value = category;
   }
 
-  // --- Packages Helper Logic ---
   void toggleProductForPackage(ProductModel product) {
     if (selectedProductsForPackage.contains(product)) {
       selectedProductsForPackage.remove(product);
