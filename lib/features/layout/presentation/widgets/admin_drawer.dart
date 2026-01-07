@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+
+// --- EXISTING IMPORTS ---
 import 'package:marvellous_admin/features/categories/screens/categories_screen.dart';
 import 'package:marvellous_admin/features/dashboard/presentation/screens/dashboard_screen.dart';
 import 'package:marvellous_admin/features/finance/presentation/screens/earnings_dashboard_screen.dart';
@@ -8,15 +10,22 @@ import 'package:marvellous_admin/features/finance/presentation/screens/payouts_s
 import 'package:marvellous_admin/features/mlm/presentation/screens/commission_setup_screen.dart';
 import 'package:marvellous_admin/features/mlm/presentation/screens/mlm_tree_view.dart';
 import 'package:marvellous_admin/features/orders/presentation/screens/orders_dashboard_screen.dart';
-import 'package:marvellous_admin/features/profile/presentation/screens/admin_profile_screen.dart'; // Profile Screen Import
+import 'package:marvellous_admin/features/profile/presentation/screens/admin_profile_screen.dart';
+import 'package:marvellous_admin/features/settings/presentation/screens/variables_screen.dart';
 import 'package:marvellous_admin/features/vendors/screens/vendors_list_screen.dart';
 
 import '../../../../core/theme/pallete.dart';
 import '../../controller/layout_controller.dart';
 
-// Screens
+// --- PRODUCTS IMPORTS ---
 import '../../../products/presentation/screens/products_home_screen.dart';
 import '../../../products/presentation/screens/add_product_screen.dart';
+
+// --- PACKAGES IMPORTS (New) ---
+// Make sure paths are correct based on your folder structure
+import '../../../packages/presentation/screens/packages_home_screen.dart'
+    hide ProductsHomeScreen;
+import '../../../packages/presentation/screens/add_package_screen.dart';
 
 class AdminMenuItem {
   final String title;
@@ -44,30 +53,46 @@ class AdminDrawer extends ConsumerStatefulWidget {
 class _AdminDrawerState extends ConsumerState<AdminDrawer> {
   final List<AdminMenuItem> menuItems = [
     AdminMenuItem(title: "Dashboard", icon: Icons.dashboard_outlined),
+    AdminMenuItem(title: "Point Variable", icon: Icons.settings_outlined),
+
+    // PRODUCTS
     AdminMenuItem(
       title: "Products",
       icon: Icons.inventory_2_outlined,
       hasSubmenu: true,
       subItems: ["All Products", "Add Product", "Categories", "Vendors"],
     ),
-    // ... baaki items same rahenge
+
+    // PACKAGES (New Item)
+    AdminMenuItem(
+      title: "Packages",
+      icon: Icons.all_inbox_outlined, // Good icon for bundles/packages
+      hasSubmenu: true,
+      subItems: ["Packages Home Screen", "Add Package"],
+    ),
+
     AdminMenuItem(title: "Customers", icon: Icons.people_outline),
     AdminMenuItem(title: "Orders", icon: Icons.shopping_bag_outlined),
+
+    // MLM
     AdminMenuItem(
       title: "MLM Network",
       icon: Icons.hub_outlined,
       hasSubmenu: true,
       subItems: ["Tree View", "Commissions"],
     ),
+
     AdminMenuItem(title: "Staff", icon: Icons.badge_outlined),
+
+    // Finance
     AdminMenuItem(
       title: "Finance",
       icon: Icons.monetization_on_outlined,
       hasSubmenu: true,
       subItems: ["Earnings", "Payouts"],
     ),
+
     AdminMenuItem(title: "Reports", icon: Icons.bar_chart_outlined),
-    // Profile Item
     AdminMenuItem(title: "Profile", icon: Icons.person_outlined),
   ];
 
@@ -90,7 +115,7 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
       ),
       child: Column(
         children: [
-          // HEADER (Logo etc) - Same as before
+          // HEADER (Logo etc)
           Container(
             height: 120,
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
@@ -144,7 +169,7 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
                             item.isExpanded = !item.isExpanded;
                           });
                         } else {
-                          // DIRECT NAVIGATION (Dashboard etc)
+                          // DIRECT NAVIGATION
                           Widget screen = Center(
                             child: Text(
                               "${item.title} Screen",
@@ -152,16 +177,16 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
                             ),
                           );
 
-                          // --- MAIN ITEMS NAVIGATION LOGIC ---
                           if (item.title == "Dashboard") {
                             screen = DashboardScreen();
                           } else if (item.title == "Orders") {
                             screen = const OrdersDashboardScreen();
                           } else if (item.title == "Profile") {
-                            // --- FIX: Added Profile Navigation ---
                             screen = const AdminProfileScreen();
+                          } else if (item.title == "Point Variable") {
+                            // Placeholder screen for Point Variable
+                            screen = const VariablesScreen();
                           }
-                          // -------------------------------------
 
                           nav.navigateTo(
                             mainItem: item.title,
@@ -169,6 +194,7 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
                             screen: screen,
                             title: item.title,
                           );
+
                           if (Scaffold.of(context).hasDrawer &&
                               Scaffold.of(context).isDrawerOpen) {
                             Navigator.pop(context);
@@ -209,8 +235,9 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
                         return InkWell(
                           onTap: () {
                             if (Scaffold.of(context).hasDrawer &&
-                                Scaffold.of(context).isDrawerOpen)
+                                Scaffold.of(context).isDrawerOpen) {
                               Navigator.pop(context);
+                            }
 
                             // --- SWITCHING LOGIC ---
                             Widget targetScreen = Center(
@@ -220,6 +247,7 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
                               ),
                             );
 
+                            // 1. PRODUCTS
                             if (item.title == "Products") {
                               if (subItem == "All Products") {
                                 targetScreen = ProductsHomeScreen();
@@ -230,7 +258,17 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
                               } else if (subItem == "Vendors") {
                                 targetScreen = VendorsListScreen();
                               }
-                            } else if (item.title == "Orders") {
+                            }
+                            // 2. PACKAGES (New Logic)
+                            else if (item.title == "Packages") {
+                              if (subItem == "Packages Home Screen") {
+                                targetScreen = const PackagesHomeScreen();
+                              } else if (subItem == "Add Package") {
+                                targetScreen = const AddPackageScreen();
+                              }
+                            }
+                            // 3. OTHERS
+                            else if (item.title == "Orders") {
                               targetScreen = const OrdersDashboardScreen();
                             } else if (item.title == "MLM Network") {
                               if (subItem == "Tree View") {

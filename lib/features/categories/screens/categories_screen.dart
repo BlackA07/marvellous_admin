@@ -139,6 +139,20 @@ class CategoriesScreen extends StatelessWidget {
                                   softWrap: true, // Allow wrapping
                                 ),
                               ),
+                              // Edit Button
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.edit,
+                                  color: Colors.orangeAccent,
+                                  size: 18,
+                                ),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                                onPressed: () {
+                                  _showEditDialog(context, category: cat);
+                                },
+                              ),
+                              const SizedBox(width: 8),
                               // Delete Button
                               IconButton(
                                 icon: const Icon(
@@ -305,6 +319,25 @@ class CategoriesScreen extends StatelessWidget {
                                     softWrap: true,
                                   ),
                                 ),
+                                // Edit Button
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.edit,
+                                    color: Colors.orangeAccent,
+                                    size: 18,
+                                  ),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  onPressed: () {
+                                    _showEditDialog(
+                                      context,
+                                      subCategoryName: subName,
+                                      parentCategory: liveCat,
+                                    );
+                                  },
+                                ),
+                                const SizedBox(width: 8),
+                                // Delete Button
                                 IconButton(
                                   icon: const Icon(
                                     Icons.delete,
@@ -356,6 +389,7 @@ class CategoriesScreen extends StatelessWidget {
     });
   }
 
+  // --- ADD DIALOG ---
   void _showAddDialog(BuildContext context, {required bool isMain}) {
     _nameController.clear();
     Get.defaultDialog(
@@ -367,7 +401,7 @@ class CategoriesScreen extends StatelessWidget {
         children: [
           TextField(
             controller: _nameController,
-            autofocus: true, // AUTO FOCUS ON OPEN
+            autofocus: true,
             style: const TextStyle(color: Colors.white),
             decoration: InputDecoration(
               hintText: isMain
@@ -385,7 +419,6 @@ class CategoriesScreen extends StatelessWidget {
                 vertical: 15,
               ),
             ),
-            // ENTER KEY SAVES DATA
             onSubmitted: (value) {
               if (value.isNotEmpty) {
                 if (isMain) {
@@ -393,7 +426,6 @@ class CategoriesScreen extends StatelessWidget {
                   Get.back();
                 } else {
                   controller.addSubCategory(value);
-                  // Dialog close handled in controller
                 }
               }
             },
@@ -416,12 +448,102 @@ class CategoriesScreen extends StatelessWidget {
                     Get.back();
                   } else {
                     controller.addSubCategory(_nameController.text);
-                    // Dialog close handled in controller for sub cat logic
                   }
                 }
               },
               child: const Text(
                 "Save",
+                style: TextStyle(
+                  color: Colors.black,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- EDIT DIALOG (NEW FEATURE) ---
+  void _showEditDialog(
+    BuildContext context, {
+    CategoryModel? category,
+    String? subCategoryName,
+    CategoryModel? parentCategory,
+  }) {
+    bool isMain = category != null;
+    _nameController.text = isMain ? category.name : subCategoryName ?? "";
+
+    Get.defaultDialog(
+      title: isMain ? "Edit Category" : "Edit Sub-Category",
+      titleStyle: GoogleFonts.orbitron(color: Colors.white, fontSize: 18),
+      backgroundColor: const Color(0xFF2A2D3E),
+      contentPadding: const EdgeInsets.all(20),
+      content: Column(
+        children: [
+          TextField(
+            controller: _nameController,
+            autofocus: true,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              hintText: "Enter New Name",
+              hintStyle: const TextStyle(color: Colors.white54),
+              filled: true,
+              fillColor: Colors.black26,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide.none,
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 15,
+                vertical: 15,
+              ),
+            ),
+            onSubmitted: (value) {
+              if (value.isNotEmpty) {
+                if (isMain) {
+                  controller.updateCategory(category, value);
+                } else if (parentCategory != null && subCategoryName != null) {
+                  controller.updateSubCategory(
+                    parentCategory,
+                    subCategoryName,
+                    value,
+                  );
+                }
+                Get.back();
+              }
+            },
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orangeAccent,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              onPressed: () {
+                if (_nameController.text.isNotEmpty) {
+                  if (isMain) {
+                    controller.updateCategory(category, _nameController.text);
+                  } else if (parentCategory != null &&
+                      subCategoryName != null) {
+                    controller.updateSubCategory(
+                      parentCategory,
+                      subCategoryName,
+                      _nameController.text,
+                    );
+                  }
+                  Get.back();
+                }
+              },
+              child: const Text(
+                "Update",
                 style: TextStyle(
                   color: Colors.black,
                   fontWeight: FontWeight.bold,

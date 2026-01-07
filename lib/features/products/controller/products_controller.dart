@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/product_model.dart';
 import '../repository/products_repository.dart';
 
@@ -8,100 +9,57 @@ class ProductsController extends GetxController {
 
   var isLoading = true.obs;
 
-  // Master list
+  // --- MASTER LIST ---
   var productList = <ProductModel>[].obs;
 
-  // Search & Filter Variables
+  // --- SEARCH & HISTORY ---
   var searchQuery = ''.obs;
   var selectedCategory = 'All'.obs;
+  var searchHistoryList = <String>[].obs;
+  var showHistory = false.obs;
 
-  // --- GLOBAL SETTING FOR POINTS ---
-  // Admin logic: 100 Rs Profit = 1 Point
-  // You can change this variable or fetch it from a SettingsController
-  double profitPerPoint = 100.0;
+  // --- SETTINGS (Dynamic) ---
+  var profitPerPoint = 100.0.obs; // Default
+  var globalShowDecimals = true.obs; // Default
 
-  // --- BRAND SUGGESTION LOGIC ---
-  List<String> get existingBrands {
-    return productList
-        .map((p) => p.brand)
-        .where((b) => b.isNotEmpty)
-        .toSet() // Removes duplicates
-        .toList();
-  }
-
-  // --- POINTS CALCULATION ---
-  double calculatePoints(double purchase, double sale) {
-    if (purchase >= sale) return 0; // No profit, no points
-    double profit = sale - purchase;
-    return (profit / profitPerPoint);
-  }
-
-  // --- FILTERED LIST LOGIC ---
-  List<ProductModel> get filteredProducts {
-    return productList.where((product) {
-      String search = searchQuery.value.toLowerCase();
-      bool matchesSearch =
-          search.isEmpty ||
-          product.name.toLowerCase().contains(search) ||
-          product.modelNumber.toLowerCase().contains(search) ||
-          product.category.toLowerCase().contains(search);
-
-      bool matchesCategory =
-          selectedCategory.value == 'All' ||
-          product.category == selectedCategory.value;
-
-      return matchesSearch && matchesCategory;
-    }).toList();
-  }
-
-  List<String> get availableCategories {
-    Set<String> categories = productList.map((p) => p.category).toSet();
-    return ['All', ...categories];
-  }
-
-  // --- Stats ---
-  int get totalProducts => productList.length;
-  int get lowStockCount =>
-      productList.where((p) => p.stockQuantity < 10).length;
-  double get totalInventoryValue => productList.fold(
-    0,
-    (sum, p) => sum + (p.purchasePrice * p.stockQuantity),
-  );
+  // --- PACKAGES ---
+  var selectedProductsForPackage = <ProductModel>[].obs;
 
   @override
   void onInit() {
     super.onInit();
     fetchProducts();
+    fetchHistory();
+    fetchGlobalSettings(); // Load variables
   }
 
-  void fetchProducts() async {
+  // --- SETTINGS LOGIC ---
+  Future<void> fetchGlobalSettings() async {
     try {
-      isLoading(true);
-      var products = await _repository.fetchProducts();
-      productList.assignAll(products);
+      DocumentSnapshot doc = await FirebaseFirestore.instance
+          .collection('admin_settings')
+          .doc('global_config')
+          .get();
+
+      if (doc.exists) {
+        Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+        profitPerPoint.value = (data['profitPerPoint'] ?? 100.0).toDouble();
+        globalShowDecimals.value = data['showDecimals'] ?? true;
+      }
     } catch (e) {
-      Get.snackbar(
-        "Error",
-        "Failed to fetch products: $e",
-        backgroundColor: Colors.redAccent,
-        colorText: Colors.white,
-      );
-    } finally {
-      isLoading(false);
+      print("Settings fetch error: $e");
     }
   }
 
-  void updateSearch(String val) {
-    searchQuery.value = val;
-  }
+  // Points Calculation (Uses current profitPerPoint)
+  double calculatePoints(double purchase, double sale) {
+    if (purchase >= sale) return 0;
 
-  void updateCategoryFilter(String category) {
-    selectedCategory.value = category;
-  }
+    // Ensure we have latest settings just in case (optional, but safer)
+    // fetchGlobalSettings();
 
-  void clearAllFilters() {
-    searchQuery.value = '';
-    selectedCategory.value = 'All';
+    double profit = sale - purchase;
+    return (profit / profitPerPoint.value);
   }
 
   // --- CRUD Operations ---
@@ -109,11 +67,25 @@ class ProductsController extends GetxController {
   Future<bool> addNewProduct(ProductModel product) async {
     try {
       isLoading(true);
+
+      // 1. Refresh Settings to ensure we use the very latest config
+      await fetchGlobalSettings();
+
+      // 2. Apply current settings to the new product
+      // Note: Points are typically calculated in UI before passing here,
+      // but we ensure the 'showDecimalPoints' flag is set correctly based on global settings.
+      product.showDecimalPoints = globalShowDecimals.value;
+
+      // 3. Save to DB
       await _repository.addProduct(product);
       productList.insert(0, product);
+
+      addToHistory(product.name);
+      addToHistory(product.brand);
+
       Get.snackbar(
         "Success",
-        "Product Added",
+        "Saved Successfully",
         backgroundColor: Colors.green,
         colorText: Colors.white,
       );
@@ -134,17 +106,25 @@ class ProductsController extends GetxController {
   Future<bool> updateProduct(ProductModel product) async {
     try {
       isLoading(true);
-      await _repository.updateProduct(product);
 
+      // When updating, we usually KEEP the product's original settings
+      // unless you specifically want to overwrite them.
+      // Here we respect the product's existing configuration or update if you prefer.
+      // For now, we update the DB normally.
+
+      await _repository.updateProduct(product);
       int index = productList.indexWhere((p) => p.id == product.id);
       if (index != -1) {
         productList[index] = product;
         productList.refresh();
       }
 
+      addToHistory(product.name);
+      addToHistory(product.brand);
+
       Get.snackbar(
         "Success",
-        "Product Updated",
+        "Updated Successfully",
         backgroundColor: Colors.green,
         colorText: Colors.white,
       );
@@ -162,16 +142,11 @@ class ProductsController extends GetxController {
     }
   }
 
-  Future<void> deleteProduct(String id) async {
+  Future<void> deleteProduct(String id, {bool isPackage = false}) async {
     try {
-      await _repository.deleteProduct(id);
+      await _repository.deleteProduct(id, isPackage: isPackage);
       productList.removeWhere((p) => p.id == id);
-      Get.snackbar(
-        "Deleted",
-        "Product removed",
-        backgroundColor: Colors.redAccent,
-        colorText: Colors.white,
-      );
+      // No snackbar here (handled by UI)
     } catch (e) {
       Get.snackbar(
         "Error",
@@ -180,5 +155,136 @@ class ProductsController extends GetxController {
         colorText: Colors.white,
       );
     }
+  }
+
+  // Fetching
+  void fetchProducts() async {
+    try {
+      isLoading(true);
+      var items = await _repository.fetchProducts();
+      productList.assignAll(items);
+    } catch (e) {
+      Get.snackbar(
+        "Error",
+        "Failed to fetch: $e",
+        backgroundColor: Colors.redAccent,
+        colorText: Colors.white,
+      );
+    } finally {
+      isLoading(false);
+    }
+  }
+
+  void fetchHistory() async {
+    var history = await _repository.fetchSearchHistory();
+    searchHistoryList.assignAll(history);
+  }
+
+  // --- PUBLIC GETTERS ---
+  List<ProductModel> get productsOnly =>
+      productList.where((p) => !p.isPackage).toList();
+
+  List<ProductModel> get packagesOnly =>
+      productList.where((p) => p.isPackage).toList();
+
+  int get totalProducts => productsOnly.length;
+
+  int get lowStockCount =>
+      productsOnly.where((p) => p.stockQuantity < 10).length;
+
+  double get totalInventoryValue => productsOnly.fold(
+    0,
+    (sum, p) => sum + (p.purchasePrice * p.stockQuantity),
+  );
+
+  List<String> get availableCategories {
+    Set<String> categories = productList.map((p) => p.category).toSet();
+    return ['All', ...categories];
+  }
+
+  // Combined History + Existing Brands/Names for suggestions
+  List<String> getSuggestions(String query) {
+    Set<String> suggestions = {...searchHistoryList};
+    suggestions.addAll(
+      productList.map((p) => p.brand).where((b) => b.isNotEmpty),
+    );
+    suggestions.addAll(
+      productList.map((p) => p.name).where((n) => n.isNotEmpty),
+    );
+
+    if (query.isEmpty) return suggestions.toList();
+    return suggestions
+        .where((s) => s.toLowerCase().contains(query.toLowerCase()))
+        .toList();
+  }
+
+  // Filter Logic
+  List<ProductModel> get filteredProducts {
+    return productList.where((product) {
+      String search = searchQuery.value.toLowerCase();
+      bool matchesSearch =
+          search.isEmpty ||
+          product.name.toLowerCase().contains(search) ||
+          product.modelNumber.toLowerCase().contains(search) ||
+          product.category.toLowerCase().contains(search);
+
+      bool matchesCategory =
+          selectedCategory.value == 'All' ||
+          product.category == selectedCategory.value;
+
+      return matchesSearch && matchesCategory;
+    }).toList();
+  }
+
+  // --- History Logic ---
+  void updateSearch(String val) {
+    searchQuery.value = val;
+  }
+
+  void addToHistory(String term) async {
+    if (term.trim().isNotEmpty && !searchHistoryList.contains(term)) {
+      searchHistoryList.add(term);
+      await _repository.addSearchTerm(term);
+    }
+  }
+
+  void removeHistoryItem(String term) async {
+    searchHistoryList.remove(term);
+    await _repository.deleteSearchTerm(term);
+  }
+
+  void clearAllHistory() async {
+    searchHistoryList.clear();
+    await _repository.clearAllHistory();
+  }
+
+  void clearAllFilters() {
+    searchQuery.value = '';
+    selectedCategory.value = 'All';
+  }
+
+  void updateCategoryFilter(String category) {
+    selectedCategory.value = category;
+  }
+
+  // --- Packages Helper Logic ---
+  void toggleProductForPackage(ProductModel product) {
+    if (selectedProductsForPackage.contains(product)) {
+      selectedProductsForPackage.remove(product);
+    } else {
+      selectedProductsForPackage.add(product);
+    }
+  }
+
+  double get packageTotalPurchasePrice => selectedProductsForPackage.fold(
+    0,
+    (sum, item) => sum + item.purchasePrice,
+  );
+
+  String get generatePackageName =>
+      selectedProductsForPackage.map((e) => e.name).join(' + ');
+
+  void clearPackageSelection() {
+    selectedProductsForPackage.clear();
   }
 }
