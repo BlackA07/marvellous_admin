@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/product_model.dart';
 import '../repository/products_repository.dart';
 
@@ -17,8 +18,9 @@ class ProductsController extends GetxController {
   var searchHistoryList = <String>[].obs;
   var showHistory = false.obs;
 
-  // --- SETTINGS ---
-  var profitPerPoint = 100.0.obs;
+  // --- SETTINGS (Dynamic) ---
+  var profitPerPoint = 100.0.obs; // Default
+  var globalShowDecimals = true.obs; // Default
 
   // --- PACKAGES ---
   var selectedProductsForPackage = <ProductModel>[].obs;
@@ -28,6 +30,131 @@ class ProductsController extends GetxController {
     super.onInit();
     fetchProducts();
     fetchHistory();
+    fetchGlobalSettings(); // Load variables
+  }
+
+  // --- SETTINGS LOGIC ---
+  Future<void> fetchGlobalSettings() async {
+    try {
+      DocumentSnapshot doc = await FirebaseFirestore.instance
+          .collection('admin_settings')
+          .doc('global_config')
+          .get();
+
+      if (doc.exists) {
+        Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+        profitPerPoint.value = (data['profitPerPoint'] ?? 100.0).toDouble();
+        globalShowDecimals.value = data['showDecimals'] ?? true;
+      }
+    } catch (e) {
+      print("Settings fetch error: $e");
+    }
+  }
+
+  // Points Calculation (Uses current profitPerPoint)
+  double calculatePoints(double purchase, double sale) {
+    if (purchase >= sale) return 0;
+
+    // Ensure we have latest settings just in case (optional, but safer)
+    // fetchGlobalSettings();
+
+    double profit = sale - purchase;
+    return (profit / profitPerPoint.value);
+  }
+
+  // --- CRUD Operations ---
+
+  Future<bool> addNewProduct(ProductModel product) async {
+    try {
+      isLoading(true);
+
+      // 1. Refresh Settings to ensure we use the very latest config
+      await fetchGlobalSettings();
+
+      // 2. Apply current settings to the new product
+      // Note: Points are typically calculated in UI before passing here,
+      // but we ensure the 'showDecimalPoints' flag is set correctly based on global settings.
+      product.showDecimalPoints = globalShowDecimals.value;
+
+      // 3. Save to DB
+      await _repository.addProduct(product);
+      productList.insert(0, product);
+
+      addToHistory(product.name);
+      addToHistory(product.brand);
+
+      Get.snackbar(
+        "Success",
+        "Saved Successfully",
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+      return true;
+    } catch (e) {
+      Get.snackbar(
+        "Error",
+        "Failed: $e",
+        backgroundColor: Colors.redAccent,
+        colorText: Colors.white,
+      );
+      return false;
+    } finally {
+      isLoading(false);
+    }
+  }
+
+  Future<bool> updateProduct(ProductModel product) async {
+    try {
+      isLoading(true);
+
+      // When updating, we usually KEEP the product's original settings
+      // unless you specifically want to overwrite them.
+      // Here we respect the product's existing configuration or update if you prefer.
+      // For now, we update the DB normally.
+
+      await _repository.updateProduct(product);
+      int index = productList.indexWhere((p) => p.id == product.id);
+      if (index != -1) {
+        productList[index] = product;
+        productList.refresh();
+      }
+
+      addToHistory(product.name);
+      addToHistory(product.brand);
+
+      Get.snackbar(
+        "Success",
+        "Updated Successfully",
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+      return true;
+    } catch (e) {
+      Get.snackbar(
+        "Error",
+        "Failed to update: $e",
+        backgroundColor: Colors.redAccent,
+        colorText: Colors.white,
+      );
+      return false;
+    } finally {
+      isLoading(false);
+    }
+  }
+
+  Future<void> deleteProduct(String id, {bool isPackage = false}) async {
+    try {
+      await _repository.deleteProduct(id, isPackage: isPackage);
+      productList.removeWhere((p) => p.id == id);
+      // No snackbar here (handled by UI)
+    } catch (e) {
+      Get.snackbar(
+        "Error",
+        "Failed to delete",
+        backgroundColor: Colors.redAccent,
+        colorText: Colors.white,
+      );
+    }
   }
 
   // Fetching
@@ -109,97 +236,6 @@ class ProductsController extends GetxController {
     }).toList();
   }
 
-  double calculatePoints(double purchase, double sale) {
-    if (purchase >= sale) return 0;
-    double profit = sale - purchase;
-    return (profit / profitPerPoint.value);
-  }
-
-  // --- CRUD Operations ---
-
-  Future<bool> addNewProduct(ProductModel product) async {
-    try {
-      isLoading(true);
-      await _repository.addProduct(product);
-      productList.insert(0, product);
-
-      addToHistory(product.name);
-      addToHistory(product.brand);
-
-      Get.snackbar(
-        "Success",
-        "Saved Successfully",
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-      );
-      return true;
-    } catch (e) {
-      Get.snackbar(
-        "Error",
-        "Failed: $e",
-        backgroundColor: Colors.redAccent,
-        colorText: Colors.white,
-      );
-      return false;
-    } finally {
-      isLoading(false);
-    }
-  }
-
-  Future<bool> updateProduct(ProductModel product) async {
-    try {
-      isLoading(true);
-      await _repository.updateProduct(product);
-      int index = productList.indexWhere((p) => p.id == product.id);
-      if (index != -1) {
-        productList[index] = product;
-        productList.refresh();
-      }
-
-      addToHistory(product.name);
-      addToHistory(product.brand);
-
-      Get.snackbar(
-        "Success",
-        "Updated Successfully",
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-      );
-      return true;
-    } catch (e) {
-      Get.snackbar(
-        "Error",
-        "Failed to update: $e",
-        backgroundColor: Colors.redAccent,
-        colorText: Colors.white,
-      );
-      return false;
-    } finally {
-      isLoading(false);
-    }
-  }
-
-  // FIX: Added 'isPackage' parameter and passed it to repository
-  Future<void> deleteProduct(String id, {bool isPackage = false}) async {
-    try {
-      // 1. Delete from Firebase
-      await _repository.deleteProduct(id, isPackage: isPackage);
-
-      // 2. Remove from Local List
-      productList.removeWhere((p) => p.id == id);
-
-      // NOTE: Removed Get.snackbar here to avoid double popups
-      // (Screen handles the Undo Snackbar)
-    } catch (e) {
-      Get.snackbar(
-        "Error",
-        "Failed to delete",
-        backgroundColor: Colors.redAccent,
-        colorText: Colors.white,
-      );
-    }
-  }
-
   // --- History Logic ---
   void updateSearch(String val) {
     searchQuery.value = val;
@@ -231,6 +267,7 @@ class ProductsController extends GetxController {
     selectedCategory.value = category;
   }
 
+  // --- Packages Helper Logic ---
   void toggleProductForPackage(ProductModel product) {
     if (selectedProductsForPackage.contains(product)) {
       selectedProductsForPackage.remove(product);

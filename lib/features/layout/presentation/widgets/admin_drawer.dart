@@ -11,6 +11,7 @@ import 'package:marvellous_admin/features/mlm/presentation/screens/commission_se
 import 'package:marvellous_admin/features/mlm/presentation/screens/mlm_tree_view.dart';
 import 'package:marvellous_admin/features/orders/presentation/screens/orders_dashboard_screen.dart';
 import 'package:marvellous_admin/features/profile/presentation/screens/admin_profile_screen.dart';
+import 'package:marvellous_admin/features/settings/presentation/screens/variables_screen.dart';
 import 'package:marvellous_admin/features/vendors/screens/vendors_list_screen.dart';
 
 import '../../../../core/theme/pallete.dart';
@@ -52,6 +53,7 @@ class AdminDrawer extends ConsumerStatefulWidget {
 class _AdminDrawerState extends ConsumerState<AdminDrawer> {
   final List<AdminMenuItem> menuItems = [
     AdminMenuItem(title: "Dashboard", icon: Icons.dashboard_outlined),
+    AdminMenuItem(title: "Point Variable", icon: Icons.settings_outlined),
 
     // PRODUCTS
     AdminMenuItem(
@@ -181,6 +183,9 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
                             screen = const OrdersDashboardScreen();
                           } else if (item.title == "Profile") {
                             screen = const AdminProfileScreen();
+                          } else if (item.title == "Point Variable") {
+                            // Placeholder screen for Point Variable
+                            screen = const VariablesScreen();
                           }
 
                           nav.navigateTo(

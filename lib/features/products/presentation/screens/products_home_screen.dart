@@ -48,9 +48,9 @@ class _ProductsHomeScreenState extends ConsumerState<ProductsHomeScreen> {
       middleText: "Are you sure you want to delete ${product.name}?",
       textConfirm: "Delete",
       textCancel: "Cancel",
-      confirmTextColor: Colors.white,
+      confirmTextColor: const Color.fromARGB(255, 255, 255, 255),
       buttonColor: Colors.redAccent,
-      backgroundColor: Colors.white,
+      backgroundColor: const Color.fromARGB(255, 0, 0, 0),
       onConfirm: () async {
         Get.back();
         await controller.deleteProduct(product.id!, isPackage: false);
