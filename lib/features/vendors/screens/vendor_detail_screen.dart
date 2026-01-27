@@ -143,9 +143,9 @@ class VendorDetailScreen extends StatelessWidget {
                   onPressed: () {
                     // Navigate to Add Product Screen
                     // Pass vendor.id as preSelectedVendorId
-                    Get.to(
-                      () => AddProductScreen(preSelectedVendorId: vendor.id),
-                    );
+                    // Get.to(
+                    //   () => AddProductScreen(preSelectedVendorId: vendor.id),
+                    // );
                   },
                   icon: const Icon(Icons.add, color: Colors.black, size: 18),
                   label: const Text(
