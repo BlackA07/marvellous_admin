@@ -325,7 +325,7 @@ class ProductsController extends GetxController {
     }
   }
 
-  void clearAllHistory() async {
+  Future<void> clearAllHistory() async {
     searchHistoryList.clear();
     await _repository.clearAllHistory();
   }
