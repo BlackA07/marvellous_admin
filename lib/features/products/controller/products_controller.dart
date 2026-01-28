@@ -15,7 +15,14 @@ class ProductsController extends GetxController {
   // --- SEARCH & HISTORY ---
   var searchQuery = ''.obs;
   var selectedCategory = 'All'.obs;
+
+  // General Search History (for Home Screen)
   var searchHistoryList = <String>[].obs;
+
+  // --- NEW: Specific History Lists (for Add Product Screen) ---
+  var brandHistoryList = <String>[].obs;
+  var productNameHistoryList = <String>[].obs;
+
   var showHistory = false.obs;
 
   // --- SETTINGS (Dynamic) ---
@@ -80,8 +87,13 @@ class ProductsController extends GetxController {
       await _repository.addProduct(product);
       productList.insert(0, product);
 
+      // --- NEW: Add to General History ---
       addToHistory(product.name);
       addToHistory(product.brand);
+
+      // --- NEW: Add to Specific History Lists ---
+      addToSpecificHistory(product.name, 'product');
+      addToSpecificHistory(product.brand, 'brand');
 
       Get.snackbar(
         "Success",
@@ -122,6 +134,10 @@ class ProductsController extends GetxController {
       addToHistory(product.name);
       addToHistory(product.brand);
 
+      // --- NEW: Update Specific Lists ---
+      addToSpecificHistory(product.name, 'product');
+      addToSpecificHistory(product.brand, 'brand');
+
       Get.snackbar(
         "Success",
         "Updated Successfully",
@@ -146,6 +162,10 @@ class ProductsController extends GetxController {
     try {
       await _repository.deleteProduct(id, isPackage: isPackage);
       productList.removeWhere((p) => p.id == id);
+
+      // Refresh suggestions after delete to remove deleted item's brand/name if no other product uses it
+      updateSuggestionLists();
+
       // No snackbar here (handled by UI)
     } catch (e) {
       Get.snackbar(
@@ -163,6 +183,9 @@ class ProductsController extends GetxController {
       isLoading(true);
       var items = await _repository.fetchProducts();
       productList.assignAll(items);
+
+      // --- NEW: Populate specific history lists from existing products ---
+      updateSuggestionLists();
     } catch (e) {
       Get.snackbar(
         "Error",
@@ -178,6 +201,27 @@ class ProductsController extends GetxController {
   void fetchHistory() async {
     var history = await _repository.fetchSearchHistory();
     searchHistoryList.assignAll(history);
+  }
+
+  // --- NEW: Helper to populate autocomplete lists from existing data ---
+  void updateSuggestionLists() {
+    // Extract unique brands
+    var brands = productList
+        .map((p) => p.brand)
+        .where((b) => b.isNotEmpty)
+        .toSet()
+        .toList();
+
+    // Extract unique product names
+    var names = productList
+        .map((p) => p.name)
+        .where((n) => n.isNotEmpty)
+        .toSet()
+        .toList();
+
+    // Update Observables
+    brandHistoryList.assignAll(brands);
+    productNameHistoryList.assignAll(names);
   }
 
   // --- PUBLIC GETTERS ---
@@ -202,7 +246,7 @@ class ProductsController extends GetxController {
     return ['All', ...categories];
   }
 
-  // Combined History + Existing Brands/Names for suggestions
+  // Combined History + Existing Brands/Names for suggestions (General Search)
   List<String> getSuggestions(String query) {
     Set<String> suggestions = {...searchHistoryList};
     suggestions.addAll(
@@ -241,6 +285,7 @@ class ProductsController extends GetxController {
     searchQuery.value = val;
   }
 
+  // General History (Search Bar)
   void addToHistory(String term) async {
     if (term.trim().isNotEmpty && !searchHistoryList.contains(term)) {
       searchHistoryList.add(term);
@@ -248,9 +293,36 @@ class ProductsController extends GetxController {
     }
   }
 
+  // General Remove
   void removeHistoryItem(String term) async {
     searchHistoryList.remove(term);
     await _repository.deleteSearchTerm(term);
+  }
+
+  // --- NEW: Specific History Logic (Brand vs Name) ---
+  void addToSpecificHistory(String term, String type) {
+    if (term.trim().isEmpty) return;
+
+    if (type == 'brand') {
+      // Avoid duplicates
+      if (!brandHistoryList.contains(term)) {
+        brandHistoryList.add(term);
+        // Note: If you want this persisted separately, you'd add a repo method like addBrandTerm(term)
+      }
+    } else {
+      if (!productNameHistoryList.contains(term)) {
+        productNameHistoryList.add(term);
+      }
+    }
+  }
+
+  void removeSpecificHistoryItem(String term, String type) {
+    if (type == 'brand') {
+      brandHistoryList.remove(term);
+      // Optional: Delete from DB if you implement specific collections
+    } else {
+      productNameHistoryList.remove(term);
+    }
   }
 
   void clearAllHistory() async {
