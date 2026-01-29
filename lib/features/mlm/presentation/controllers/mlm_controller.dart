@@ -2,7 +2,9 @@
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../data/models/mlm_models.dart';
+import '../../data/models/mlm_global_settings_model.dart'; // Import Settings Model
 import '../../data/repositories/mlm_repository.dart';
 
 class MLMController extends GetxController {
@@ -11,6 +13,11 @@ class MLMController extends GetxController {
   // Variables
   var isLoading = false.obs;
   var commissionLevels = <CommissionLevel>[].obs;
+
+  // Settings for Calculation Display
+  var globalSettings = Rxn<MLMGlobalSettings>();
+
+  // --- RESTORED: Tree View Variable ---
   var rootNode = Rxn<MLMNode>();
 
   // Text Controller for "Total Levels" Input
@@ -30,42 +37,52 @@ class MLMController extends GetxController {
   void loadData() async {
     try {
       isLoading(true);
-      var levels = await _repository.getCommissionLevels();
-      var tree = await _repository.getMLMTree();
 
+      // 1. Fetch Levels
+      var levels = await _repository.getCommissionLevels();
       commissionLevels.assignAll(levels);
-      // TextField ko bhi update karo current levels k hisab se
       levelCountInputController.text = levels.length.toString();
 
+      // 2. Fetch Global Settings (For Rank Breakdown Calculation)
+      var settingsDoc = await FirebaseFirestore.instance
+          .collection('admin_settings')
+          .doc('mlm_variables')
+          .get();
+
+      if (settingsDoc.exists) {
+        globalSettings.value = MLMGlobalSettings.fromMap(settingsDoc.data()!);
+      } else {
+        globalSettings.value = MLMGlobalSettings.defaults();
+      }
+
+      // --- RESTORED: Fetch Tree Structure ---
+      var tree = await _repository.getMLMTree();
       rootNode.value = tree;
+    } catch (e) {
+      print("Error loading MLM data: $e");
     } finally {
       isLoading(false);
     }
   }
 
-  // --- NEW LOGIC: Total Levels Change karna ---
+  // Update Total Levels Logic
   void updateTotalLevels(String value) {
     int? newCount = int.tryParse(value);
-
-    // Validation: 1 se 50 k darmiyan ho
     if (newCount == null || newCount < 1 || newCount > 50) return;
 
     int currentCount = commissionLevels.length;
 
     if (newCount > currentCount) {
-      // Add new levels
       for (int i = currentCount; i < newCount; i++) {
         commissionLevels.add(CommissionLevel(level: i + 1, percentage: 0.0));
       }
     } else if (newCount < currentCount) {
-      // Remove extra levels
       commissionLevels.removeRange(newCount, currentCount);
     }
-
     commissionLevels.refresh();
   }
 
-  // Update logic for specific level percentage
+  // Update Percentage Logic
   void updateLevelPercentage(int index, String value) {
     double? val = double.tryParse(value);
     if (val != null) {
@@ -74,31 +91,26 @@ class MLMController extends GetxController {
     }
   }
 
-  // Save Button Logic
+  // Save Config
   Future<void> saveConfig() async {
-    // Validation
     if (totalCommission > 100) {
       Get.snackbar(
         "Error",
-        "Total commission $totalCommission% hogaya hai. Ye 100 se uper nahi jasakta!",
+        "Total commission $totalCommission% exceeds 100%!",
         backgroundColor: Colors.redAccent,
         colorText: Colors.white,
-        snackPosition: SnackPosition.BOTTOM,
       );
       return;
     }
 
     try {
       isLoading(true);
-      // Firebase Repository Call
       await _repository.saveCommissions(commissionLevels);
-
       Get.snackbar(
         "Success",
         "Commissions structure updated successfully!",
         backgroundColor: Colors.green,
         colorText: Colors.white,
-        snackPosition: SnackPosition.BOTTOM,
       );
     } catch (e) {
       Get.snackbar(

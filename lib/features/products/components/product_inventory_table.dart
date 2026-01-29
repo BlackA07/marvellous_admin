@@ -35,8 +35,42 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
   bool ascending = true;
   int? sortColumnIndex;
 
-  final ScrollController _verticalController = ScrollController();
+  // --- PAGINATION STATE ---
+  int _currentPage = 1;
+  final int _itemsPerPage = 11; // User requirement: Odd number (9 or 11)
 
+  // Controllers for Scrolling
+  final ScrollController _verticalController = ScrollController();
+  final ScrollController _topHorizontalController = ScrollController();
+  final ScrollController _bottomHorizontalController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    // Scroll Sync Logic
+    _topHorizontalController.addListener(() {
+      if (_topHorizontalController.offset !=
+          _bottomHorizontalController.offset) {
+        _bottomHorizontalController.jumpTo(_topHorizontalController.offset);
+      }
+    });
+    _bottomHorizontalController.addListener(() {
+      if (_bottomHorizontalController.offset !=
+          _topHorizontalController.offset) {
+        _topHorizontalController.jumpTo(_bottomHorizontalController.offset);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _verticalController.dispose();
+    _topHorizontalController.dispose();
+    _bottomHorizontalController.dispose();
+    super.dispose();
+  }
+
+  // --- SORTING LOGIC ---
   void _sort<T>(
     Comparable<T> Function(ProductModel p) getField,
     int columnIndex,
@@ -59,16 +93,74 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
     });
   }
 
-  @override
-  void dispose() {
-    _verticalController.dispose();
-    super.dispose();
+  // --- DYNAMIC POINTS CALCULATION (FIXED) ---
+  double _calculatePoints(ProductModel product) {
+    // 1. Get Sale and Purchase Price safely
+    double sale = product.salePrice;
+
+    // Make sure model has purchasePrice, else treat as 0 to avoid null errors if distinct
+    double purchase = product.purchasePrice;
+
+    // 2. Get Profit Per Point from Controller
+    // Using simple .toDouble() in case it's an int or RxDouble
+    double profitPerPointVal = 0.0;
+    try {
+      profitPerPointVal = widget.controller.profitPerPoint.toDouble();
+    } catch (e) {
+      // Fallback incase variable access fails
+      profitPerPointVal = 1.0;
+    }
+
+    // 3. CRITICAL: Prevent Division by Zero
+    if (profitPerPointVal == 0) {
+      return 0.0;
+    }
+
+    // 4. Calculate Gross Profit
+    double grossProfit = sale - purchase;
+
+    // 5. Calculate Points
+    double points = grossProfit / profitPerPointVal;
+
+    // 6. Safety Check: If result is NaN or Infinity, return 0.0
+    if (points.isNaN || points.isInfinite) {
+      return 0.0;
+    }
+
+    return points;
   }
 
   @override
   Widget build(BuildContext context) {
     const Color cardColor = Color.fromARGB(255, 231, 225, 225);
     const Color textColor = Colors.black;
+
+    // --- COMPACT SIZES ---
+    final double _fontSize = widget.isMobile ? 11 : 13;
+    final double _iconSize = widget.isMobile ? 16 : 18;
+    final double _rowHeight = widget.isMobile ? 45 : 50;
+    final double _colSpacing = widget.isMobile ? 10 : 20;
+
+    // --- PAGINATION LOGIC ---
+    int totalItems = widget.filteredList.length;
+    int totalPages = (totalItems / _itemsPerPage).ceil();
+    if (totalPages == 0) totalPages = 1;
+
+    // Ensure current page is valid
+    if (_currentPage > totalPages) _currentPage = totalPages;
+
+    // Slice the list for current page
+    int startIndex = (_currentPage - 1) * _itemsPerPage;
+    int endIndex = startIndex + _itemsPerPage;
+    if (endIndex > totalItems) endIndex = totalItems;
+
+    // Ye list ab table men show hogi
+    final List<ProductModel> currentDisplayList = widget.filteredList.sublist(
+      startIndex,
+      endIndex,
+    );
+
+    final double estimatedTableWidth = widget.isMobile ? 800 : 1200;
 
     return Container(
       decoration: BoxDecoration(
@@ -83,17 +175,19 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
         ],
       ),
       child: SizedBox(
-        height: 650,
+        // Height allows for pagination controls
+        height: 760,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // --- HEADER ---
             Padding(
               padding: const EdgeInsets.all(15.0),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    "Inventory List",
+                    "Inventory List (${widget.filteredList.length})",
                     style: GoogleFonts.orbitron(
                       color: textColor,
                       fontSize: widget.isMobile ? 16 : 18,
@@ -103,22 +197,7 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                   if (widget.controller.searchHistoryList.isNotEmpty)
                     TextButton(
                       onPressed: () async {
-                        bool? confirmed = await Get.defaultDialog<bool>(
-                          title: "Clear History",
-                          middleText: "Delete all search history?",
-                          onConfirm: () {
-                            Get.back(result: true);
-                          },
-                          onCancel: () => Get.back(result: false),
-                          textConfirm: "Yes",
-                          textCancel: "No",
-                          buttonColor: Colors.redAccent,
-                          backgroundColor: const Color.fromARGB(255, 0, 0, 0),
-                        );
-
-                        if (confirmed == true) {
-                          await widget.controller.clearAllHistory();
-                        }
+                        await widget.controller.clearAllHistory();
                       },
                       child: const Text(
                         "Clear History",
@@ -128,271 +207,374 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                 ],
               ),
             ),
-            const Divider(color: Colors.grey),
+            const Divider(color: Colors.grey, height: 1),
 
+            // --- EMPTY STATE ---
             if (widget.filteredList.isEmpty)
               Expanded(
                 child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.search_off,
-                        size: widget.isMobile ? 40 : 50,
-                        color: Colors.grey.shade300,
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        "No products found",
-                        style: GoogleFonts.comicNeue(
-                          color: Colors.grey,
-                          fontSize: widget.isMobile ? 16 : 18,
-                        ),
-                      ),
-                    ],
+                  child: Text(
+                    "No products found",
+                    style: GoogleFonts.comicNeue(color: Colors.grey),
                   ),
                 ),
               )
             else
               Expanded(
-                child: Scrollbar(
-                  controller: _verticalController,
-                  thumbVisibility: true,
-                  interactive: true,
-                  thickness: 8,
-                  radius: const Radius.circular(8),
-                  child: SingleChildScrollView(
-                    controller: _verticalController,
-                    scrollDirection: Axis.vertical,
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          minWidth: widget.constraints.maxWidth,
-                        ),
-                        child: DataTable(
-                          sortColumnIndex: sortColumnIndex,
-                          sortAscending: ascending,
-                          headingRowColor: MaterialStateProperty.all(
-                            const Color.fromARGB(255, 216, 213, 213),
-                          ),
-                          dataRowHeight: widget.isMobile ? 60 : 70,
-                          columnSpacing: widget.isMobile ? 20 : 40,
-                          columns: [
-                            DataColumn(
-                              label: _tableHeader("Product", textColor),
-                              onSort: (index, _) {
-                                _sort((p) => p.name, index);
-                              },
-                            ),
-                            DataColumn(
-                              label: _tableHeader("Brand", textColor),
-                              onSort: (index, _) {
-                                _sort((p) => p.brand, index);
-                              },
-                            ),
-                            DataColumn(
-                              label: _tableHeader("Category", textColor),
-                              onSort: (index, _) {
-                                _sort((p) => p.category, index);
-                              },
-                            ),
-                            DataColumn(
-                              label: _tableHeader("Sub Category", textColor),
-                              onSort: (index, _) {
-                                _sort((p) => p.subCategory, index);
-                              },
-                            ),
-                            DataColumn(
-                              label: _tableHeader("Location", textColor),
-                              onSort: (index, _) {
-                                _sort((p) => p.deliveryLocation, index);
-                              },
-                            ),
-                            DataColumn(
-                              label: _tableHeader("In / Out", textColor),
-                              onSort: (index, _) {
-                                _sort((p) => p.stockQuantity, index);
-                              },
-                            ),
-                            DataColumn(
-                              label: _tableHeader(
-                                "Price",
-                                Colors.green.shade700,
-                              ),
-                              numeric: true,
-                              onSort: (index, _) {
-                                _sort((p) => p.salePrice, index);
-                              },
-                            ),
-                            DataColumn(
-                              label: _tableHeader("Actions", textColor),
-                            ),
-                          ],
-                          rows: widget.filteredList.map((product) {
-                            int stockIn = product.stockQuantity;
-                            int stockOut = product.stockOut;
-
-                            return DataRow(
-                              cells: [
-                                DataCell(
-                                  Row(
-                                    children: [
-                                      Container(
-                                        width: widget.isMobile ? 35 : 45,
-                                        height: widget.isMobile ? 35 : 45,
-                                        decoration: BoxDecoration(
-                                          color: Colors.grey.shade200,
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                          image: product.images.isNotEmpty
-                                              ? DecorationImage(
-                                                  image: MemoryImage(
-                                                    base64Decode(
-                                                      product.images.first,
-                                                    ),
-                                                  ),
-                                                  fit: BoxFit.cover,
-                                                )
-                                              : null,
-                                        ),
-                                        child: product.images.isEmpty
-                                            ? Icon(
-                                                product.isPackage
-                                                    ? Icons.inventory_2
-                                                    : Icons.image,
-                                                color: Colors.grey,
-                                                size: widget.isMobile ? 16 : 20,
-                                              )
-                                            : null,
-                                      ),
-                                      const SizedBox(width: 12),
-                                      SizedBox(
-                                        width: 120,
-                                        child: Text(
-                                          product.name,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: GoogleFonts.comicNeue(
-                                            color: textColor,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: widget.isMobile ? 13 : 15,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                DataCell(
-                                  Text(
-                                    product.brand,
-                                    style: GoogleFonts.comicNeue(
-                                      color: textColor,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                DataCell(
-                                  Text(
-                                    product.category,
-                                    style: GoogleFonts.comicNeue(
-                                      color: textColor,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                DataCell(
-                                  Text(
-                                    product.subCategory,
-                                    style: GoogleFonts.comicNeue(
-                                      color: textColor,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                DataCell(
-                                  Text(
-                                    product.deliveryLocation,
-                                    style: GoogleFonts.comicNeue(
-                                      color: textColor,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                DataCell(
-                                  Text(
-                                    "$stockIn / $stockOut",
-                                    style: GoogleFonts.comicNeue(
-                                      color: textColor,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                DataCell(
-                                  Text(
-                                    "PKR ${product.salePrice}",
-                                    style: GoogleFonts.comicNeue(
-                                      color: Colors.green.shade700,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                DataCell(
-                                  Row(
-                                    children: [
-                                      IconButton(
-                                        icon: const Icon(
-                                          Icons.visibility,
-                                          color: Colors.blueAccent,
-                                        ),
-                                        onPressed: () {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (_) =>
-                                                  ProductDetailScreen(
-                                                    product: product,
-                                                  ),
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                      IconButton(
-                                        icon: const Icon(
-                                          Icons.edit,
-                                          color: Colors.orangeAccent,
-                                        ),
-                                        onPressed: () {
-                                          ref
-                                              .read(navigationProvider)
-                                              .navigateTo(
-                                                mainItem: "Products",
-                                                subItem: "Add Product",
-                                                screen: AddProductScreen(
-                                                  productToEdit: product,
-                                                ),
-                                                title: "Edit Product",
-                                              );
-                                        },
-                                      ),
-                                      IconButton(
-                                        icon: const Icon(
-                                          Icons.delete,
-                                          color: Colors.redAccent,
-                                        ),
-                                        onPressed: () =>
-                                            widget.onDelete(product),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            );
-                          }).toList(),
+                child: Column(
+                  children: [
+                    // --- TOP SCROLLBAR ---
+                    Scrollbar(
+                      controller: _topHorizontalController,
+                      thumbVisibility: true,
+                      trackVisibility: true,
+                      thickness: 8,
+                      child: SingleChildScrollView(
+                        controller: _topHorizontalController,
+                        scrollDirection: Axis.horizontal,
+                        child: SizedBox(
+                          width:
+                              estimatedTableWidth > widget.constraints.maxWidth
+                              ? estimatedTableWidth
+                              : widget.constraints.maxWidth,
+                          height: 15,
                         ),
                       ),
                     ),
-                  ),
+
+                    // --- TABLE CONTENT ---
+                    Expanded(
+                      child: Scrollbar(
+                        controller: _verticalController,
+                        thumbVisibility: true,
+                        thickness: 8,
+                        child: SingleChildScrollView(
+                          controller: _verticalController,
+                          scrollDirection: Axis.vertical,
+                          child: Scrollbar(
+                            controller: _bottomHorizontalController,
+                            thumbVisibility: true,
+                            trackVisibility: true,
+                            thickness: 8,
+                            child: SingleChildScrollView(
+                              controller: _bottomHorizontalController,
+                              scrollDirection: Axis.horizontal,
+                              child: ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  minWidth: widget.constraints.maxWidth,
+                                ),
+                                child: DataTable(
+                                  sortColumnIndex: sortColumnIndex,
+                                  sortAscending: ascending,
+                                  headingRowColor: MaterialStateProperty.all(
+                                    const Color.fromARGB(255, 216, 213, 213),
+                                  ),
+                                  dataRowHeight: _rowHeight,
+                                  headingRowHeight: _rowHeight,
+                                  columnSpacing: _colSpacing,
+                                  horizontalMargin: 10,
+                                  columns: [
+                                    DataColumn(
+                                      label: _tableHeader(
+                                        "Product",
+                                        textColor,
+                                        _fontSize,
+                                      ),
+                                      onSort: (index, _) =>
+                                          _sort((p) => p.name, index),
+                                    ),
+                                    DataColumn(
+                                      label: _tableHeader(
+                                        "Brand",
+                                        textColor,
+                                        _fontSize,
+                                      ),
+                                      onSort: (index, _) =>
+                                          _sort((p) => p.brand, index),
+                                    ),
+                                    DataColumn(
+                                      label: _tableHeader(
+                                        "Category",
+                                        textColor,
+                                        _fontSize,
+                                      ),
+                                      onSort: (index, _) =>
+                                          _sort((p) => p.category, index),
+                                    ),
+                                    DataColumn(
+                                      label: _tableHeader(
+                                        "Sub Cat",
+                                        textColor,
+                                        _fontSize,
+                                      ),
+                                      onSort: (index, _) =>
+                                          _sort((p) => p.subCategory, index),
+                                    ),
+                                    DataColumn(
+                                      label: _tableHeader(
+                                        "Loc",
+                                        textColor,
+                                        _fontSize,
+                                      ),
+                                      onSort: (index, _) => _sort(
+                                        (p) => p.deliveryLocation,
+                                        index,
+                                      ),
+                                    ),
+                                    DataColumn(
+                                      label: _tableHeader(
+                                        "In/Out",
+                                        textColor,
+                                        _fontSize,
+                                      ),
+                                      onSort: (index, _) =>
+                                          _sort((p) => p.stockQuantity, index),
+                                    ),
+                                    // --- POINTS COLUMN (Modified) ---
+                                    DataColumn(
+                                      label: _tableHeader(
+                                        "Pts (GP)",
+                                        Colors.amber.shade900,
+                                        _fontSize,
+                                      ),
+                                      numeric: true,
+                                      // Sort based on calculated points
+                                      onSort: (index, _) => _sort(
+                                        (p) => _calculatePoints(p),
+                                        index,
+                                      ),
+                                    ),
+                                    DataColumn(
+                                      label: _tableHeader(
+                                        "Price",
+                                        Colors.green.shade800,
+                                        _fontSize,
+                                      ),
+                                      numeric: true,
+                                      onSort: (index, _) =>
+                                          _sort((p) => p.salePrice, index),
+                                    ),
+                                    DataColumn(
+                                      label: _tableHeader(
+                                        "Actions",
+                                        textColor,
+                                        _fontSize,
+                                      ),
+                                    ),
+                                  ],
+                                  // Use currentDisplayList (Paginated)
+                                  rows: currentDisplayList.map((product) {
+                                    int stockIn = product.stockQuantity;
+                                    int stockOut = product.stockOut;
+                                    // Use safe calculation
+                                    double dynamicPoints = _calculatePoints(
+                                      product,
+                                    );
+
+                                    return DataRow(
+                                      cells: [
+                                        // Product Name & Image
+                                        DataCell(
+                                          Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              if (product.images.isNotEmpty)
+                                                Container(
+                                                  width: 30,
+                                                  height: 30,
+                                                  margin: const EdgeInsets.only(
+                                                    right: 8,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          4,
+                                                        ),
+                                                    image: DecorationImage(
+                                                      image: MemoryImage(
+                                                        base64Decode(
+                                                          product.images.first,
+                                                        ),
+                                                      ),
+                                                      fit: BoxFit.cover,
+                                                    ),
+                                                  ),
+                                                ),
+                                              SizedBox(
+                                                width: 100,
+                                                child: Text(
+                                                  product.name,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: GoogleFonts.comicNeue(
+                                                    color: textColor,
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: _fontSize,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        _buildCellText(
+                                          product.brand,
+                                          _fontSize,
+                                        ),
+                                        _buildCellText(
+                                          product.category,
+                                          _fontSize,
+                                        ),
+                                        _buildCellText(
+                                          product.subCategory,
+                                          _fontSize,
+                                        ),
+                                        _buildCellText(
+                                          product.deliveryLocation,
+                                          _fontSize,
+                                        ),
+                                        _buildCellText(
+                                          "$stockIn / $stockOut",
+                                          _fontSize,
+                                        ),
+
+                                        // --- UPDATED POINTS CELL (SAFE) ---
+                                        DataCell(
+                                          Text(
+                                            // Check again for safety before printing to string
+                                            product.showDecimalPoints
+                                                ? dynamicPoints.toStringAsFixed(
+                                                    1,
+                                                  )
+                                                : dynamicPoints
+                                                      .floor()
+                                                      .toString(),
+                                            style: GoogleFonts.comicNeue(
+                                              color: Colors.amber.shade900,
+                                              fontWeight: FontWeight.w900,
+                                              fontSize: _fontSize,
+                                            ),
+                                          ),
+                                        ),
+
+                                        // Price Cell
+                                        DataCell(
+                                          Text(
+                                            "PKR ${product.salePrice.toInt()}",
+                                            style: GoogleFonts.comicNeue(
+                                              color: Colors.green.shade800,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: _fontSize,
+                                            ),
+                                          ),
+                                        ),
+
+                                        // Actions Cell
+                                        DataCell(
+                                          Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              _actionIcon(
+                                                Icons.visibility,
+                                                Colors.blueAccent,
+                                                _iconSize,
+                                                () {
+                                                  Navigator.push(
+                                                    context,
+                                                    MaterialPageRoute(
+                                                      builder: (_) =>
+                                                          ProductDetailScreen(
+                                                            product: product,
+                                                          ),
+                                                    ),
+                                                  );
+                                                },
+                                              ),
+                                              _actionIcon(
+                                                Icons.edit,
+                                                Colors.orangeAccent,
+                                                _iconSize,
+                                                () {
+                                                  ref
+                                                      .read(navigationProvider)
+                                                      .navigateTo(
+                                                        mainItem: "Products",
+                                                        subItem: "Add Product",
+                                                        screen:
+                                                            AddProductScreen(
+                                                              productToEdit:
+                                                                  product,
+                                                            ),
+                                                        title: "Edit Product",
+                                                      );
+                                                },
+                                              ),
+                                              _actionIcon(
+                                                Icons.delete,
+                                                Colors.redAccent,
+                                                _iconSize,
+                                                () {
+                                                  widget.onDelete(product);
+                                                },
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  }).toList(),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // --- PAGINATION CONTROLS FOOTER ---
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 10,
+                      ),
+                      decoration: const BoxDecoration(
+                        border: Border(
+                          top: BorderSide(color: Colors.grey, width: 0.5),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Text(
+                            "Showing $startIndex - $endIndex of $totalItems",
+                            style: GoogleFonts.comicNeue(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(width: 20),
+                          IconButton(
+                            icon: const Icon(Icons.arrow_back_ios, size: 16),
+                            onPressed: _currentPage > 1
+                                ? () => setState(() => _currentPage--)
+                                : null,
+                          ),
+                          Text(
+                            "Page $_currentPage of $totalPages",
+                            style: GoogleFonts.orbitron(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.arrow_forward_ios, size: 16),
+                            onPressed: _currentPage < totalPages
+                                ? () => setState(() => _currentPage++)
+                                : null,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
           ],
@@ -401,13 +583,42 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
     );
   }
 
-  Widget _tableHeader(String text, Color color) {
+  // --- HELPER WIDGETS ---
+  Widget _tableHeader(String text, Color color, double fontSize) {
     return Text(
       text,
       style: GoogleFonts.comicNeue(
         color: color,
         fontWeight: FontWeight.bold,
-        fontSize: 14,
+        fontSize: fontSize,
+      ),
+    );
+  }
+
+  DataCell _buildCellText(String text, double fontSize) {
+    return DataCell(
+      Text(
+        text,
+        style: GoogleFonts.comicNeue(
+          color: Colors.black,
+          fontSize: fontSize,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+  }
+
+  Widget _actionIcon(
+    IconData icon,
+    Color color,
+    double size,
+    VoidCallback onTap,
+  ) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Icon(icon, color: color, size: size),
       ),
     );
   }
