@@ -4,10 +4,10 @@ import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
-import 'package:marvellous_admin/features/layout/presentation/screens/main_layout_screen.dart';
 
 // Controllers & Models
 import '../../../../features/products/controller/products_controller.dart';
+import '../../../layout/presentation/screens/main_layout_screen.dart';
 import '../../../products/models/product_model.dart';
 import '../../../vendors/controllers/vendor_controller.dart';
 import '../../../dashboard/presentation/screens/dashboard_screen.dart';
@@ -42,6 +42,7 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
   // Package Specific State
   List<ProductModel> _selectedProducts = [];
   double _totalCalculatedPurchasePrice = 0.0;
+  double _totalCalculatedIndividualSellPrice = 0.0; // New Variable
   String _productSearchQuery = "";
 
   bool _isSuccess = false; // Popup State
@@ -63,11 +64,28 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
   @override
   void initState() {
     super.initState();
+
+    // Listener to update Points when Sale Price changes
+    salePriceCtrl.addListener(() {
+      setState(() {});
+    });
+
     if (widget.packageToEdit != null) {
       _loadPackageData();
     } else {
       selectedLocation = locationOptions[1]; // Default Pakistan
     }
+  }
+
+  @override
+  void dispose() {
+    // Dispose controllers to avoid memory leaks
+    nameCtrl.dispose();
+    descCtrl.dispose();
+    salePriceCtrl.dispose();
+    originalPriceCtrl.dispose();
+    stockCtrl.dispose();
+    super.dispose();
   }
 
   void _loadPackageData() {
@@ -91,12 +109,15 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
   }
 
   void _recalculateTotals({bool updateImages = true}) {
-    double total = 0;
+    double totalBuy = 0;
+    double totalIndividualSell = 0;
     List<String> autoImages = [];
 
     // Calculate total and gather images from selected products
     for (var p in _selectedProducts) {
-      total += p.purchasePrice;
+      totalBuy += p.purchasePrice;
+      totalIndividualSell += p.salePrice; // Summing individual selling prices
+
       if (updateImages && p.images.isNotEmpty) {
         // Avoid duplicates
         if (!autoImages.contains(p.images.first)) {
@@ -106,16 +127,9 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
     }
 
     setState(() {
-      _totalCalculatedPurchasePrice = total;
+      _totalCalculatedPurchasePrice = totalBuy;
+      _totalCalculatedIndividualSellPrice = totalIndividualSell;
       if (updateImages) {
-        // Keep existing manual images if you implemented separate logic,
-        // but for now, we reset to selected products + we allow manual add below.
-        // This makes sure if user removes a product, its image goes away.
-        // Any manually added images (via picker) should be appended.
-        // For simplicity: We stick to Auto Images from Selection + Manual Picker Append
-
-        // Logic: Keep old images that are NOT from products?
-        // Simple Fix: Just reset to auto images to keep it clean, user can add manual after.
         selectedImagesBase64 = autoImages;
       }
     });
@@ -165,6 +179,7 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
       selectedImagesBase64.clear();
       _selectedProducts.clear();
       _totalCalculatedPurchasePrice = 0.0;
+      _totalCalculatedIndividualSellPrice = 0.0;
     });
   }
 
@@ -276,7 +291,7 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
                                         ),
                                       ),
                                       subtitle: Text(
-                                        "Buy: PKR ${product.purchasePrice}",
+                                        "Buy: PKR ${product.purchasePrice} | Sell: PKR ${product.salePrice}",
                                         style: TextStyle(
                                           color: Colors.grey.shade600,
                                           fontSize: 12,
@@ -317,7 +332,7 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        "Selected: ${_selectedProducts.length} items | Total Purchase Cost: PKR ${_totalCalculatedPurchasePrice.toInt()}",
+                        "Selected: ${_selectedProducts.length} items",
                         style: TextStyle(
                           color: Colors.green.shade700,
                           fontWeight: FontWeight.bold,
@@ -337,13 +352,12 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
                       ),
                       const SizedBox(height: 15),
 
-                      // Images Area (Auto + Manual Add)
+                      // Images Area
                       SizedBox(
                         height: 100,
                         child: ListView(
                           scrollDirection: Axis.horizontal,
                           children: [
-                            // 1. Add Image Button
                             GestureDetector(
                               onTap: _pickImages,
                               child: Container(
@@ -373,8 +387,6 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
                                 ),
                               ),
                             ),
-
-                            // 2. Image List
                             ...selectedImagesBase64.asMap().entries.map((
                               entry,
                             ) {
@@ -463,8 +475,7 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
                                     (vends.isNotEmpty ? vends.first.id : null),
                                 dropdownColor: cardColor,
                                 style: TextStyle(color: textColor),
-                                iconEnabledColor:
-                                    Colors.black54, // Icon Visible
+                                iconEnabledColor: Colors.black54,
                                 decoration: _inputDeco("Vendor"),
                                 items: vends
                                     .map(
@@ -491,7 +502,7 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
                               value: selectedLocation,
                               dropdownColor: cardColor,
                               style: TextStyle(color: textColor),
-                              iconEnabledColor: Colors.black54, // Icon Visible
+                              iconEnabledColor: Colors.black54,
                               decoration: _inputDeco("Location"),
                               items: locationOptions
                                   .map(
@@ -526,6 +537,53 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
                       ),
                       const SizedBox(height: 15),
 
+                      // --- NEW: COST & POINTS INFO ---
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        margin: const EdgeInsets.only(bottom: 15),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: Column(
+                          children: [
+                            _buildReadOnlyRow(
+                              "Total Purchase Cost:",
+                              "PKR ${_totalCalculatedPurchasePrice.toStringAsFixed(0)}",
+                              Colors.red.shade700,
+                            ),
+                            const Divider(height: 10),
+                            _buildReadOnlyRow(
+                              "Total Individual Sell Price:",
+                              "PKR ${_totalCalculatedIndividualSellPrice.toStringAsFixed(0)}",
+                              Colors.blue.shade800,
+                            ),
+                            const Divider(height: 10),
+                            Builder(
+                              builder: (context) {
+                                // Live Points Calculation
+                                double currentSell =
+                                    double.tryParse(salePriceCtrl.text) ?? 0;
+                                double points = productController
+                                    .calculatePoints(
+                                      _totalCalculatedPurchasePrice,
+                                      currentSell,
+                                    );
+                                return _buildReadOnlyRow(
+                                  "Gross Profit Points:",
+                                  points.toStringAsFixed(1),
+                                  Colors.green.shade800,
+                                  isBold: true,
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // ---------------------------------
                       Row(
                         children: [
                           Expanded(
@@ -542,7 +600,7 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
                               controller: salePriceCtrl,
                               keyboardType: TextInputType.number,
                               style: TextStyle(color: textColor),
-                              decoration: _inputDeco("Sale Price"),
+                              decoration: _inputDeco("Bundle Sale Price"),
                               validator: (v) => v!.isEmpty ? "Required" : null,
                             ),
                           ),
@@ -558,7 +616,7 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
 
                       const SizedBox(height: 40),
 
-                      // SAVE BUTTON with Loading
+                      // SAVE BUTTON
                       SizedBox(
                         width: double.infinity,
                         height: 50,
@@ -627,8 +685,7 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
                                             ) ??
                                             0,
                                         stockQuantity: stock,
-                                        vendorId:
-                                            selectedVendorId!, // Force unwrap only after check
+                                        vendorId: selectedVendorId!,
                                         images: selectedImagesBase64,
                                         dateAdded: DateTime.now(),
                                         deliveryLocation:
@@ -762,6 +819,35 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
             ),
         ],
       ),
+    );
+  }
+
+  Widget _buildReadOnlyRow(
+    String label,
+    String value,
+    Color valueColor, {
+    bool isBold = false,
+  }) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.grey.shade700,
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            color: valueColor,
+            fontSize: 14,
+            fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
+          ),
+        ),
+      ],
     );
   }
 

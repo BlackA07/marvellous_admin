@@ -20,52 +20,66 @@ class PackagesHomeScreen extends StatefulWidget {
 
 class _PackagesHomeScreenState extends State<PackagesHomeScreen> {
   final ProductsController controller = Get.put(ProductsController());
-  final ScrollController _scrollController = ScrollController();
+
+  // Scrolling Controllers
+  final ScrollController _verticalTableController = ScrollController();
+  final ScrollController _horizontalTableController = ScrollController();
+
+  // Sorting State
+  int _sortColumnIndex = 0;
+  bool _isAscending = true;
 
   @override
   void dispose() {
-    _scrollController.dispose();
+    _verticalTableController.dispose();
+    _horizontalTableController.dispose();
     super.dispose();
   }
 
-  // Delete Logic with Undo
+  // --- SORTING LOGIC ---
+  void _onSort<T>(
+    Comparable<T> Function(ProductModel p) getField,
+    int columnIndex,
+  ) {
+    setState(() {
+      if (_sortColumnIndex == columnIndex) {
+        _isAscending = !_isAscending;
+      } else {
+        _sortColumnIndex = columnIndex;
+        _isAscending = true;
+      }
+    });
+  }
+
+  // --- DELETE LOGIC ---
   void _deletePackage(ProductModel pkg) {
     Get.defaultDialog(
       title: "Delete Package?",
       titleStyle: GoogleFonts.comicNeue(
         fontWeight: FontWeight.bold,
-        color: const Color.fromARGB(221, 255, 0, 0),
-      ), // Dialog text dark for white bg
+        color: Colors.redAccent,
+      ),
       middleText: "Are you sure you want to delete ${pkg.name}?",
       textConfirm: "Delete",
       textCancel: "Cancel",
       confirmTextColor: Colors.white,
-      buttonColor: Colors.redAccent,
-      backgroundColor: const Color.fromARGB(255, 0, 0, 0),
+      buttonColor: Colors.red,
       onConfirm: () {
-        // 1. Close Dialog immediately
         Get.back();
-
-        // 2. Perform Delete (Pass isPackage: true)
         controller.deleteProduct(pkg.id!, isPackage: true);
-
-        // 3. Show Undo Snackbar
         Get.snackbar(
-          "Processing Delete",
-          "${pkg.name} is being removed...",
+          "Deleted",
+          "${pkg.name} removed.",
+          backgroundColor: Colors.black87,
+          colorText: Colors.white,
+          snackPosition: SnackPosition.TOP,
           mainButton: TextButton(
             onPressed: () {
-              // UNDO LOGIC
               controller.addNewProduct(pkg);
-              Get.back(); // Close Snackbar
+              Get.back();
             },
             child: const Text("UNDO", style: TextStyle(color: Colors.yellow)),
           ),
-          backgroundColor: Colors.black87,
-          colorText: Colors.white,
-          duration: const Duration(seconds: 3),
-          snackPosition: SnackPosition.TOP, // Show at Top
-          margin: const EdgeInsets.all(20),
         );
       },
     );
@@ -73,354 +87,326 @@ class _PackagesHomeScreenState extends State<PackagesHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // RESTORED DARK THEME COLORS
-    // This was likely transparent before to show gradient behind, or a specific dark color.
-    // Assuming transparent to match Dashboard gradient or fallback to dark.
-    const Color bgColor = Color.fromARGB(0, 228, 224, 224);
-    const Color cardColor = Color.fromARGB(
-      255,
-      199,
-      193,
-      191,
-    ); // Dark Card Color
-    const Color textColor = Color.fromARGB(255, 0, 0, 0);
-    const Color accentColor = Color.fromARGB(
-      255,
-      83,
-      157,
-      207,
-    ); // Original Accent
+    const Color bgColor = Color(0xFFF5F7FA);
+    const Color cardColor = Colors.white;
+    const Color textColor = Colors.black87;
+    const Color headerColor = Color(0xFFE0E0E0);
+    const Color accentColor = Colors.deepPurple;
 
     return Scaffold(
       backgroundColor: bgColor,
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => Get.to(() => const AddPackageScreen()),
         backgroundColor: accentColor,
-        icon: const Icon(Icons.inventory_2, color: Colors.white),
+        icon: const Icon(Icons.add, color: Colors.white),
         label: Text(
-          "Create Package",
-          style: GoogleFonts.comicNeue(
+          "New Package",
+          style: GoogleFonts.orbitron(
             color: Colors.white,
             fontWeight: FontWeight.bold,
           ),
         ),
       ),
-      // REFRESH INDICATOR
       body: RefreshIndicator(
-        color: accentColor,
-        backgroundColor: cardColor,
         onRefresh: () async {
           controller.fetchProducts();
-          await Future.delayed(const Duration(seconds: 1));
         },
         child: Obx(() {
           if (controller.isLoading.value) {
-            return const Center(
-              child: CircularProgressIndicator(color: accentColor),
-            );
+            return const Center(child: CircularProgressIndicator());
           }
 
-          final packages = controller.packagesOnly;
+          // 1. Prepare List
+          List<ProductModel> packages = List.from(controller.packagesOnly);
 
-          // Calculate Stats
+          // 2. Apply Sorting
+          packages.sort((a, b) {
+            int result = 0;
+            switch (_sortColumnIndex) {
+              case 0:
+                result = a.name.compareTo(b.name);
+                break;
+              case 1:
+                result = a.includedItemIds.length.compareTo(
+                  b.includedItemIds.length,
+                );
+                break;
+              case 2:
+                result = a.productPoints.compareTo(b.productPoints);
+                break;
+              case 3:
+                result = a.salePrice.compareTo(b.salePrice);
+                break;
+              case 4:
+                result = a.deliveryLocation.compareTo(b.deliveryLocation);
+                break;
+            }
+            return _isAscending ? result : -result;
+          });
+
+          // Stats
           double totalValue = packages.fold(0, (sum, p) => sum + p.salePrice);
-          int totalPackages = packages.length;
+          int totalItems = packages.length;
 
-          return Scrollbar(
-            controller: _scrollController,
-            thumbVisibility: true,
-            trackVisibility: true,
-            thickness: 8,
-            radius: const Radius.circular(10),
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              controller: _scrollController,
-              padding: const EdgeInsets.all(13),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // STATS AREA
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      bool isMobile = constraints.maxWidth < 800;
-                      return isMobile
-                          ? Column(
-                              children: [
-                                _buildStatCard(
-                                  "Total Packages",
-                                  "$totalPackages",
-                                  Icons.inventory_2,
-                                  Colors.cyanAccent,
-                                  cardColor,
-                                ), // Cyan for dark theme
-                                const SizedBox(height: 10),
-                                _buildStatCard(
-                                  "Inventory Value",
-                                  "PKR ${totalValue.toStringAsFixed(0)}",
-                                  Icons.attach_money,
-                                  Colors
-                                      .greenAccent, // GreenAccent for dark theme
-                                  cardColor,
-                                ),
-                              ],
-                            )
-                          : Row(
-                              children: [
-                                Expanded(
-                                  child: _buildStatCard(
-                                    "Total Packages",
-                                    "$totalPackages",
-                                    Icons.inventory_2,
-                                    Colors.cyanAccent,
-                                    cardColor,
-                                  ),
-                                ),
-                                const SizedBox(width: 20),
-                                Expanded(
-                                  child: _buildStatCard(
-                                    "Inventory Value",
-                                    "PKR ${totalValue.toStringAsFixed(0)}",
-                                    Icons.attach_money,
-                                    Colors.greenAccent,
-                                    cardColor,
-                                  ),
-                                ),
-                              ],
-                            );
-                    },
-                  ),
-
-                  const SizedBox(height: 30),
-
-                  Text(
-                    "Active Packages",
-                    style: GoogleFonts.comicNeue(
-                      color: textColor,
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(15),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // --- STATS HEADER ---
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildStatCard(
+                        "Total Packages",
+                        "$totalItems",
+                        Icons.inventory_2,
+                        Colors.blue,
+                        cardColor,
+                      ),
                     ),
-                  ),
-                  const Divider(color: Colors.white10),
+                    const SizedBox(width: 15),
+                    Expanded(
+                      child: _buildStatCard(
+                        "Total Value",
+                        "PKR ${totalValue.toInt()}",
+                        Icons.attach_money,
+                        Colors.green,
+                        cardColor,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
 
-                  if (packages.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.all(40),
-                      child: Center(
-                        child: Column(
-                          children: [
-                            Icon(Icons.inbox, size: 50, color: Colors.white24),
-                            const SizedBox(height: 10),
-                            Text(
-                              "No Packages Found",
-                              style: TextStyle(
-                                color: Colors.white54,
-                                fontSize: 16,
-                              ),
-                            ),
-                          ],
-                        ),
+                // --- TABLE CONTAINER ---
+                Container(
+                  width: double.infinity, // Ensures full width
+                  decoration: BoxDecoration(
+                    color: cardColor,
+                    borderRadius: BorderRadius.circular(10),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
                       ),
-                    )
-                  else
-                    Container(
-                      decoration: BoxDecoration(
-                        color: cardColor, // Dark bg for table container
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.2),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      padding: const EdgeInsets.all(10),
-                      child: SizedBox(
-                        height: 650,
+                    ],
+                  ),
+                  padding: const EdgeInsets.all(5),
+                  child: Theme(
+                    data: Theme.of(context).copyWith(
+                      dividerColor: Colors.grey.shade200,
+                      iconTheme: const IconThemeData(color: Colors.black54),
+                    ),
+                    child: SizedBox(
+                      height: 750, // Fixed height for scrolling area
+                      child: Scrollbar(
+                        controller: _verticalTableController,
+                        thumbVisibility: true,
+                        thickness: 8,
+                        radius: const Radius.circular(8),
                         child: SingleChildScrollView(
+                          controller: _verticalTableController,
                           scrollDirection: Axis.vertical,
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: DataTable(
-                              headingRowColor: MaterialStateProperty.all(
-                                Colors.white10,
-                              ), // Dark header
-                              dataRowHeight: 70,
-                              columnSpacing: 30,
-                              columns: const [
-                                DataColumn(
-                                  label: Text(
-                                    "Name",
-                                    style: TextStyle(
-                                      color: Color.fromARGB(
-                                        255,
-                                        0,
-                                        0,
-                                        0,
-                                      ), // White Header Text
-                                      fontWeight: FontWeight.bold,
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              return Scrollbar(
+                                controller: _horizontalTableController,
+                                thumbVisibility: true,
+                                trackVisibility: true,
+                                child: SingleChildScrollView(
+                                  controller: _horizontalTableController,
+                                  scrollDirection: Axis.horizontal,
+                                  child: ConstrainedBox(
+                                    constraints: BoxConstraints(
+                                      // Ensure table takes at least full width of container
+                                      minWidth: constraints.maxWidth,
                                     ),
-                                  ),
-                                ),
-                                DataColumn(
-                                  label: Text(
-                                    "Items",
-                                    style: TextStyle(
-                                      color: Color.fromARGB(255, 0, 0, 0),
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                DataColumn(
-                                  label: Text(
-                                    "Price",
-                                    style: TextStyle(
-                                      color: Color.fromARGB(255, 0, 0, 0),
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                DataColumn(
-                                  label: Text(
-                                    "Actions",
-                                    style: TextStyle(
-                                      color: Color.fromARGB(255, 0, 0, 0),
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                              rows: packages.map((pkg) {
-                                return DataRow(
-                                  cells: [
-                                    // Name & Image
-                                    DataCell(
-                                      Row(
-                                        children: [
-                                          Container(
-                                            width: 40,
-                                            height: 40,
-                                            decoration: BoxDecoration(
-                                              color: Colors
-                                                  .grey[800], // Dark placeholder
-                                              borderRadius:
-                                                  BorderRadius.circular(8),
-                                              image: pkg.images.isNotEmpty
-                                                  ? DecorationImage(
-                                                      image: MemoryImage(
-                                                        base64Decode(
-                                                          pkg.images.first,
-                                                        ),
+                                    child: DataTable(
+                                      sortColumnIndex: _sortColumnIndex,
+                                      sortAscending: _isAscending,
+                                      headingRowColor:
+                                          MaterialStateProperty.all(
+                                            headerColor,
+                                          ),
+                                      dataRowHeight: 60,
+                                      columnSpacing: 25,
+                                      // Using Expanded/Flexible inside cells helps distribute space but DataTable is rigid.
+                                      // minWidth constraint above forces it to stretch if content is small.
+                                      columns: [
+                                        DataColumn(
+                                          label: _headerText("Name"),
+                                          onSort: (idx, _) =>
+                                              _onSort((p) => p.name, idx),
+                                        ),
+                                        DataColumn(
+                                          label: _headerText("Items"),
+                                          numeric: true,
+                                          onSort: (idx, _) => _onSort(
+                                            (p) => p.includedItemIds.length,
+                                            idx,
+                                          ),
+                                        ),
+                                        DataColumn(
+                                          label: _headerText("Points"),
+                                          numeric: true,
+                                          onSort: (idx, _) => _onSort(
+                                            (p) => p.productPoints,
+                                            idx,
+                                          ),
+                                        ),
+                                        DataColumn(
+                                          label: _headerText("Price"),
+                                          numeric: true,
+                                          onSort: (idx, _) =>
+                                              _onSort((p) => p.salePrice, idx),
+                                        ),
+                                        DataColumn(
+                                          label: _headerText("Location"),
+                                          onSort: (idx, _) => _onSort(
+                                            (p) => p.deliveryLocation,
+                                            idx,
+                                          ),
+                                        ),
+                                        DataColumn(
+                                          label: _headerText("Actions"),
+                                        ),
+                                      ],
+                                      rows: packages.map((pkg) {
+                                        return DataRow(
+                                          cells: [
+                                            DataCell(
+                                              Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Container(
+                                                    width: 35,
+                                                    height: 35,
+                                                    decoration: BoxDecoration(
+                                                      color:
+                                                          Colors.grey.shade200,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            6,
+                                                          ),
+                                                      image:
+                                                          pkg.images.isNotEmpty
+                                                          ? DecorationImage(
+                                                              image: MemoryImage(
+                                                                base64Decode(
+                                                                  pkg
+                                                                      .images
+                                                                      .first,
+                                                                ),
+                                                              ),
+                                                              fit: BoxFit.cover,
+                                                            )
+                                                          : null,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 10),
+                                                  // Name takes remaining space if table stretches
+                                                  Container(
+                                                    constraints:
+                                                        const BoxConstraints(
+                                                          maxWidth: 200,
+                                                        ), // Limit width to prevent overflow
+                                                    child: Text(
+                                                      pkg.name,
+                                                      style: const TextStyle(
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        color: textColor,
                                                       ),
-                                                      fit: BoxFit.cover,
-                                                    )
-                                                  : null,
-                                            ),
-                                            child: pkg.images.isEmpty
-                                                ? const Icon(
-                                                    Icons.inventory_2,
-                                                    color: Colors.white54,
-                                                  )
-                                                : null,
-                                          ),
-                                          const SizedBox(width: 10),
-                                          SizedBox(
-                                            width: 180,
-                                            child: Text(
-                                              pkg.name,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.w600,
-                                                color: Colors.white,
-                                              ), // White Text
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    // Items Count
-                                    DataCell(
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 4,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Colors.purple.withOpacity(0.3),
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                        ),
-                                        child: Text(
-                                          "${pkg.includedItemIds.length} Items",
-                                          style: const TextStyle(
-                                            color: Colors
-                                                .purpleAccent, // Light Purple
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    // Price
-                                    DataCell(
-                                      Text(
-                                        "PKR ${pkg.salePrice}",
-                                        style: GoogleFonts.comicNeue(
-                                          color: Colors
-                                              .greenAccent, // Green Accent
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16,
-                                        ),
-                                      ),
-                                    ),
-                                    // Actions
-                                    DataCell(
-                                      Row(
-                                        children: [
-                                          IconButton(
-                                            icon: const Icon(
-                                              Icons.visibility,
-                                              color: Colors.blueAccent,
-                                            ),
-                                            onPressed: () => Get.to(
-                                              () => PackageDetailScreen(
-                                                package: pkg,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
                                             ),
-                                          ),
-                                          IconButton(
-                                            icon: const Icon(
-                                              Icons.edit,
-                                              color: Colors.orangeAccent,
-                                            ),
-                                            onPressed: () => Get.to(
-                                              () => AddPackageScreen(
-                                                packageToEdit: pkg,
+                                            DataCell(
+                                              Text(
+                                                "${pkg.includedItemIds.length}",
+                                                style: const TextStyle(
+                                                  color: textColor,
+                                                ),
                                               ),
                                             ),
-                                          ),
-                                          IconButton(
-                                            icon: const Icon(
-                                              Icons.delete,
-                                              color: Colors.redAccent,
+                                            DataCell(
+                                              Text(
+                                                pkg.productPoints
+                                                    .toStringAsFixed(1),
+                                                style: const TextStyle(
+                                                  color: textColor,
+                                                ),
+                                              ),
                                             ),
-                                            onPressed: () =>
-                                                _deletePackage(pkg),
-                                          ),
-                                        ],
-                                      ),
+                                            DataCell(
+                                              Text(
+                                                "PKR ${pkg.salePrice.toInt()}",
+                                                style: GoogleFonts.comicNeue(
+                                                  color: Colors.green[700],
+                                                  fontWeight: FontWeight.w900,
+                                                  fontSize: 15,
+                                                ),
+                                              ),
+                                            ),
+                                            DataCell(
+                                              Text(
+                                                pkg.deliveryLocation,
+                                                style: const TextStyle(
+                                                  color: textColor,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ),
+                                            DataCell(
+                                              Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  _actionIcon(
+                                                    Icons.visibility,
+                                                    Colors.blue,
+                                                    () => Get.to(
+                                                      () => PackageDetailScreen(
+                                                        package: pkg,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  _actionIcon(
+                                                    Icons.edit,
+                                                    Colors.orange,
+                                                    () => Get.to(
+                                                      () => AddPackageScreen(
+                                                        packageToEdit: pkg,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  _actionIcon(
+                                                    Icons.delete,
+                                                    Colors.red,
+                                                    () => _deletePackage(pkg),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        );
+                                      }).toList(),
                                     ),
-                                  ],
-                                );
-                              }).toList(),
-                            ),
+                                  ),
+                                ),
+                              );
+                            },
                           ),
                         ),
                       ),
                     ),
-                ],
-              ),
+                  ),
+                ),
+                const SizedBox(height: 80),
+              ],
             ),
           );
         }),
@@ -428,7 +414,26 @@ class _PackagesHomeScreenState extends State<PackagesHomeScreen> {
     );
   }
 
-  // Helper Widget for Stats Card (Updated for Dark Theme)
+  Widget _headerText(String text) {
+    return Text(
+      text,
+      style: const TextStyle(
+        color: Colors.black87,
+        fontWeight: FontWeight.bold,
+      ),
+    );
+  }
+
+  Widget _actionIcon(IconData icon, Color color, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Icon(icon, color: color, size: 20),
+      ),
+    );
+  }
+
   Widget _buildStatCard(
     String title,
     String value,
@@ -437,15 +442,15 @@ class _PackagesHomeScreenState extends State<PackagesHomeScreen> {
     Color bgColor,
   ) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
         color: bgColor,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: color.withOpacity(0.1), // Subtle colored glow
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -455,34 +460,27 @@ class _PackagesHomeScreenState extends State<PackagesHomeScreen> {
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(icon, color: color, size: 20),
+            child: Icon(icon, color: color, size: 22),
           ),
-          const SizedBox(width: 15),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    value,
-                    style: GoogleFonts.comicNeue(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: const Color.fromARGB(255, 0, 0, 0),
-                    ),
-                  ), // White Text
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
                 ),
                 Text(
                   title,
-                  style: GoogleFonts.comicNeue(
-                    color: const Color.fromARGB(137, 0, 0, 0),
-                    fontSize: 14,
-                  ),
-                ), // Greyish Text
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
               ],
             ),
           ),
