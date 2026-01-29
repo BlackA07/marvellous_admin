@@ -10,26 +10,24 @@ class ProductModel {
   String brand;
   double purchasePrice;
   double salePrice;
-  double originalPrice; // Optional: 0.0 means hidden
+  double originalPrice;
   int stockQuantity;
+  int stockOut; // New field, default 0
   String vendorId;
   List<String> images;
   String? video;
   DateTime dateAdded;
 
-  // --- Existing Extra Fields ---
   String deliveryLocation;
   String warranty;
   double productPoints;
 
-  // --- NEW FIELDS FOR PACKAGES & SETTINGS ---
   bool isPackage;
   List<String> includedItemIds;
   bool showDecimalPoints;
 
-  // --- NEW FIELDS FOR MOBILE SPECS ---
-  String? ram; // e.g. "8GB"
-  String? storage; // e.g. "128GB"
+  String? ram;
+  String? storage;
 
   ProductModel({
     this.id,
@@ -43,6 +41,7 @@ class ProductModel {
     required this.salePrice,
     required this.originalPrice,
     required this.stockQuantity,
+    this.stockOut = 0,
     required this.vendorId,
     required this.images,
     this.video,
@@ -53,7 +52,6 @@ class ProductModel {
     this.isPackage = false,
     this.includedItemIds = const [],
     this.showDecimalPoints = true,
-    // New Params
     this.ram,
     this.storage,
   });
@@ -70,6 +68,7 @@ class ProductModel {
       'salePrice': salePrice,
       'originalPrice': originalPrice,
       'stockQuantity': stockQuantity,
+      'stockOut': stockOut,
       'vendorId': vendorId,
       'images': images,
       'video': video,
@@ -80,7 +79,6 @@ class ProductModel {
       'isPackage': isPackage,
       'includedItemIds': includedItemIds,
       'showDecimalPoints': showDecimalPoints,
-      // New Fields
       'ram': ram,
       'storage': storage,
     };
@@ -99,6 +97,7 @@ class ProductModel {
       salePrice: (map['salePrice'] ?? 0).toDouble(),
       originalPrice: (map['originalPrice'] ?? 0).toDouble(),
       stockQuantity: map['stockQuantity'] ?? 0,
+      stockOut: map['stockOut'] ?? 0,
       vendorId: map['vendorId'] ?? '',
       images: List<String>.from(map['images'] ?? []),
       video: map['video'],
@@ -109,7 +108,6 @@ class ProductModel {
       isPackage: map['isPackage'] ?? false,
       includedItemIds: List<String>.from(map['includedItemIds'] ?? []),
       showDecimalPoints: map['showDecimalPoints'] ?? true,
-      // New Fields Extraction
       ram: map['ram'],
       storage: map['storage'],
     );

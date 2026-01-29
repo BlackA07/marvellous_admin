@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:intl/intl.dart';
+import 'package:marvellous_admin/features/layout/presentation/screens/main_layout_screen.dart';
 
 // Controllers & Models
 import '../../../../features/categories/controllers/category_controller.dart';
@@ -19,6 +20,9 @@ import '../widgets/add_product_media.dart';
 import '../widgets/add_product_info.dart';
 import '../widgets/add_product_logistics.dart';
 import '../widgets/add_product_pricing.dart';
+
+// SCREEN IMPORT
+import 'products_home_screen.dart';
 
 class AddProductScreen extends StatefulWidget {
   final ProductModel? productToEdit;
@@ -37,7 +41,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final _formKey = GlobalKey<FormState>();
   final ImagePicker _picker = ImagePicker();
 
-  String _currentName = ""; // Fixed: Variable defined
+  String _currentName = "";
 
   // Controllers
   final TextEditingController nameCtrl = TextEditingController();
@@ -64,7 +68,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
   // Colors
   final Color bgColor = const Color(0xFFF5F7FA);
   final Color cardColor = Colors.white;
-  final Color textColor = Colors.black; // FIXED: Black text
+  final Color textColor = Colors.black;
   final Color accentColor = Colors.deepPurple;
 
   @override
@@ -80,6 +84,23 @@ class _AddProductScreenState extends State<AddProductScreen> {
       _currentName = nameCtrl.text;
       _checkIfMobile(nameCtrl.text);
     });
+  }
+
+  // --- FIX: ADD DISPOSE TO PREVENT LISTENER ERRORS ---
+  @override
+  void dispose() {
+    nameCtrl.dispose();
+    modelCtrl.dispose();
+    descCtrl.dispose();
+    brandCtrl.dispose();
+    ramCtrl.dispose();
+    storageCtrl.dispose();
+    purchaseCtrl.dispose();
+    saleCtrl.dispose();
+    originalCtrl.dispose();
+    warrantyCtrl.dispose();
+    _scrollController.dispose();
+    super.dispose();
   }
 
   void _checkIfMobile(String val) {
@@ -118,24 +139,21 @@ class _AddProductScreenState extends State<AddProductScreen> {
     calculatedPoints = product.productPoints;
   }
 
-  // --- FIXED IMAGE PICKER (Resolves _namespace error) ---
+  // --- IMAGE PICKER ---
   Future<void> _handleImagePicker() async {
     if (selectedImagesBase64.length >= 3) {
       Get.snackbar("Limit Reached", "Max 3 images allowed.");
       return;
     }
 
-    // Check if Web strictly first to avoid dart:io errors
     if (kIsWeb) {
       _pickImages(ImageSource.gallery);
       return;
     }
 
-    // Now safe to check Platform for Desktop
     if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
       _pickImages(ImageSource.gallery);
     } else {
-      // Mobile
       showModalBottomSheet(
         context: context,
         backgroundColor: Colors.white,
@@ -172,7 +190,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
   Future<void> _pickImages(ImageSource source) async {
     try {
       final List<XFile> pickedFiles;
-      // Multi pick only for gallery
       if (source == ImageSource.gallery) {
         pickedFiles = await _picker.pickMultiImage();
       } else {
@@ -185,14 +202,12 @@ class _AddProductScreenState extends State<AddProductScreen> {
       for (var file in pickedFiles) {
         if (selectedImagesBase64.length >= 3) break;
 
-        // Skip Crop on Web to avoid CORS/Path issues, or if user prefers speed
         if (kIsWeb) {
           final bytes = await file.readAsBytes();
           setState(() => selectedImagesBase64.add(base64Encode(bytes)));
           continue;
         }
 
-        // Mobile/Desktop Crop
         CroppedFile? croppedFile = await ImageCropper().cropImage(
           sourcePath: file.path,
           uiSettings: [
@@ -255,6 +270,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
         return;
       }
 
+      productController.isLoading.value = true; // Manual loading start
+
       ProductModel newProduct = ProductModel(
         id: widget.productToEdit?.id,
         name: nameCtrl.text,
@@ -284,6 +301,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
       } else {
         success = await productController.updateProduct(newProduct);
       }
+
+      productController.isLoading.value = false; // Manual loading end
 
       if (success) {
         setState(() => _isSuccess = true);
@@ -395,9 +414,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
                           saleCtrl: saleCtrl,
                           originalCtrl: originalCtrl,
                           warrantyCtrl: warrantyCtrl,
-                          calculatedPoints: calculatedPoints,
-                          showDecimals:
-                              productController.globalShowDecimals.value,
                           cardColor: cardColor,
                           textColor: textColor,
                           accentColor: accentColor,
@@ -500,10 +516,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 ),
               const SizedBox(height: 10),
 
+              // GO TO DASHBOARD
               OutlinedButton.icon(
                 onPressed: () {
-                  // FIX: Go to Dashboard (Root)
-                  Get.until((route) => route.isFirst);
+                  Get.offAll(() => MainLayoutScreen());
                 },
                 icon: const Icon(Icons.dashboard, color: Colors.blue),
                 label: const Text(
@@ -516,10 +532,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
               ),
               const SizedBox(height: 10),
 
+              // ALL PRODUCTS
               OutlinedButton.icon(
                 onPressed: () {
-                  // FIX: Close Overlay AND Screen -> Back to All Products
-                  Get.close(2);
+                  Get.off(() => const ProductsHomeScreen());
                 },
                 icon: const Icon(Icons.list, color: Colors.black),
                 label: const Text(

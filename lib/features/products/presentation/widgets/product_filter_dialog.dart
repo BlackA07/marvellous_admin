@@ -6,181 +6,161 @@ import '../../controller/products_controller.dart';
 class ProductFilterDialog extends StatelessWidget {
   final ProductsController controller = Get.find();
 
-  // Local variable for Stock (since we are mimicking it for now)
-  final RxString _localStockFilter = "All Stock".obs;
-
   ProductFilterDialog({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    final isSmall = MediaQuery.of(context).size.width < 600;
+
+    final RxString localCategory = controller.selectedCategory.value.obs;
+    final RxString localSubCategory = 'All'.obs;
+
     return Dialog(
       backgroundColor: const Color(0xFF2A2D3E),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: const BorderSide(color: Colors.white10),
-      ),
-      child: Container(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
         padding: const EdgeInsets.all(20),
-        width: 400,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  "Filter Products",
-                  style: GoogleFonts.orbitron(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                IconButton(
-                  onPressed: () => Get.back(),
-                  icon: const Icon(Icons.close, color: Colors.white54),
-                ),
-              ],
-            ),
-            const Divider(color: Colors.white24, height: 30),
+        child: Obx(() {
+          final subCategories = {
+            'All',
+            ...controller.productList
+                .where(
+                  (p) =>
+                      localCategory.value == 'All' ||
+                      p.category == localCategory.value,
+                )
+                .map((p) => p.subCategory)
+                .where((e) => e.isNotEmpty),
+          }.toList();
 
-            // Section 1: By Category
-            Text(
-              "By Category",
-              style: GoogleFonts.comicNeue(
-                color: Colors.cyanAccent,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 15),
-
-            // Categories Chips
-            Obx(() {
-              return Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: controller.availableCategories.map((cat) {
-                  // Real-time check
-                  bool isSelected = controller.selectedCategory.value == cat;
-                  return ChoiceChip(
-                    label: Text(cat),
-                    labelStyle: TextStyle(
-                      color: isSelected ? Colors.black : Colors.white70,
-                      fontWeight: FontWeight.bold,
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    "Filter Products",
+                    style: GoogleFonts.orbitron(
+                      color: Colors.white,
+                      fontSize: 20,
                     ),
-                    selected: isSelected,
-                    selectedColor: Colors.cyanAccent,
-                    backgroundColor: Colors.white.withOpacity(0.05),
-                    onSelected: (bool selected) {
-                      // INSTANT UPDATE LOGIC:
-                      // Yahan select karte hi controller update hoga aur background men list change ho jayegi
-                      controller.updateCategoryFilter(selected ? cat : 'All');
+                  ),
+                  IconButton(
+                    onPressed: () => Get.back(),
+                    icon: const Icon(Icons.close, color: Colors.white54),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 20),
+
+              Text(
+                "Category",
+                style: GoogleFonts.comicNeue(
+                  color: Colors.cyanAccent,
+                  fontSize: 18,
+                ),
+              ),
+
+              const SizedBox(height: 10),
+
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: controller.availableCategories.map((cat) {
+                  final selected = localCategory.value == cat;
+                  return ChoiceChip(
+                    label: Text(
+                      cat,
+                      style: TextStyle(fontSize: isSmall ? 12 : 14),
+                    ),
+                    selected: selected,
+                    selectedColor: Colors.orangeAccent,
+                    onSelected: (_) {
+                      localCategory.value = cat;
+                      localSubCategory.value = 'All';
                     },
                   );
                 }).toList(),
-              );
-            }),
-
-            const SizedBox(height: 25),
-
-            // Section 2: Stock Status
-            Text(
-              "Stock Status",
-              style: GoogleFonts.comicNeue(
-                color: Colors.cyanAccent,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
               ),
-            ),
-            const SizedBox(height: 15),
 
-            // Stock Status Chips
-            Obx(() {
-              return Wrap(
-                spacing: 10,
-                children: [
-                  _buildStockChip("All Stock"),
-                  _buildStockChip("Low Stock (<10)"),
-                  _buildStockChip("Out of Stock"),
-                ],
-              );
-            }),
+              const SizedBox(height: 20),
 
-            const SizedBox(height: 30),
+              Text(
+                "Sub Category",
+                style: GoogleFonts.comicNeue(
+                  color: Colors.cyanAccent,
+                  fontSize: 18,
+                ),
+              ),
 
-            // Action Buttons
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () {
-                      // Clear logic
-                      controller.clearAllFilters();
-                      _localStockFilter.value = "All Stock";
-                      Get.back();
+              const SizedBox(height: 10),
+
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: subCategories.map((sub) {
+                  final selected = localSubCategory.value == sub;
+                  return ChoiceChip(
+                    label: Text(
+                      sub,
+                      style: TextStyle(fontSize: isSmall ? 12 : 14),
+                    ),
+                    selected: selected,
+                    selectedColor: Colors.redAccent,
+                    onSelected: (_) {
+                      localSubCategory.value = sub;
                     },
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Colors.redAccent),
-                      padding: const EdgeInsets.symmetric(vertical: 15),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    child: const Text(
-                      "Clear Filters",
-                      style: TextStyle(
-                        color: Colors.redAccent,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 15),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => Get.back(),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.cyanAccent,
-                      padding: const EdgeInsets.symmetric(vertical: 15),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    child: const Text(
-                      "Apply / Close",
-                      style: TextStyle(
-                        color: Colors.black,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+                  );
+                }).toList(),
+              ),
 
-  Widget _buildStockChip(String label) {
-    bool isSelected = _localStockFilter.value == label;
-    return ChoiceChip(
-      label: Text(label),
-      selected: isSelected,
-      onSelected: (val) {
-        _localStockFilter.value = label;
-        // Agar controller men stock logic he to yahan call karein:
-        // controller.updateStockFilter(label);
-      },
-      selectedColor: Colors.purpleAccent,
-      backgroundColor: Colors.white.withOpacity(0.05),
-      labelStyle: TextStyle(
-        color: isSelected ? Colors.white : Colors.white70,
-        fontWeight: FontWeight.bold,
+              const SizedBox(height: 25),
+
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () {
+                        controller.clearAllFilters();
+                        localCategory.value = 'All';
+                        localSubCategory.value = 'All';
+                        Get.back();
+                      },
+                      child: const Text(
+                        "Clear Filters",
+                        style: TextStyle(color: Colors.redAccent),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 15),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        controller.updateCategoryFilter(localCategory.value);
+
+                        if (localSubCategory.value != 'All') {
+                          controller.searchQuery.value = localSubCategory.value;
+                        }
+
+                        Get.back();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.cyanAccent,
+                      ),
+                      child: const Text(
+                        "Apply / Close",
+                        style: TextStyle(color: Colors.black),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          );
+        }),
       ),
     );
   }
