@@ -14,7 +14,7 @@ class ProductStatsSection extends StatelessWidget {
     required this.isMobile,
   }) : super(key: key);
 
-  // 1. Total Inventory Value (Stock * Price) - Existing
+  // 1. Total Inventory Value (Stock * Price) - Total Value
   double get totalInventoryValue {
     return controller.productsOnly.fold(
       0,
@@ -22,7 +22,7 @@ class ProductStatsSection extends StatelessWidget {
     );
   }
 
-  // 2. Total One Unit Value (Sum of all prices - 1 qty each) - New
+  // 2. Total One Unit Value (Sum of all prices - 1 qty each) - Unit Value
   double get totalOneUnitValue {
     return controller.productsOnly.fold(
       0,
@@ -39,7 +39,7 @@ class ProductStatsSection extends StatelessWidget {
     });
   }
 
-  // 4. Products "In" Stock (Count of items with stock > 0) - New
+  // 4. Products "In" Stock (Count of items with stock > 0)
   int get productsInStockCount {
     return controller.productsOnly.where((p) => p.stockQuantity > 0).length;
   }
@@ -49,12 +49,12 @@ class ProductStatsSection extends StatelessWidget {
     const Color cardColor = Color.fromARGB(255, 231, 225, 225);
 
     // Formatted Values
-    // Products: "Total / In Stock"
+    // Products: "Total / In Stock" (No Change)
     String productStats = "${controller.totalProducts} / $productsInStockCount";
 
-    // Value: "One Unit / Total Stock"
+    // Value: "Total Stock / One Unit" (Swapped to match format)
     String valueStats =
-        "${totalOneUnitValue.toStringAsFixed(0)} / ${totalInventoryValue.toStringAsFixed(0)}";
+        "${totalInventoryValue.toStringAsFixed(0)} / ${totalOneUnitValue.toStringAsFixed(0)}";
 
     if (isDesktop) {
       return Row(
@@ -63,7 +63,7 @@ class ProductStatsSection extends StatelessWidget {
             child: _buildStatCard(
               "Total Products",
               productStats,
-              "(Total / In Stock)", // Sub-label added
+              "(Total / In Stock)",
               Icons.inventory,
               Colors.purple,
               cardColor,
@@ -74,7 +74,7 @@ class ProductStatsSection extends StatelessWidget {
             child: _buildStatCard(
               "Inventory Value (PKR)",
               valueStats,
-              "(1 Unit Sum / Total Stock)", // Sub-label added
+              "(Total Stock / 1 Unit Sum)", // Label Swapped
               Icons.attach_money,
               Colors.green,
               cardColor,
@@ -100,9 +100,7 @@ class ProductStatsSection extends StatelessWidget {
         physics: const NeverScrollableScrollPhysics(),
         crossAxisSpacing: 10,
         mainAxisSpacing: 10,
-        childAspectRatio: isMobile
-            ? 1.4
-            : 2.0, // Aspect ratio thoda adjust kiya height k liye
+        childAspectRatio: isMobile ? 1.4 : 2.0,
         children: [
           _buildStatCard(
             "Total Products",
@@ -115,7 +113,7 @@ class ProductStatsSection extends StatelessWidget {
           _buildStatCard(
             "Total Value",
             valueStats,
-            "(1 Unit / All Stock)",
+            "(Total Stock / 1 Unit)", // Label Swapped
             Icons.attach_money,
             Colors.green,
             cardColor,
@@ -136,13 +134,13 @@ class ProductStatsSection extends StatelessWidget {
   Widget _buildStatCard(
     String title,
     String value,
-    String subTitle, // New Parameter for clarity
+    String subTitle,
     IconData icon,
     Color color,
     Color bgColor,
   ) {
     return Container(
-      padding: const EdgeInsets.all(15), // Padding thodi kam ki taake fit aye
+      padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(16),
@@ -177,8 +175,7 @@ class ProductStatsSection extends StatelessWidget {
                   child: Text(
                     value,
                     style: GoogleFonts.comicNeue(
-                      fontSize:
-                          18, // Thoda size adjust kiya taake slash fit aye
+                      fontSize: 18,
                       fontWeight: FontWeight.bold,
                       color: Colors.black87,
                     ),
@@ -198,13 +195,11 @@ class ProductStatsSection extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
 
-                // Helper Subtitle (e.g. Total / Active)
+                // Helper Subtitle
                 Text(
                   subTitle,
                   style: GoogleFonts.comicNeue(
-                    color: color.withOpacity(
-                      0.8,
-                    ), // Same color as icon but lighter
+                    color: color.withOpacity(0.8),
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
                     fontStyle: FontStyle.italic,

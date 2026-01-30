@@ -12,11 +12,13 @@ class CommissionSetupScreen extends StatelessWidget {
         ? Get.find<MLMController>()
         : Get.put(MLMController());
 
-    // Theme Colors
-    const Color bgColor = Color(0xFFF5F7FA); // Soft Light Grey
-    const Color cardColor = Colors.white; // Clean White
-    const Color textColor = Colors.black87; // Soft Black
-    const Color accentColor = Colors.deepPurple;
+    // --- THEME COLORS ---
+    const Color bgColor = Color(0xFFF5F7FA);
+    const Color cardColor = Color.fromARGB(255, 187, 178, 224);
+    const Color textColor = Colors.black87;
+
+    // Dark Professional Green
+    final Color accentColor = Colors.green[800]!;
     const Color subTextColor = Colors.black54;
 
     return Scaffold(
@@ -27,7 +29,7 @@ class CommissionSetupScreen extends StatelessWidget {
           style: GoogleFonts.orbitron(
             color: textColor,
             fontWeight: FontWeight.bold,
-            fontSize: 22, // Increased font size
+            fontSize: 22,
           ),
         ),
         centerTitle: false,
@@ -35,11 +37,8 @@ class CommissionSetupScreen extends StatelessWidget {
         elevation: 0,
         iconTheme: const IconThemeData(color: textColor),
         actions: [
-          // Refresh Button
           IconButton(
             onPressed: () {
-              // Assuming your controller has a method to reload data
-              // If not, you can call init or whatever loads the levels
               controller.onInit();
               Get.snackbar(
                 "Refreshed",
@@ -58,14 +57,18 @@ class CommissionSetupScreen extends StatelessWidget {
       ),
       body: Obx(() {
         if (controller.isLoading.value && controller.commissionLevels.isEmpty) {
+          // Black Loader
           return const Center(
-            child: CircularProgressIndicator(color: accentColor),
+            child: CircularProgressIndicator(color: Colors.black),
           );
         }
 
+        final settings = controller.globalSettings.value;
+        double totalAlloc = controller.totalCommission;
+
         return RefreshIndicator(
           onRefresh: () async {
-            controller.onInit(); // Trigger refresh
+            controller.onInit();
           },
           color: accentColor,
           child: SingleChildScrollView(
@@ -78,11 +81,14 @@ class CommissionSetupScreen extends StatelessWidget {
                   width: double.infinity,
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: cardColor,
+                    color: const Color.fromARGB(255, 232, 249, 234),
                     borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: const Color.fromARGB(255, 11, 132, 0),
+                    ), // Green Border
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
+                        color: accentColor.withOpacity(0.05),
                         blurRadius: 15,
                         offset: const Offset(0, 5),
                       ),
@@ -98,7 +104,7 @@ class CommissionSetupScreen extends StatelessWidget {
                               color: accentColor.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: const Icon(
+                            child: Icon(
                               Icons.layers,
                               color: accentColor,
                               size: 28,
@@ -109,13 +115,13 @@ class CommissionSetupScreen extends StatelessWidget {
                             "Total Levels:",
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
-                              fontSize: 18, // Increased size
+                              fontSize: 18,
                               color: textColor,
                             ),
                           ),
                           const Spacer(),
                           SizedBox(
-                            width: 100, // Slightly wider for ease of use
+                            width: 100,
                             child: TextFormField(
                               controller: controller.levelCountInputController,
                               keyboardType: TextInputType.number,
@@ -123,7 +129,7 @@ class CommissionSetupScreen extends StatelessWidget {
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 18,
-                                color: Colors.black,
+                                color: Colors.black, // Explicit Black
                               ),
                               decoration: InputDecoration(
                                 isDense: true,
@@ -133,24 +139,31 @@ class CommissionSetupScreen extends StatelessWidget {
                                 ),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(10),
-                                  borderSide: BorderSide(
-                                    color: Colors.grey.shade300,
-                                  ),
                                 ),
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(10),
                                   borderSide: BorderSide(
-                                    color: Colors.grey.shade300,
+                                    color: const Color.fromARGB(
+                                      255,
+                                      189,
+                                      189,
+                                      189,
+                                    ),
                                   ),
                                 ),
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(10),
-                                  borderSide: const BorderSide(
-                                    color: accentColor,
+                                  borderSide: BorderSide(
+                                    color: const Color.fromARGB(255, 255, 0, 0),
                                   ),
                                 ),
                                 filled: true,
-                                fillColor: bgColor,
+                                fillColor: const Color.fromARGB(
+                                  255,
+                                  222,
+                                  159,
+                                  159,
+                                ),
                               ),
                               onChanged: (val) =>
                                   controller.updateTotalLevels(val),
@@ -161,6 +174,8 @@ class CommissionSetupScreen extends StatelessWidget {
                       const SizedBox(height: 20),
                       const Divider(thickness: 1, height: 1),
                       const SizedBox(height: 15),
+
+                      // Allocation Display
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -168,55 +183,243 @@ class CommissionSetupScreen extends StatelessWidget {
                             "Total Allocation:",
                             style: TextStyle(color: subTextColor, fontSize: 16),
                           ),
-                          Obx(
-                            () => Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color:
-                                    (controller.totalCommission > 100
-                                            ? Colors.red
-                                            : Colors.green)
-                                        .withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                "${controller.totalCommission.toStringAsFixed(1)}% / 100%",
-                                style: TextStyle(
-                                  fontSize: 18, // Increased size
-                                  fontWeight: FontWeight.w900,
-                                  color: controller.totalCommission > 100
-                                      ? Colors.red
-                                      : Colors.green[700],
-                                ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color:
+                                  (totalAlloc > 100 ? Colors.red : accentColor)
+                                      .withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              "${totalAlloc.toStringAsFixed(1)}% / 100%",
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                                color: totalAlloc > 100
+                                    ? Colors.red[700]
+                                    : accentColor,
                               ),
                             ),
                           ),
                         ],
                       ),
+                      // Warning Text if > 100
+                      if (totalAlloc > 100)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8.0),
+                          child: Text(
+                            "⚠ Error: Total exceeds 100%. Save Blocked.",
+                            style: TextStyle(
+                              color: Colors.red[800],
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
 
                 const SizedBox(height: 20),
 
-                // --- SECTION 2: Dynamic Levels List ---
+                // --- SECTION 2: CASHBACK (Level 0) ---
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color.fromARGB(255, 231, 223, 244),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: const Color.fromARGB(255, 149, 0, 255),
+                      width: 1.5,
+                    ), // Thicker Green Border
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color.fromARGB(
+                          255,
+                          0,
+                          0,
+                          0,
+                        ).withOpacity(0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: accentColor.withOpacity(0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.monetization_on,
+                              color: accentColor,
+                              size: 22,
+                            ),
+                          ),
+                          const SizedBox(width: 15),
+                          const Text(
+                            "Cashback (Self)",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          const Spacer(),
+                          // Toggle
+                          Obx(
+                            () => Transform.scale(
+                              scale: 0.9,
+                              child: Switch(
+                                value: controller.isCashbackEnabled.value,
+                                onChanged: (val) =>
+                                    controller.toggleCashback(val),
+                                activeColor: accentColor,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 15),
+                      Row(
+                        children: [
+                          const Text(
+                            "Base Percent:",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          const Spacer(),
+                          SizedBox(
+                            width: 100,
+                            child: TextFormField(
+                              // Using Key to ensure rebuild when controller changes
+                              key: ValueKey(controller.cashbackPercent.value),
+                              initialValue: controller.cashbackPercent.value
+                                  .toString(),
+                              keyboardType: TextInputType.number,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                color: Colors.black,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              decoration: InputDecoration(
+                                suffixText: "%",
+                                suffixStyle: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black54,
+                                ),
+                                isDense: true,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 12,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: const BorderSide(
+                                    color: Color.fromARGB(255, 255, 0, 0),
+                                  ),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(color: accentColor),
+                                ),
+                                filled: true,
+                                fillColor: const Color.fromARGB(
+                                  255,
+                                  237,
+                                  140,
+                                  140,
+                                ),
+                              ),
+                              onChanged: (val) =>
+                                  controller.updateCashbackPercent(val),
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      if (settings != null) ...[
+                        const SizedBox(height: 15),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 12,
+                            horizontal: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: accentColor.withOpacity(
+                              0.05,
+                            ), // Light Green Background
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: accentColor.withOpacity(0.1),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                            children: [
+                              _buildRankPreview(
+                                "🥉 Bronze",
+                                settings.bronzeRewardPercent,
+                                controller.cashbackPercent.value,
+                                Colors.brown,
+                              ),
+                              _buildRankPreview(
+                                "🥈 Silver",
+                                settings.silverRewardPercent,
+                                controller.cashbackPercent.value,
+                                Colors.grey[800]!,
+                              ),
+                              _buildRankPreview(
+                                "🥇 Gold",
+                                settings.goldRewardPercent,
+                                controller.cashbackPercent.value,
+                                Colors.amber[900]!,
+                              ),
+                              _buildRankPreview(
+                                "💎 Diamond",
+                                settings.diamondRewardPercent,
+                                controller.cashbackPercent.value,
+                                Colors.blue[800]!,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                // --- SECTION 3: Dynamic Levels List ---
                 ListView.separated(
-                  physics:
-                      const NeverScrollableScrollPhysics(), // Scroll handled by SingleChildScrollView
+                  physics: const NeverScrollableScrollPhysics(),
                   shrinkWrap: true,
                   itemCount: controller.commissionLevels.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 15),
                   itemBuilder: (context, index) {
                     final item = controller.commissionLevels[index];
-                    final settings = controller.globalSettings.value;
                     double baseReward = item.percentage;
 
                     return Container(
                       decoration: BoxDecoration(
-                        color: cardColor,
+                        color: const Color.fromARGB(255, 231, 223, 244),
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
                           BoxShadow(
@@ -225,12 +428,13 @@ class CommissionSetupScreen extends StatelessWidget {
                             offset: const Offset(0, 4),
                           ),
                         ],
-                        border: Border.all(color: Colors.grey.shade200),
+                        border: Border.all(
+                          color: const Color.fromARGB(255, 174, 0, 255),
+                        ),
                       ),
                       padding: const EdgeInsets.all(16),
                       child: Column(
                         children: [
-                          // Main Input Row
                           Row(
                             children: [
                               Container(
@@ -243,7 +447,7 @@ class CommissionSetupScreen extends StatelessWidget {
                                 alignment: Alignment.center,
                                 child: Text(
                                   "${item.level}",
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     color: accentColor,
                                     fontWeight: FontWeight.bold,
                                     fontSize: 16,
@@ -255,7 +459,7 @@ class CommissionSetupScreen extends StatelessWidget {
                                 "Level ${item.level} Reward",
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
-                                  fontSize: 16,
+                                  fontSize: 18,
                                   color: textColor,
                                 ),
                               ),
@@ -265,16 +469,15 @@ class CommissionSetupScreen extends StatelessWidget {
                                 child: TextFormField(
                                   initialValue: item.percentage.toString(),
                                   keyboardType: TextInputType.number,
-                                  // 👇 Yahan color add kiya hai
                                   style: const TextStyle(
                                     fontSize: 16,
-                                    color: Colors.black,
+                                    color: Colors.black, // Explicit Black
+                                    fontWeight: FontWeight.bold,
                                   ),
                                   decoration: InputDecoration(
                                     suffixText: "%",
-                                    suffixStyle: TextStyle(
-                                      color:
-                                          subTextColor, // Make sure subTextColor is defined or use Colors.black54
+                                    suffixStyle: const TextStyle(
+                                      color: subTextColor,
                                       fontWeight: FontWeight.bold,
                                     ),
                                     isDense: true,
@@ -288,14 +491,31 @@ class CommissionSetupScreen extends StatelessWidget {
                                     enabledBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(8),
                                       borderSide: BorderSide(
-                                        color: Colors.grey.shade300,
+                                        color: const Color.fromARGB(
+                                          255,
+                                          224,
+                                          115,
+                                          115,
+                                        ),
                                       ),
                                     ),
                                     focusedBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(8),
-                                      borderSide: const BorderSide(
-                                        color: accentColor,
+                                      borderSide: BorderSide(
+                                        color: const Color.fromARGB(
+                                          255,
+                                          255,
+                                          0,
+                                          0,
+                                        ),
                                       ),
+                                    ),
+                                    filled: true,
+                                    fillColor: const Color.fromARGB(
+                                      255,
+                                      227,
+                                      148,
+                                      148,
                                     ),
                                   ),
                                   onChanged: (val) => controller
@@ -305,7 +525,6 @@ class CommissionSetupScreen extends StatelessWidget {
                             ],
                           ),
 
-                          // Breakdown Display
                           if (settings != null && baseReward > 0) ...[
                             const SizedBox(height: 15),
                             Container(
@@ -314,11 +533,13 @@ class CommissionSetupScreen extends StatelessWidget {
                                 horizontal: 8,
                               ),
                               decoration: BoxDecoration(
-                                color: const Color(
-                                  0xFFF9F9F9,
-                                ), // Very light grey
+                                color: accentColor.withOpacity(
+                                  0.05,
+                                ), // Consistent Green Tint
                                 borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: Colors.grey.shade300),
+                                border: Border.all(
+                                  color: accentColor.withOpacity(0.1),
+                                ),
                               ),
                               child: Row(
                                 mainAxisAlignment:
@@ -334,19 +555,19 @@ class CommissionSetupScreen extends StatelessWidget {
                                     "🥈 Silver",
                                     settings.silverRewardPercent,
                                     baseReward,
-                                    Colors.grey[700]!,
+                                    Colors.grey[800]!,
                                   ),
                                   _buildRankPreview(
                                     "🥇 Gold",
                                     settings.goldRewardPercent,
                                     baseReward,
-                                    Colors.amber[800]!,
+                                    Colors.amber[900]!,
                                   ),
                                   _buildRankPreview(
                                     "💎 Diamond",
                                     settings.diamondRewardPercent,
                                     baseReward,
-                                    Colors.blue[700]!,
+                                    Colors.blue[800]!,
                                   ),
                                 ],
                               ),
@@ -363,7 +584,7 @@ class CommissionSetupScreen extends StatelessWidget {
                 // --- SAVE BUTTON ---
                 SizedBox(
                   width: double.infinity,
-                  height: 55, // Taller button
+                  height: 60,
                   child: ElevatedButton(
                     onPressed: controller.isLoading.value
                         ? null
@@ -374,16 +595,17 @@ class CommissionSetupScreen extends StatelessWidget {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: accentColor,
                       foregroundColor: Colors.white,
-                      elevation: 4,
+                      elevation: 6,
                       shadowColor: accentColor.withOpacity(0.4),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(15),
                       ),
                     ),
                     child: controller.isLoading.value
                         ? const SizedBox(
                             height: 24,
                             width: 24,
+                            // Black Loading Indicator
                             child: CircularProgressIndicator(
                               color: Color.fromARGB(255, 0, 0, 0),
                               strokeWidth: 2.5,
@@ -392,14 +614,15 @@ class CommissionSetupScreen extends StatelessWidget {
                         : const Text(
                             "SAVE STRUCTURE",
                             style: TextStyle(
-                              fontSize: 17,
+                              fontSize: 18,
                               fontWeight: FontWeight.bold,
-                              letterSpacing: 1.0,
+                              letterSpacing: 1.2,
+                              color: Colors.white,
                             ),
                           ),
                   ),
                 ),
-                const SizedBox(height: 30), // Bottom padding
+                const SizedBox(height: 40),
               ],
             ),
           ),
@@ -414,27 +637,24 @@ class CommissionSetupScreen extends StatelessWidget {
     double baseReward,
     Color color,
   ) {
-    // Calculate actual % the user gets
-    // Formula: (Level Reward * Rank Share) / 100
     double actualPercent = (baseReward * percentShare) / 100;
-
     return Column(
       children: [
         Text(
           label,
           style: TextStyle(
-            fontSize: 12,
+            fontSize: 13,
             fontWeight: FontWeight.bold,
             color: color,
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 6),
         Text(
           "${actualPercent.toStringAsFixed(2)}%",
           style: const TextStyle(
-            fontSize: 14, // Larger font
-            fontWeight: FontWeight.w600,
-            color: Colors.black87,
+            fontSize: 16,
+            fontWeight: FontWeight.w900,
+            color: Colors.black87, // Black Text
           ),
         ),
       ],

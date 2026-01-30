@@ -43,6 +43,9 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
   List<ProductModel> _selectedProducts = [];
   double _totalCalculatedPurchasePrice = 0.0;
   double _totalCalculatedIndividualSellPrice = 0.0; // New Variable
+  double _totalCalculatedGP = 0.0; // New Variable for Summary
+  double _totalCalculatedPoints = 0.0; // New Variable for Summary
+
   String _productSearchQuery = "";
 
   bool _isSuccess = false; // Popup State
@@ -111,12 +114,24 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
   void _recalculateTotals({bool updateImages = true}) {
     double totalBuy = 0;
     double totalIndividualSell = 0;
+    double totalGP = 0;
+    double totalPts = 0;
     List<String> autoImages = [];
 
     // Calculate total and gather images from selected products
     for (var p in _selectedProducts) {
       totalBuy += p.purchasePrice;
-      totalIndividualSell += p.salePrice; // Summing individual selling prices
+      totalIndividualSell += p.salePrice;
+
+      // Live Calculation for this specific product
+      double gp = p.salePrice - p.purchasePrice;
+      double pts = productController.calculatePoints(
+        p.purchasePrice,
+        p.salePrice,
+      );
+
+      totalGP += gp;
+      totalPts += pts;
 
       if (updateImages && p.images.isNotEmpty) {
         // Avoid duplicates
@@ -129,6 +144,8 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
     setState(() {
       _totalCalculatedPurchasePrice = totalBuy;
       _totalCalculatedIndividualSellPrice = totalIndividualSell;
+      _totalCalculatedGP = totalGP;
+      _totalCalculatedPoints = totalPts;
       if (updateImages) {
         selectedImagesBase64 = autoImages;
       }
@@ -180,6 +197,8 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
       _selectedProducts.clear();
       _totalCalculatedPurchasePrice = 0.0;
       _totalCalculatedIndividualSellPrice = 0.0;
+      _totalCalculatedGP = 0.0;
+      _totalCalculatedPoints = 0.0;
     });
   }
 
@@ -282,6 +301,17 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
                                     final product = items[index];
                                     final isSelected = _selectedProducts
                                         .contains(product);
+
+                                    // Live Calculations for List Item
+                                    final double gp =
+                                        product.salePrice -
+                                        product.purchasePrice;
+                                    final double pts = productController
+                                        .calculatePoints(
+                                          product.purchasePrice,
+                                          product.salePrice,
+                                        );
+
                                     return CheckboxListTile(
                                       title: Text(
                                         product.name,
@@ -290,16 +320,45 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
                                           fontWeight: FontWeight.w600,
                                         ),
                                       ),
-                                      subtitle: Text(
-                                        "Buy: PKR ${product.purchasePrice} | Sell: PKR ${product.salePrice}",
-                                        style: TextStyle(
-                                          color: Colors.grey.shade600,
-                                          fontSize: 12,
-                                        ),
+                                      subtitle: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            "Buy: PKR ${product.purchasePrice.toInt()} | Sell: PKR ${product.salePrice.toInt()}",
+                                            style: TextStyle(
+                                              color: Colors.grey.shade600,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Row(
+                                            children: [
+                                              Text(
+                                                "GP: PKR ${gp.toInt()}",
+                                                style: TextStyle(
+                                                  color: Colors.blue.shade700,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 10),
+                                              Text(
+                                                "Pts: ${pts.toStringAsFixed(1)}",
+                                                style: TextStyle(
+                                                  color: Colors.amber.shade800,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
                                       ),
                                       value: isSelected,
                                       activeColor: accentColor,
                                       checkColor: Colors.white,
+                                      isThreeLine: true,
                                       onChanged: (val) =>
                                           _toggleProductSelection(product),
                                       secondary: Container(
@@ -331,11 +390,42 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
                         ),
                       ),
                       const SizedBox(height: 10),
-                      Text(
-                        "Selected: ${_selectedProducts.length} items",
-                        style: TextStyle(
-                          color: Colors.green.shade700,
-                          fontWeight: FontWeight.bold,
+
+                      // --- SUMMARY SECTION ---
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: cardColor,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: accentColor.withOpacity(0.2),
+                          ),
+                        ),
+                        child: Wrap(
+                          spacing: 20,
+                          runSpacing: 10,
+                          alignment: WrapAlignment.spaceBetween,
+                          children: [
+                            _summaryItem(
+                              "Selected",
+                              "${_selectedProducts.length}",
+                            ),
+                            _summaryItem(
+                              "Cost",
+                              "PKR ${_totalCalculatedPurchasePrice.toInt()}",
+                            ),
+                            _summaryItem(
+                              "Total GP",
+                              "PKR ${_totalCalculatedGP.toInt()}",
+                              valueColor: Colors.blue,
+                            ),
+                            _summaryItem(
+                              "Total Pts",
+                              _totalCalculatedPoints.toStringAsFixed(1),
+                              valueColor: Colors.amber[800],
+                            ),
+                          ],
                         ),
                       ),
 
@@ -819,6 +909,30 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
             ),
         ],
       ),
+    );
+  }
+
+  Widget _summaryItem(String label, String value, {Color? valueColor}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.grey.shade600,
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            color: valueColor ?? Colors.black87,
+            fontWeight: FontWeight.w900,
+            fontSize: 14,
+          ),
+        ),
+      ],
     );
   }
 
