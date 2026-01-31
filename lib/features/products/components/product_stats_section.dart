@@ -54,7 +54,7 @@ class ProductStatsSection extends StatelessWidget {
 
     // Value: "Total Stock / One Unit" (Swapped to match format)
     String valueStats =
-        "${totalInventoryValue.toStringAsFixed(0)} / ${totalOneUnitValue.toStringAsFixed(0)}";
+        "${totalOneUnitValue.toStringAsFixed(0)} / ${totalInventoryValue.toStringAsFixed(0)}";
 
     if (isDesktop) {
       return Row(
