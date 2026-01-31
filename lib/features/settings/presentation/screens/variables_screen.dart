@@ -14,6 +14,7 @@ class VariablesScreen extends StatefulWidget {
 class _VariablesScreenState extends State<VariablesScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = true;
+  String _loadingText = "Loading...";
 
   // --- CONTROLLERS ---
 
@@ -45,11 +46,20 @@ class _VariablesScreenState extends State<VariablesScreen> {
   final TextEditingController _cycleThreshCtrl = TextEditingController();
   final TextEditingController _cycleChargeCtrl = TextEditingController();
 
-  // Colors (High Contrast)
+  // Colors
   final Color bgColor = const Color(0xFFF5F7FA);
   final Color cardColor = Colors.white;
   final Color textColor = Colors.black;
   final Color accentColor = Colors.deepPurple;
+
+  // Real-time Split Total
+  double get _currentSplitTotal {
+    double t = double.tryParse(_taxCtrl.text) ?? 0;
+    double m = double.tryParse(_mlmDistCtrl.text) ?? 0;
+    double e = double.tryParse(_expenseCtrl.text) ?? 0;
+    double p = double.tryParse(_profitCtrl.text) ?? 0;
+    return t + m + e + p;
+  }
 
   @override
   void initState() {
@@ -58,7 +68,10 @@ class _VariablesScreenState extends State<VariablesScreen> {
   }
 
   Future<void> _fetchSettings() async {
-    setState(() => _isLoading = true); // Trigger loading UI on refresh
+    setState(() {
+      _isLoading = true;
+      _loadingText = "Fetching Settings...";
+    });
     try {
       DocumentSnapshot doc = await FirebaseFirestore.instance
           .collection('admin_settings')
@@ -114,52 +127,114 @@ class _VariablesScreenState extends State<VariablesScreen> {
     }
   }
 
+  // --- AUTOMATIC PRODUCT UPDATE LOGIC ---
+  Future<void> _recalculateAllProductPoints(
+    double newRate,
+    bool showDecimals,
+  ) async {
+    if (newRate <= 0) return;
+
+    setState(() {
+      _loadingText = "Updating All Products Points & Settings...";
+    });
+
+    try {
+      final QuerySnapshot productsSnapshot = await FirebaseFirestore.instance
+          .collection('products')
+          .get();
+
+      if (productsSnapshot.docs.isEmpty) return;
+
+      WriteBatch batch = FirebaseFirestore.instance.batch();
+      int count = 0;
+      int totalUpdated = 0;
+
+      for (var doc in productsSnapshot.docs) {
+        Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+        double purchase =
+            double.tryParse(data['purchasePrice']?.toString() ?? '0') ?? 0.0;
+        double sale =
+            double.tryParse(data['salePrice']?.toString() ?? '0') ?? 0.0;
+
+        double grossProfit = sale - purchase;
+        double newPoints = 0.0;
+
+        if (grossProfit > 0) {
+          newPoints = grossProfit / newRate;
+        }
+
+        // UPDATE BOTH: The Points Value AND The Display Flag
+        batch.update(doc.reference, {
+          'productPoints': newPoints,
+          'showDecimalPoints':
+              showDecimals, // This updates the flag in every product
+        });
+
+        count++;
+        totalUpdated++;
+
+        if (count >= 400) {
+          await batch.commit();
+          batch = FirebaseFirestore.instance.batch();
+          count = 0;
+        }
+      }
+
+      if (count > 0) {
+        await batch.commit();
+      }
+      print(
+        "Successfully updated points & decimal flag for $totalUpdated products.",
+      );
+    } catch (e) {
+      print("Error updating product points: $e");
+      Get.snackbar(
+        "Warning",
+        "Settings saved but product update failed: $e",
+        backgroundColor: Colors.orange,
+      );
+    }
+  }
+
   Future<void> _saveSettings() async {
-    // Validate triggers the 'validator' function in TextFields
     if (!_formKey.currentState!.validate()) {
       Get.snackbar(
         "Invalid Input",
-        "Please fix the errors highlighted in red.",
+        "Please fix errors.",
         backgroundColor: Colors.red,
         colorText: Colors.white,
-        snackPosition: SnackPosition.TOP,
       );
       return;
     }
 
-    // --- SECURITY CHECK: Company Split must equal 100% ---
-    double tax = double.parse(_taxCtrl.text);
-    double mlm = double.parse(_mlmDistCtrl.text);
-    double exp = double.parse(_expenseCtrl.text);
-    double prof = double.parse(_profitCtrl.text);
-
-    // Allowing small floating point error margin (0.01)
-    if ((tax + mlm + exp + prof - 100.0).abs() > 0.01) {
+    // Security Check (Split Total)
+    if ((_currentSplitTotal - 100.0).abs() > 0.01) {
       Get.defaultDialog(
-        title: "Calculation Error",
-        titleStyle: const TextStyle(color: Colors.black),
+        title: "Error",
         middleText:
-            "Company Split Total is ${(tax + mlm + exp + prof)}%.\nIt MUST be exactly 100%.",
-        middleTextStyle: const TextStyle(color: Colors.black87),
+            "Company Split must equal exactly 100%.\nCurrent Total: ${_currentSplitTotal.toStringAsFixed(1)}%",
         textConfirm: "OK",
         confirmTextColor: Colors.white,
-        buttonColor: Colors.red,
         onConfirm: () => Get.back(),
-        backgroundColor: Colors.white,
       );
       return;
     }
 
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _loadingText = "Saving Settings...";
+    });
 
     try {
+      double newProfitPerPoint = double.parse(_profitPerPointCtrl.text);
+
       MLMGlobalSettings newSettings = MLMGlobalSettings(
-        profitPerPoint: double.parse(_profitPerPointCtrl.text),
+        profitPerPoint: newProfitPerPoint,
         showDecimals: _showDecimals,
-        taxPercent: tax,
-        mlmDistributionPercent: mlm,
-        expensesPercent: exp,
-        companyProfitPercent: prof,
+        taxPercent: double.parse(_taxCtrl.text),
+        mlmDistributionPercent: double.parse(_mlmDistCtrl.text),
+        expensesPercent: double.parse(_expenseCtrl.text),
+        companyProfitPercent: double.parse(_profitCtrl.text),
         bronzeLimit: int.parse(_bronzeLimitCtrl.text),
         silverLimit: int.parse(_silverLimitCtrl.text),
         goldLimit: int.parse(_goldLimitCtrl.text),
@@ -174,13 +249,12 @@ class _VariablesScreenState extends State<VariablesScreen> {
         highEarnerDeduction: double.parse(_cycleChargeCtrl.text),
       );
 
-      // Save to NEW Document
+      // 1. Update Settings
       await FirebaseFirestore.instance
           .collection('admin_settings')
           .doc('mlm_variables')
           .set(newSettings.toMap(), SetOptions(merge: true));
 
-      // Update Legacy Config (For Product Calculation)
       await FirebaseFirestore.instance
           .collection('admin_settings')
           .doc('global_config')
@@ -189,13 +263,16 @@ class _VariablesScreenState extends State<VariablesScreen> {
             'showDecimals': newSettings.showDecimals,
           }, SetOptions(merge: true));
 
+      // 2. AUTO-UPDATE ALL PRODUCTS (Points + Decimal Flag)
+      await _recalculateAllProductPoints(newProfitPerPoint, _showDecimals);
+
       Get.snackbar(
         "Success",
-        "All MLM Variables Updated Securely!",
+        "Settings Saved & All Products Updated!",
         backgroundColor: Colors.green,
         colorText: Colors.white,
         snackPosition: SnackPosition.TOP,
-        duration: const Duration(seconds: 4),
+        duration: const Duration(seconds: 3),
       );
     } catch (e) {
       Get.snackbar(
@@ -233,7 +310,22 @@ class _VariablesScreenState extends State<VariablesScreen> {
         ],
       ),
       body: _isLoading
-          ? Center(child: CircularProgressIndicator(color: accentColor))
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(color: accentColor),
+                  const SizedBox(height: 20),
+                  Text(
+                    _loadingText,
+                    style: TextStyle(
+                      color: textColor,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            )
           : SingleChildScrollView(
               padding: const EdgeInsets.all(20),
               child: Form(
@@ -252,27 +344,47 @@ class _VariablesScreenState extends State<VariablesScreen> {
                           "Rupees per Point (PKR)",
                           _profitPerPointCtrl,
                           suffix: "PKR",
-                          isPositiveOnly: true, // Only allows positive numbers
+                          isPositiveOnly: true,
                         ),
                         const SizedBox(height: 5),
                         const Text(
-                          "Note: Changing this only affects NEW calculations (Products Display/New Earnings). Existing wallet balances remain unchanged.",
+                          "Note: Updating this will automatically recalculate points for ALL existing products.",
                           style: TextStyle(
                             fontSize: 11,
-                            color: Colors.grey,
+                            color: Colors.green,
+                            fontWeight: FontWeight.bold,
                             fontStyle: FontStyle.italic,
                           ),
                         ),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 15),
+
+                        // Decimal Toggle with Live Preview
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              "Show Decimals in Points",
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: textColor,
-                              ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "Show Decimals in Points",
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: textColor,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                // LIVE PREVIEW EXAMPLE
+                                Text(
+                                  _showDecimals
+                                      ? "Example: 123.25 Pts (2 Decimal Places)"
+                                      : "Example: 123 Pts (Rounded)",
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[600],
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              ],
                             ),
                             Switch(
                               value: _showDecimals,
@@ -290,11 +402,59 @@ class _VariablesScreenState extends State<VariablesScreen> {
                     _buildSectionHeader("2. Company Split (Gross Profit)"),
                     _buildCard(
                       children: [
-                        const Text(
-                          "Must sum to exactly 100%",
-                          style: TextStyle(fontSize: 12, color: Colors.grey),
+                        // TOTAL INDICATOR
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              "Total Allocation:",
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              "${_currentSplitTotal.toStringAsFixed(1)}% / 100%",
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: _currentSplitTotal > 100.0
+                                    ? Colors.red
+                                    : Colors.green,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 5),
+                        // PROGRESS BAR
+                        LinearProgressIndicator(
+                          value: (_currentSplitTotal / 100.0).clamp(0.0, 1.0),
+                          backgroundColor: Colors.grey[200],
+                          color: _currentSplitTotal > 100.0
+                              ? Colors.red
+                              : Colors.green,
+                          minHeight: 8,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        if (_currentSplitTotal != 100.0)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 5),
+                            child: Text(
+                              _currentSplitTotal > 100
+                                  ? "Error: Total exceeds 100%!"
+                                  : "Remaining: ${(100 - _currentSplitTotal).toStringAsFixed(1)}%",
+                              style: TextStyle(
+                                color: _currentSplitTotal > 100
+                                    ? Colors.red
+                                    : Colors.orange,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+
+                        const SizedBox(height: 20),
+
                         Row(
                           children: [
                             Expanded(
@@ -303,6 +463,8 @@ class _VariablesScreenState extends State<VariablesScreen> {
                                 _taxCtrl,
                                 suffix: "%",
                                 isPercentage: true,
+                                onChanged: (_) =>
+                                    setState(() {}), // Updates Progress Bar
                               ),
                             ),
                             const SizedBox(width: 10),
@@ -312,6 +474,8 @@ class _VariablesScreenState extends State<VariablesScreen> {
                                 _mlmDistCtrl,
                                 suffix: "%",
                                 isPercentage: true,
+                                onChanged: (_) =>
+                                    setState(() {}), // Updates Progress Bar
                               ),
                             ),
                           ],
@@ -325,6 +489,8 @@ class _VariablesScreenState extends State<VariablesScreen> {
                                 _expenseCtrl,
                                 suffix: "%",
                                 isPercentage: true,
+                                onChanged: (_) =>
+                                    setState(() {}), // Updates Progress Bar
                               ),
                             ),
                             const SizedBox(width: 10),
@@ -334,6 +500,8 @@ class _VariablesScreenState extends State<VariablesScreen> {
                                 _profitCtrl,
                                 suffix: "%",
                                 isPercentage: true,
+                                onChanged: (_) =>
+                                    setState(() {}), // Updates Progress Bar
                               ),
                             ),
                           ],
@@ -341,12 +509,11 @@ class _VariablesScreenState extends State<VariablesScreen> {
                       ],
                     ),
 
-                    // --- SECTION 3: RANK RULES (DYNAMIC UPDATES) ---
+                    // --- SECTION 3: RANK RULES ---
                     const SizedBox(height: 20),
                     _buildSectionHeader("3. Rank Thresholds & Rewards"),
                     _buildCard(
                       children: [
-                        // Bronze
                         _buildRankRow(
                           "Bronze",
                           _bronzeLimitCtrl,
@@ -354,8 +521,6 @@ class _VariablesScreenState extends State<VariablesScreen> {
                           "0 - ",
                         ),
                         const Divider(color: Colors.grey),
-
-                        // Silver (Depends on Bronze)
                         _buildRankRow(
                           "Silver",
                           _silverLimitCtrl,
@@ -363,8 +528,6 @@ class _VariablesScreenState extends State<VariablesScreen> {
                           "${(int.tryParse(_bronzeLimitCtrl.text) ?? 0) + 1} - ",
                         ),
                         const Divider(color: Colors.grey),
-
-                        // Gold (Depends on Silver)
                         _buildRankRow(
                           "Gold",
                           _goldLimitCtrl,
@@ -372,24 +535,16 @@ class _VariablesScreenState extends State<VariablesScreen> {
                           "${(int.tryParse(_silverLimitCtrl.text) ?? 0) + 1} - ",
                         ),
                         const Divider(color: Colors.grey),
-
-                        // Diamond (Depends on Gold)
                         _buildRankRow(
                           "Diamond",
                           null,
                           _diamondRewardCtrl,
                           "${(int.tryParse(_goldLimitCtrl.text) ?? 0) + 1}+ ",
                         ),
-
-                        const SizedBox(height: 10),
-                        const Text(
-                          "* Rank Start Points are Auto-Calculated based on previous limit + 1.",
-                          style: TextStyle(fontSize: 11, color: Colors.grey),
-                        ),
                       ],
                     ),
 
-                    // --- SECTION 4: FEES & RULES ---
+                    // --- SECTION 4: FEES ---
                     const SizedBox(height: 20),
                     _buildSectionHeader("4. Membership & Penalties"),
                     _buildCard(
@@ -460,10 +615,10 @@ class _VariablesScreenState extends State<VariablesScreen> {
                           elevation: 5,
                         ),
                         child: Text(
-                          "SAVE ALL SETTINGS",
+                          "SAVE ALL & UPDATE PRODUCTS",
                           style: GoogleFonts.orbitron(
                             color: Colors.white,
-                            fontSize: 18,
+                            fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -499,7 +654,7 @@ class _VariablesScreenState extends State<VariablesScreen> {
       decoration: BoxDecoration(
         color: cardColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade300), // Visible Border
+        border: Border.all(color: Colors.grey.shade300),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
@@ -579,8 +734,8 @@ class _VariablesScreenState extends State<VariablesScreen> {
     String? suffix,
     String? prefix,
     Function(String)? onChanged,
-    bool isPercentage = false, // Check 0-100
-    bool isPositiveOnly = false, // Check > 0
+    bool isPercentage = false,
+    bool isPositiveOnly = false,
   }) {
     return TextFormField(
       controller: ctrl,
@@ -589,11 +744,11 @@ class _VariablesScreenState extends State<VariablesScreen> {
       style: const TextStyle(
         fontWeight: FontWeight.bold,
         fontSize: 14,
-        color: Colors.black, // High Contrast Text
+        color: Colors.black,
       ),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(color: Colors.grey[700]), // Visible Label
+        labelStyle: TextStyle(color: Colors.grey[700]),
         prefixText: prefix,
         prefixStyle: const TextStyle(
           color: Colors.black,
@@ -606,22 +761,19 @@ class _VariablesScreenState extends State<VariablesScreen> {
         ),
         isDense: true,
         filled: true,
-        fillColor: Colors.white, // High Contrast Background
+        fillColor: Colors.white,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 10,
           vertical: 15,
         ),
-        // Normal State
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide(color: Colors.grey.shade400),
         ),
-        // Typing State
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide(color: accentColor, width: 2),
         ),
-        // Error State (Red Border)
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
           borderSide: const BorderSide(color: Colors.red, width: 1.5),
@@ -639,16 +791,13 @@ class _VariablesScreenState extends State<VariablesScreen> {
         if (val == null || val.isEmpty) return "Required";
         final n = double.tryParse(val);
         if (n == null) return "Invalid Number";
-
         if (isPercentage) {
           if (n < 0) return "Min 0%";
           if (n > 100) return "Max 100%";
         }
-
         if (isPositiveOnly) {
           if (n < 0) return "Must be > 0";
         }
-
         return null;
       },
     );
@@ -668,7 +817,7 @@ class _VariablesScreenState extends State<VariablesScreen> {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              "SECURE ZONE: Changes affect MLM Core instantly. Double check values.",
+              "SECURE ZONE: Changes automatically update all existing products.",
               style: GoogleFonts.comicNeue(
                 color: Colors.blue[900],
                 fontSize: 14,

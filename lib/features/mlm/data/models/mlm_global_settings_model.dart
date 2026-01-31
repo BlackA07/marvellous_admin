@@ -1,36 +1,39 @@
 // File: lib/features/mlm/data/models/mlm_global_settings_model.dart
 
 class MLMGlobalSettings {
-  // 1. Company Split (Total must be 100%)
+  // 1. Company Split
   double taxPercent;
   double mlmDistributionPercent;
   double expensesPercent;
   double companyProfitPercent;
 
-  // 2. Rank Thresholds (Points needed to reach rank)
-  int bronzeLimit; // e.g. 100
-  int silverLimit; // e.g. 200
-  int goldLimit; // e.g. 300
-  // Diamond is anything above goldLimit
+  // 2. Rank Thresholds
+  int bronzeLimit;
+  int silverLimit;
+  int goldLimit;
 
-  // 3. Rank Reward Percentages (What % of the level reward they get)
-  double bronzeRewardPercent; // e.g. 25%
-  double silverRewardPercent; // e.g. 50%
-  double goldRewardPercent; // e.g. 75%
-  double diamondRewardPercent; // e.g. 100%
+  // 3. Rank Rewards
+  double bronzeRewardPercent;
+  double silverRewardPercent;
+  double goldRewardPercent;
+  double diamondRewardPercent;
 
-  // 4. Fees & Rules
-  double membershipFee; // Amount in PKR
-  double unpaidMemberWithdrawalDeduction; // % to cut if fee not paid
+  // 4. Fees
+  double membershipFee;
+  double unpaidMemberWithdrawalDeduction;
 
-  // 5. Diamond/High Earner Rules
-  double diamondShoppingWalletPercent; // % cut from diamond earnings
-  double highEarnerThreshold; // e.g. 50,000
-  double highEarnerDeduction; // e.g. 5,000
+  // 5. Diamond Rules
+  double diamondShoppingWalletPercent;
+  double highEarnerThreshold;
+  double highEarnerDeduction;
 
   // 6. General
   double profitPerPoint;
   bool showDecimals;
+
+  // 7. NEW: Cashback Settings
+  double cashbackPercent; // Level 0
+  bool isCashbackEnabled;
 
   MLMGlobalSettings({
     required this.taxPercent,
@@ -51,9 +54,10 @@ class MLMGlobalSettings {
     required this.highEarnerDeduction,
     required this.profitPerPoint,
     required this.showDecimals,
+    this.cashbackPercent = 5.0, // Default
+    this.isCashbackEnabled = true, // Default
   });
 
-  // Default values incase DB is empty
   factory MLMGlobalSettings.defaults() {
     return MLMGlobalSettings(
       taxPercent: 46.0,
@@ -67,13 +71,15 @@ class MLMGlobalSettings {
       silverRewardPercent: 50.0,
       goldRewardPercent: 75.0,
       diamondRewardPercent: 100.0,
-      membershipFee: 1000.0, // Example
+      membershipFee: 1000.0,
       unpaidMemberWithdrawalDeduction: 50.0,
       diamondShoppingWalletPercent: 25.0,
       highEarnerThreshold: 50000.0,
       highEarnerDeduction: 5000.0,
       profitPerPoint: 100.0,
       showDecimals: true,
+      cashbackPercent: 5.0,
+      isCashbackEnabled: true,
     );
   }
 
@@ -97,6 +103,8 @@ class MLMGlobalSettings {
       'highEarnerDeduction': highEarnerDeduction,
       'profitPerPoint': profitPerPoint,
       'showDecimals': showDecimals,
+      'cashbackPercent': cashbackPercent,
+      'isCashbackEnabled': isCashbackEnabled,
     };
   }
 
@@ -123,6 +131,8 @@ class MLMGlobalSettings {
       highEarnerDeduction: (map['highEarnerDeduction'] ?? 5000.0).toDouble(),
       profitPerPoint: (map['profitPerPoint'] ?? 100.0).toDouble(),
       showDecimals: map['showDecimals'] ?? true,
+      cashbackPercent: (map['cashbackPercent'] ?? 5.0).toDouble(),
+      isCashbackEnabled: map['isCashbackEnabled'] ?? true,
     );
   }
 }

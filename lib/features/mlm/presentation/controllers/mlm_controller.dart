@@ -1,10 +1,8 @@
-// File: lib/features/mlm/presentation/controllers/mlm_controller.dart
-
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../data/models/mlm_models.dart';
-import '../../data/models/mlm_global_settings_model.dart'; // Import Settings Model
+import '../../data/models/mlm_global_settings_model.dart';
 import '../../data/repositories/mlm_repository.dart';
 
 class MLMController extends GetxController {
@@ -13,20 +11,25 @@ class MLMController extends GetxController {
   // Variables
   var isLoading = false.obs;
   var commissionLevels = <CommissionLevel>[].obs;
-
-  // Settings for Calculation Display
   var globalSettings = Rxn<MLMGlobalSettings>();
 
-  // --- RESTORED: Tree View Variable ---
-  var rootNode = Rxn<MLMNode>();
+  // Cashback Variables (Reactive)
+  var cashbackPercent = 5.0.obs;
+  var isCashbackEnabled = true.obs;
 
-  // Text Controller for "Total Levels" Input
+  var rootNode = Rxn<MLMNode>();
   final TextEditingController levelCountInputController =
       TextEditingController();
 
-  // Computed Property for Total %
-  double get totalCommission =>
-      commissionLevels.fold(0, (sum, item) => sum + item.percentage);
+  // Computed Property: Total % = (Cashback if enabled) + (Sum of Levels)
+  double get totalCommission {
+    double cashback = isCashbackEnabled.value ? cashbackPercent.value : 0.0;
+    double levelsTotal = commissionLevels.fold(
+      0,
+      (sum, item) => sum + item.percentage,
+    );
+    return cashback + levelsTotal;
+  }
 
   @override
   void onInit() {
@@ -43,19 +46,26 @@ class MLMController extends GetxController {
       commissionLevels.assignAll(levels);
       levelCountInputController.text = levels.length.toString();
 
-      // 2. Fetch Global Settings (For Rank Breakdown Calculation)
+      // 2. Fetch Global Settings
       var settingsDoc = await FirebaseFirestore.instance
           .collection('admin_settings')
           .doc('mlm_variables')
           .get();
 
       if (settingsDoc.exists) {
-        globalSettings.value = MLMGlobalSettings.fromMap(settingsDoc.data()!);
+        var settings = MLMGlobalSettings.fromMap(settingsDoc.data()!);
+        globalSettings.value = settings;
+
+        // Initialize Cashback inputs from Firebase Data
+        cashbackPercent.value = settings.cashbackPercent;
+        isCashbackEnabled.value = settings.isCashbackEnabled;
       } else {
-        globalSettings.value = MLMGlobalSettings.defaults();
+        var defaults = MLMGlobalSettings.defaults();
+        globalSettings.value = defaults;
+        cashbackPercent.value = defaults.cashbackPercent;
+        isCashbackEnabled.value = defaults.isCashbackEnabled;
       }
 
-      // --- RESTORED: Fetch Tree Structure ---
       var tree = await _repository.getMLMTree();
       rootNode.value = tree;
     } catch (e) {
@@ -65,11 +75,10 @@ class MLMController extends GetxController {
     }
   }
 
-  // Update Total Levels Logic
+  // Update Logic
   void updateTotalLevels(String value) {
     int? newCount = int.tryParse(value);
     if (newCount == null || newCount < 1 || newCount > 50) return;
-
     int currentCount = commissionLevels.length;
 
     if (newCount > currentCount) {
@@ -82,7 +91,6 @@ class MLMController extends GetxController {
     commissionLevels.refresh();
   }
 
-  // Update Percentage Logic
   void updateLevelPercentage(int index, String value) {
     double? val = double.tryParse(value);
     if (val != null) {
@@ -91,25 +99,65 @@ class MLMController extends GetxController {
     }
   }
 
+  void toggleCashback(bool val) {
+    isCashbackEnabled.value = val;
+  }
+
+  void updateCashbackPercent(String val) {
+    double? v = double.tryParse(val);
+    if (v != null) {
+      cashbackPercent.value = v;
+    }
+  }
+
   // Save Config
   Future<void> saveConfig() async {
-    if (totalCommission > 100) {
+    // 1. Validation Logic: Block Save if > 100%
+    if (totalCommission > 100.0) {
       Get.snackbar(
-        "Error",
-        "Total commission $totalCommission% exceeds 100%!",
-        backgroundColor: Colors.redAccent,
+        "Critical Error",
+        "Total Allocation (${totalCommission.toStringAsFixed(1)}%) exceeds 100%!\nPlease reduce percentages before saving.",
+        backgroundColor: Colors.red[800],
         colorText: Colors.white,
+        duration: const Duration(seconds: 4),
+        snackPosition: SnackPosition.TOP,
+        icon: const Icon(Icons.error, color: Colors.white),
       );
-      return;
+      return; // Stop execution
     }
 
     try {
       isLoading(true);
+
+      // 2. Save Levels
       await _repository.saveCommissions(commissionLevels);
+
+      // 3. Save Cashback Settings to MLM Variables in Firebase
+      // FIX: Manually updating the settings object before saving
+      if (globalSettings.value != null) {
+        globalSettings.value!.cashbackPercent = cashbackPercent.value;
+        globalSettings.value!.isCashbackEnabled = isCashbackEnabled.value;
+
+        await FirebaseFirestore.instance
+            .collection('admin_settings')
+            .doc('mlm_variables')
+            .set(globalSettings.value!.toMap(), SetOptions(merge: true));
+      } else {
+        // Fallback if settings are null
+        var newSettings = MLMGlobalSettings.defaults();
+        newSettings.cashbackPercent = cashbackPercent.value;
+        newSettings.isCashbackEnabled = isCashbackEnabled.value;
+
+        await FirebaseFirestore.instance
+            .collection('admin_settings')
+            .doc('mlm_variables')
+            .set(newSettings.toMap(), SetOptions(merge: true));
+      }
+
       Get.snackbar(
         "Success",
-        "Commissions structure updated successfully!",
-        backgroundColor: Colors.green,
+        "Structure Saved! Total Allocation: ${totalCommission.toStringAsFixed(1)}%",
+        backgroundColor: Colors.green[800],
         colorText: Colors.white,
       );
     } catch (e) {
