@@ -17,8 +17,13 @@ class MLMController extends GetxController {
   var cashbackPercent = 5.0.obs;
   var isCashbackEnabled = true.obs;
 
+  // New: Total Distribution Amount for calculations
+  var totalDistAmount = 0.0.obs;
+
   var rootNode = Rxn<MLMNode>();
   final TextEditingController levelCountInputController =
+      TextEditingController();
+  final TextEditingController totalDistAmountController =
       TextEditingController();
 
   // Computed Property: Total % = (Cashback if enabled) + (Sum of Levels)
@@ -91,6 +96,14 @@ class MLMController extends GetxController {
     commissionLevels.refresh();
   }
 
+  // New: Update Total Distribution Amount
+  void updateTotalDistAmount(String value) {
+    double? val = double.tryParse(value);
+    if (val != null) {
+      totalDistAmount.value = val;
+    }
+  }
+
   void updateLevelPercentage(int index, String value) {
     double? val = double.tryParse(value);
     if (val != null) {
@@ -112,7 +125,6 @@ class MLMController extends GetxController {
 
   // Save Config
   Future<void> saveConfig() async {
-    // 1. Validation Logic: Block Save if > 100%
     if (totalCommission > 100.0) {
       Get.snackbar(
         "Critical Error",
@@ -123,17 +135,13 @@ class MLMController extends GetxController {
         snackPosition: SnackPosition.TOP,
         icon: const Icon(Icons.error, color: Colors.white),
       );
-      return; // Stop execution
+      return;
     }
 
     try {
       isLoading(true);
-
-      // 2. Save Levels
       await _repository.saveCommissions(commissionLevels);
 
-      // 3. Save Cashback Settings to MLM Variables in Firebase
-      // FIX: Manually updating the settings object before saving
       if (globalSettings.value != null) {
         globalSettings.value!.cashbackPercent = cashbackPercent.value;
         globalSettings.value!.isCashbackEnabled = isCashbackEnabled.value;
@@ -143,7 +151,6 @@ class MLMController extends GetxController {
             .doc('mlm_variables')
             .set(globalSettings.value!.toMap(), SetOptions(merge: true));
       } else {
-        // Fallback if settings are null
         var newSettings = MLMGlobalSettings.defaults();
         newSettings.cashbackPercent = cashbackPercent.value;
         newSettings.isCashbackEnabled = isCashbackEnabled.value;
