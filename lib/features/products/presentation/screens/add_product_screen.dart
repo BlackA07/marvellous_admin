@@ -86,7 +86,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
     });
   }
 
-  // --- FIX: ADD DISPOSE TO PREVENT LISTENER ERRORS ---
   @override
   void dispose() {
     nameCtrl.dispose();
@@ -270,7 +269,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
         return;
       }
 
-      productController.isLoading.value = true; // Manual loading start
+      productController.isLoading.value = true;
 
       ProductModel newProduct = ProductModel(
         id: widget.productToEdit?.id,
@@ -302,7 +301,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
         success = await productController.updateProduct(newProduct);
       }
 
-      productController.isLoading.value = false; // Manual loading end
+      productController.isLoading.value = false;
 
       if (success) {
         setState(() => _isSuccess = true);

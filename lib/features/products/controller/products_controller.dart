@@ -62,9 +62,6 @@ class ProductsController extends GetxController {
   double calculatePoints(double purchase, double sale) {
     if (purchase >= sale) return 0;
 
-    // Ensure we have latest settings just in case (optional, but safer)
-    // fetchGlobalSettings();
-
     double profit = sale - purchase;
     return (profit / profitPerPoint.value);
   }
@@ -79,33 +76,34 @@ class ProductsController extends GetxController {
       await fetchGlobalSettings();
 
       // 2. Apply current settings to the new product
-      // Note: Points are typically calculated in UI before passing here,
-      // but we ensure the 'showDecimalPoints' flag is set correctly based on global settings.
       product.showDecimalPoints = globalShowDecimals.value;
 
-      // 3. Save to DB
+      // 3. Save to DB (Repository will handle ID generation)
       await _repository.addProduct(product);
+
+      // 4. Add to local list at top
       productList.insert(0, product);
 
-      // --- NEW: Add to General History ---
+      // --- Add to History ---
       addToHistory(product.name);
       addToHistory(product.brand);
 
-      // --- NEW: Add to Specific History Lists ---
+      // --- Add to Specific History Lists ---
       addToSpecificHistory(product.name, 'product');
       addToSpecificHistory(product.brand, 'brand');
 
       Get.snackbar(
         "Success",
-        "Saved Successfully",
+        "Product saved successfully with ID: ${product.id}",
         backgroundColor: Colors.green,
         colorText: Colors.white,
       );
       return true;
     } catch (e) {
+      print("❌ Controller Error: $e");
       Get.snackbar(
         "Error",
-        "Failed: $e",
+        "Failed to add product: $e",
         backgroundColor: Colors.redAccent,
         colorText: Colors.white,
       );
@@ -119,11 +117,6 @@ class ProductsController extends GetxController {
     try {
       isLoading(true);
 
-      // When updating, we usually KEEP the product's original settings
-      // unless you specifically want to overwrite them.
-      // Here we respect the product's existing configuration or update if you prefer.
-      // For now, we update the DB normally.
-
       await _repository.updateProduct(product);
       int index = productList.indexWhere((p) => p.id == product.id);
       if (index != -1) {
@@ -134,7 +127,7 @@ class ProductsController extends GetxController {
       addToHistory(product.name);
       addToHistory(product.brand);
 
-      // --- NEW: Update Specific Lists ---
+      // --- Update Specific Lists ---
       addToSpecificHistory(product.name, 'product');
       addToSpecificHistory(product.brand, 'brand');
 
@@ -184,7 +177,7 @@ class ProductsController extends GetxController {
       var items = await _repository.fetchProducts();
       productList.assignAll(items);
 
-      // --- NEW: Populate specific history lists from existing products ---
+      // --- Populate specific history lists from existing products ---
       updateSuggestionLists();
     } catch (e) {
       Get.snackbar(
@@ -203,7 +196,7 @@ class ProductsController extends GetxController {
     searchHistoryList.assignAll(history);
   }
 
-  // --- NEW: Helper to populate autocomplete lists from existing data ---
+  // --- Helper to populate autocomplete lists from existing data ---
   void updateSuggestionLists() {
     // Extract unique brands
     var brands = productList
@@ -299,7 +292,7 @@ class ProductsController extends GetxController {
     await _repository.deleteSearchTerm(term);
   }
 
-  // --- NEW: Specific History Logic (Brand vs Name) ---
+  // --- Specific History Logic (Brand vs Name) ---
   void addToSpecificHistory(String term, String type) {
     if (term.trim().isEmpty) return;
 
@@ -307,7 +300,6 @@ class ProductsController extends GetxController {
       // Avoid duplicates
       if (!brandHistoryList.contains(term)) {
         brandHistoryList.add(term);
-        // Note: If you want this persisted separately, you'd add a repo method like addBrandTerm(term)
       }
     } else {
       if (!productNameHistoryList.contains(term)) {
@@ -319,7 +311,6 @@ class ProductsController extends GetxController {
   void removeSpecificHistoryItem(String term, String type) {
     if (type == 'brand') {
       brandHistoryList.remove(term);
-      // Optional: Delete from DB if you implement specific collections
     } else {
       productNameHistoryList.remove(term);
     }

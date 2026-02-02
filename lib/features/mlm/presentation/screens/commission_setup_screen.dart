@@ -13,7 +13,6 @@ class CommissionSetupScreen extends StatelessWidget {
         ? Get.find<MLMController>()
         : Get.put(MLMController());
 
-    // --- THEME COLORS ---
     const Color bgColor = Color(0xFFF5F7FA);
     const Color textColor = Colors.black87;
     final Color accentColor = Colors.green[800]!;
@@ -37,18 +36,10 @@ class CommissionSetupScreen extends StatelessWidget {
         actions: [
           IconButton(
             onPressed: () {
-              controller.onInit();
-              Get.snackbar(
-                "Refreshed",
-                "Commission levels reloaded",
-                snackPosition: SnackPosition.BOTTOM,
-                backgroundColor: Colors.black87,
-                colorText: const Color.fromARGB(255, 0, 0, 0),
-                margin: const EdgeInsets.all(16),
-              );
+              controller.loadData();
+              Get.snackbar("Refreshed", "Data reloaded from cloud");
             },
             icon: const Icon(Icons.refresh),
-            tooltip: "Refresh Data",
           ),
           const SizedBox(width: 10),
         ],
@@ -61,27 +52,32 @@ class CommissionSetupScreen extends StatelessWidget {
         }
 
         final settings = controller.globalSettings.value;
+        final totalDist = controller.totalDistAmount.value;
+
+        double usedAmount = controller.usedAmount;
+        double remainingAmt = totalDist - usedAmount;
+
+        if (remainingAmt.abs() < 0.01) remainingAmt = 0;
+
         double totalAlloc = controller.totalCommission;
         double remainingPercent = 100.0 - totalAlloc;
-        double totalDist = controller.totalDistAmount.value;
-        double remainingAmt = (remainingPercent * totalDist) / 100;
+        if (remainingPercent.abs() < 0.001) remainingPercent = 0;
 
         String statusText;
         Color statusColor;
 
-        if (totalAlloc > 100) {
+        if (totalAlloc > 100.0001) {
           statusText =
-              "Total: ${totalAlloc.toStringAsFixed(2)}% | Over: ${(totalAlloc - 100).toStringAsFixed(2)}%";
+              "Total: ${totalAlloc.toStringAsFixed(2)}% | Over: Rs ${(usedAmount - totalDist).round()}";
           statusColor = Colors.red[800]!;
         } else {
           statusText =
-              "Total: ${totalAlloc.toStringAsFixed(2)}% | Remaining: ${remainingPercent.toStringAsFixed(2)}% (Rs ${remainingAmt.toStringAsFixed(0)})";
+              "Total: ${totalAlloc.toStringAsFixed(2)}% | Remaining: Rs ${remainingAmt.round()} (${remainingPercent.toStringAsFixed(2)}%)";
           statusColor = accentColor;
         }
 
         return Column(
           children: [
-            // --- FIXED SECTION: Total Levels & Total Amount ---
             Container(
               width: double.infinity,
               margin: const EdgeInsets.all(16),
@@ -90,13 +86,6 @@ class CommissionSetupScreen extends StatelessWidget {
                 color: const Color.fromARGB(255, 222, 248, 219),
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: const Color.fromARGB(255, 14, 70, 0)),
-                boxShadow: [
-                  BoxShadow(
-                    color: accentColor.withOpacity(0.05),
-                    blurRadius: 15,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
               ),
               child: Column(
                 children: [
@@ -141,14 +130,9 @@ class CommissionSetupScreen extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 15),
-                  const Divider(thickness: 1, height: 1),
-                  const SizedBox(height: 15),
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
+                    padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: statusColor.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
@@ -164,26 +148,12 @@ class CommissionSetupScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-                  if (totalAlloc > 100)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8.0),
-                      child: Text(
-                        "⚠ Error: Total exceeds 100%. Save Blocked.",
-                        style: TextStyle(
-                          color: Colors.red[800],
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
                 ],
               ),
             ),
-
-            // --- SCROLLABLE SECTION ---
             Expanded(
               child: RefreshIndicator(
-                onRefresh: () async => controller.onInit(),
+                onRefresh: () async => controller.loadData(),
                 color: accentColor,
                 child: SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
@@ -224,33 +194,23 @@ class CommissionSetupScreen extends StatelessWidget {
                         child: ElevatedButton(
                           onPressed: controller.isLoading.value
                               ? null
-                              : () {
-                                  FocusScope.of(context).unfocus();
-                                  controller.saveConfig();
-                                },
+                              : () => controller.saveConfig(),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: accentColor,
                             foregroundColor: Colors.white,
-                            elevation: 6,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(15),
                             ),
                           ),
                           child: controller.isLoading.value
-                              ? const SizedBox(
-                                  height: 24,
-                                  width: 24,
-                                  child: CircularProgressIndicator(
-                                    color: Color.fromARGB(255, 0, 0, 0),
-                                    strokeWidth: 2.5,
-                                  ),
+                              ? const CircularProgressIndicator(
+                                  color: Color.fromARGB(255, 255, 255, 255),
                                 )
                               : const Text(
                                   "SAVE STRUCTURE",
                                   style: TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold,
-                                    letterSpacing: 1.2,
                                   ),
                                 ),
                         ),
@@ -284,10 +244,6 @@ class CommissionSetupScreen extends StatelessWidget {
         isDense: true,
         contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 5),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Color.fromARGB(255, 255, 0, 0)),
-        ),
         filled: true,
         fillColor: const Color.fromARGB(255, 211, 178, 178),
       ),
@@ -296,17 +252,22 @@ class CommissionSetupScreen extends StatelessWidget {
   }
 }
 
-// --- SYNC INPUT WIDGET ---
 class SyncInputs extends StatefulWidget {
   final String initialPercent;
+  final double initialAmount;
   final Function(String) onPercentChanged;
   final MLMController controller;
+  final int? levelIndex;
+  final bool isCashback;
 
   const SyncInputs({
     Key? key,
     required this.initialPercent,
+    required this.initialAmount,
     required this.onPercentChanged,
     required this.controller,
+    this.levelIndex,
+    this.isCashback = false,
   }) : super(key: key);
 
   @override
@@ -316,39 +277,70 @@ class SyncInputs extends StatefulWidget {
 class _SyncInputsState extends State<SyncInputs> {
   late TextEditingController _pCtrl;
   late TextEditingController _aCtrl;
+  bool _isUpdating = false;
 
   @override
   void initState() {
     super.initState();
     _pCtrl = TextEditingController(text: widget.initialPercent);
-    _aCtrl = TextEditingController();
-    _updateAmount();
-  }
-
-  void _updateAmount() {
-    double p = double.tryParse(_pCtrl.text) ?? 0;
-    double total = widget.controller.totalDistAmount.value;
-    _aCtrl.text = ((p * total) / 100).toStringAsFixed(0);
-  }
-
-  void _updatePercent() {
-    double a = double.tryParse(_aCtrl.text) ?? 0;
-    double total = widget.controller.totalDistAmount.value;
-    if (total > 0) {
-      double p = (a / total) * 100;
-      _pCtrl.text = p.toStringAsFixed(2);
-      widget.onPercentChanged(_pCtrl.text);
-    }
+    _aCtrl = TextEditingController(text: widget.initialAmount.toStringAsFixed(2));
   }
 
   @override
   void didUpdateWidget(SyncInputs oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.initialPercent != _pCtrl.text &&
-        !FocusScope.of(context).hasFocus) {
-      _pCtrl.text = widget.initialPercent;
-      _updateAmount();
+    
+    if (!_isUpdating) {
+      if (widget.initialPercent != oldWidget.initialPercent) {
+        _pCtrl.text = widget.initialPercent;
+      }
+      if ((widget.initialAmount - oldWidget.initialAmount).abs() > 0.01) {
+        _aCtrl.text = widget.initialAmount.toStringAsFixed(2);
+      }
     }
+  }
+
+  void _syncAmount() {
+    if (_isUpdating) return;
+    _isUpdating = true;
+    
+    final p = double.tryParse(_pCtrl.text) ?? 0;
+    final total = widget.controller.totalDistAmount.value;
+    final exact = (p * total) / 100;
+    _aCtrl.text = exact.toStringAsFixed(2);
+    
+    _isUpdating = false;
+  }
+
+  void _syncPercent() {
+    if (_isUpdating) return;
+    _isUpdating = true;
+    
+    final a = double.tryParse(_aCtrl.text) ?? 0;
+    final total = widget.controller.totalDistAmount.value;
+    if (total <= 0) {
+      _isUpdating = false;
+      return;
+    }
+
+    final p = (a / total) * 100;
+    _pCtrl.text = p.toStringAsFixed(6);
+    widget.onPercentChanged(_pCtrl.text);
+
+    if (widget.levelIndex != null) {
+      widget.controller.updateLevelByAmount(widget.levelIndex!, a);
+    } else if (widget.isCashback) {
+      widget.controller.updateCashbackByAmount(a);
+    }
+    
+    _isUpdating = false;
+  }
+
+  @override
+  void dispose() {
+    _pCtrl.dispose();
+    _aCtrl.dispose();
+    super.dispose();
   }
 
   @override
@@ -357,23 +349,25 @@ class _SyncInputsState extends State<SyncInputs> {
       mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(
-          width: 70,
+          width: 75,
           child: _input(
             controller: _pCtrl,
             hint: "%",
             onChanged: (v) {
               widget.onPercentChanged(v);
-              _updateAmount();
+              _syncAmount();
             },
+            readOnly: false,
           ),
         ),
         const SizedBox(width: 8),
         SizedBox(
-          width: 90,
+          width: 95,
           child: _input(
             controller: _aCtrl,
             hint: "Rs",
-            onChanged: (v) => _updatePercent(),
+            onChanged: (_) => _syncPercent(),
+            readOnly: false,
           ),
         ),
       ],
@@ -384,24 +378,27 @@ class _SyncInputsState extends State<SyncInputs> {
     required TextEditingController controller,
     required String hint,
     required Function(String) onChanged,
+    required bool readOnly,
   }) {
     return TextFormField(
       controller: controller,
-      keyboardType: TextInputType.number,
+      readOnly: readOnly,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
       textAlign: TextAlign.center,
-      style: const TextStyle(
+      style: TextStyle(
         fontWeight: FontWeight.bold,
-        fontSize: 14,
-        color: Colors.black,
+        fontSize: 13,
+        color: readOnly ? Colors.black54 : Colors.black,
       ),
       decoration: InputDecoration(
         isDense: true,
         suffixText: hint,
-        suffixStyle: const TextStyle(fontSize: 10, color: Colors.black54),
         contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
         filled: true,
-        fillColor: const Color.fromARGB(255, 209, 176, 176),
+        fillColor: readOnly 
+            ? const Color.fromARGB(255, 240, 240, 240) 
+            : const Color.fromARGB(255, 209, 176, 176),
       ),
       onChanged: onChanged,
     );
@@ -424,89 +421,67 @@ class _CashbackCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: const Color.fromARGB(255, 58, 0, 100),
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+    return Obx(() {
+      final cashbackPercent = controller.cashbackPercent.value;
+      final totalDist = controller.totalDistAmount.value;
+      final cashbackAmount = (cashbackPercent * totalDist) / 100;
+
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: const Color.fromARGB(255, 58, 0, 100),
+            width: 1.5,
           ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: accentColor.withOpacity(0.1),
-                  shape: BoxShape.circle,
+        ),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Icon(Icons.monetization_on, color: accentColor, size: 22),
+                const SizedBox(width: 10),
+                const Text(
+                  "Cashback (Self)",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                    color: Colors.black87,
+                  ),
                 ),
-                child: Icon(
-                  Icons.monetization_on,
-                  color: accentColor,
-                  size: 22,
-                ),
-              ),
-              const SizedBox(width: 15),
-              const Text(
-                "Cashback (Self)",
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                  color: Colors.black87,
-                ),
-              ),
-              const Spacer(),
-              Obx(
-                () => Switch(
+                const Spacer(),
+                Switch(
                   value: controller.isCashbackEnabled.value,
                   onChanged: (val) => controller.toggleCashback(val),
                   activeColor: accentColor,
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 15),
-          Row(
-            children: [
-              const Text(
-                "Reward:",
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black87,
-                ),
-              ),
-              const Spacer(),
-              SyncInputs(
-                initialPercent: controller.cashbackPercent.value.toString(),
-                onPercentChanged: (v) => controller.updateCashbackPercent(v),
-                controller: controller,
-              ),
-            ],
-          ),
-          if (settings != null) ...[
+              ],
+            ),
             const SizedBox(height: 15),
-            _RankPreviewRow(
-              settings: settings,
-              baseReward: controller.cashbackPercent.value,
-              accentColor: accentColor,
+            Row(
+              children: [
+                const Text(
+                  "Reward:",
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                ),
+                const Spacer(),
+                SyncInputs(
+                  initialPercent: cashbackPercent.toString(),
+                  initialAmount: cashbackAmount,
+                  onPercentChanged: (v) => controller.updateCashbackPercent(v),
+                  controller: controller,
+                  isCashback: true,
+                ),
+              ],
             ),
           ],
-        ],
-      ),
-    );
+        ),
+      );
+    });
   }
 }
 
@@ -534,158 +509,69 @@ class _CommissionLevelItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: const Color.fromARGB(255, 58, 0, 100),
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+    return Obx(() {
+      final levelItem = controller.commissionLevels[index];
+      
+      return Container(
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: const Color.fromARGB(255, 58, 0, 100),
+            width: 1.5,
           ),
-        ],
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              CircleAvatar(
-                backgroundColor: accentColor.withOpacity(0.1),
-                radius: 18,
-                child: Text(
-                  "${item.level}",
-                  style: TextStyle(
-                    color: accentColor,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor: accentColor.withOpacity(0.1),
+                  radius: 18,
+                  child: Text(
+                    "${levelItem.level}",
+                    style: TextStyle(
+                      color: accentColor,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 15),
-              Text(
-                "Level ${item.level} Reward",
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                  color: textColor,
+                const SizedBox(width: 15),
+                Text(
+                  "Level ${levelItem.level} Reward",
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                    color: Colors.black87,
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 15),
-          Row(
-            children: [
-              const Text(
-                "Structure:",
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black87,
-                ),
-              ),
-              const Spacer(),
-              SyncInputs(
-                initialPercent: item.percentage.toString(),
-                onPercentChanged: (v) =>
-                    controller.updateLevelPercentage(index, v),
-                controller: controller,
-              ),
-            ],
-          ),
-          if (settings != null && item.percentage > 0) ...[
+              ],
+            ),
             const SizedBox(height: 15),
-            _RankPreviewRow(
-              settings: settings,
-              baseReward: item.percentage,
-              accentColor: accentColor,
+            Row(
+              children: [
+                const Text(
+                  "Structure:",
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                ),
+                const Spacer(),
+                SyncInputs(
+                  initialPercent: levelItem.percentage.toString(),
+                  initialAmount: levelItem.amount,
+                  onPercentChanged: (v) =>
+                      controller.updateLevelPercentage(index, v),
+                  controller: controller,
+                  levelIndex: index,
+                ),
+              ],
             ),
           ],
-        ],
-      ),
-    );
-  }
-}
-
-class _RankPreviewRow extends StatelessWidget {
-  final dynamic settings;
-  final double baseReward;
-  final Color accentColor;
-
-  const _RankPreviewRow({
-    required this.settings,
-    required this.baseReward,
-    required this.accentColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-      decoration: BoxDecoration(
-        color: accentColor.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: accentColor.withOpacity(0.1)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _preview(
-            "🥉 Bronze",
-            settings.bronzeRewardPercent,
-            baseReward,
-            Colors.brown,
-          ),
-          _preview(
-            "🥈 Silver",
-            settings.silverRewardPercent,
-            baseReward,
-            Colors.grey[800]!,
-          ),
-          _preview(
-            "🥇 Gold",
-            settings.goldRewardPercent,
-            baseReward,
-            Colors.amber[900]!,
-          ),
-          _preview(
-            "💎 Diamond",
-            settings.diamondRewardPercent,
-            baseReward,
-            Colors.blue[800]!,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _preview(String label, double share, double base, Color color) {
-    double actual = (base * share) / 100;
-    return Column(
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
         ),
-        const SizedBox(height: 4),
-        Text(
-          "${actual.toStringAsFixed(2)}%",
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w900,
-            color: Colors.black87,
-          ),
-        ),
-      ],
-    );
+      );
+    });
   }
 }

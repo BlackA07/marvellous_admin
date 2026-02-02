@@ -9,6 +9,10 @@ class ProductsRepository {
   CollectionReference get _searchHistory =>
       _firestore.collection('admin_search_history');
 
+  // Counter document for reliable ID generation
+  DocumentReference get _counterDoc =>
+      _firestore.collection('admin_settings').doc('product_counter');
+
   Future<List<ProductModel>> fetchProducts() async {
     try {
       List<ProductModel> allItems = [];
@@ -48,52 +52,65 @@ class ProductsRepository {
   Future<void> addProduct(ProductModel product) async {
     try {
       if (!product.isPackage) {
-        // 1. Get the last ID to increment correctly
-        QuerySnapshot snap = await _products
-            .orderBy(
-              'id',
-              descending: true,
-            ) // Assuming 'id' field exists as string/number in doc
-            .limit(1)
-            .get();
+        // ==========================================
+        // FIX: Use Transaction to get next ID safely
+        // ==========================================
+        String newId = await _firestore.runTransaction<String>((
+          transaction,
+        ) async {
+          DocumentSnapshot counterSnap = await transaction.get(_counterDoc);
 
-        // Fallback: If ordering by string ID gives issues, you might need a separate counter document.
-        // But for now, fixing the .set() logic:
+          int currentId = 0;
+          if (counterSnap.exists) {
+            currentId =
+                (counterSnap.data() as Map<String, dynamic>)['lastProductId'] ??
+                0;
+          }
 
-        int lastId = 0;
-        if (snap.docs.isNotEmpty) {
-          // Try to parse the document ID itself if it's stored as "1", "2"
-          // Or the 'id' field inside the data
-          var data = snap.docs.first.data() as Map<String, dynamic>;
-          lastId =
-              int.tryParse(data['id']?.toString() ?? snap.docs.first.id) ?? 0;
-        }
+          int nextId = currentId + 1;
 
-        product.id = (lastId + 1).toString();
+          // Update counter
+          transaction.set(_counterDoc, {
+            'lastProductId': nextId,
+            'updatedAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
 
-        // --- FIX IS HERE: Use .doc().set() instead of .add() ---
-        // This ensures the Document ID matches '1', '2', etc.
+          return nextId.toString();
+        });
+
+        product.id = newId;
+
+        // Save product with the guaranteed unique ID
         await _products.doc(product.id).set(product.toMap());
+
+        print("✅ Product added successfully with ID: ${product.id}");
       } else {
-        // Packages can use auto-ID or specific logic
-        await _packages.add(product.toMap());
+        // Packages use auto-generated IDs
+        DocumentReference docRef = await _packages.add(product.toMap());
+        product.id = docRef.id;
+        print("✅ Package added successfully with ID: ${product.id}");
       }
     } catch (e) {
+      print("❌ Error adding product: $e");
       throw Exception("Failed to add: $e");
     }
   }
 
   Future<void> updateProduct(ProductModel product) async {
     try {
-      if (product.id == null) throw Exception("ID missing");
+      if (product.id == null || product.id!.isEmpty) {
+        throw Exception("Product ID is missing");
+      }
 
       if (product.isPackage) {
         await _packages.doc(product.id).update(product.toMap());
+        print("✅ Package updated: ${product.id}");
       } else {
-        // This line caused error before because doc(1) didn't exist. Now it will work.
         await _products.doc(product.id).update(product.toMap());
+        print("✅ Product updated: ${product.id}");
       }
     } catch (e) {
+      print("❌ Error updating product: $e");
       throw Exception("Failed to update: $e");
     }
   }
@@ -105,7 +122,9 @@ class ProductsRepository {
       } else {
         await _products.doc(id).delete();
       }
+      print("✅ Product deleted: $id");
     } catch (e) {
+      print("❌ Error deleting product: $e");
       throw Exception("Failed to delete: $e");
     }
   }

@@ -25,21 +25,22 @@ class MLMRepository {
       final snapshot = await _commissionCollection.orderBy('level').get();
 
       if (snapshot.docs.isEmpty) {
-        // Agar Database khali hai to Default/Initial data return karo
-        // Taake app crash na ho pehli baar chalne par
-        return [
-          CommissionLevel(level: 1, percentage: 25.0),
-          CommissionLevel(level: 2, percentage: 15.0),
-          CommissionLevel(level: 3, percentage: 10.0),
-          for (int i = 4; i <= 11; i++)
-            CommissionLevel(level: i, percentage: 3.0),
-        ];
+        print("Repository: No commission levels found in Firebase");
+        // Agar Database khali hai to empty list return karo
+        // Controller default data handle karega
+        return [];
       }
 
       // Firebase docs ko Model men convert karo
-      return snapshot.docs.map((doc) {
-        return CommissionLevel.fromJson(doc.data() as Map<String, dynamic>);
+      List<CommissionLevel> levels = snapshot.docs.map((doc) {
+        var data = doc.data() as Map<String, dynamic>;
+        return CommissionLevel.fromJson(data);
       }).toList();
+
+      print(
+        "Repository: Loaded ${levels.length} commission levels from Firebase",
+      );
+      return levels;
     } catch (e) {
       print("Error fetching commissions: $e");
       return []; // Error aye to khali list
@@ -60,12 +61,28 @@ class MLMRepository {
           'level_${item.level}',
         );
 
-        batch.set(docRef, item.toJson());
+        // IMPORTANT: Amount bhi save kar rahe hain ab
+        Map<String, dynamic> dataToSave = {
+          'level': item.level,
+          'percentage': item.percentage,
+          'amount': item.amount,
+        };
+
+        batch.set(docRef, dataToSave);
       }
 
       // Commit changes to Firebase
       await batch.commit();
-      print("Repository: Commissions Saved to Firebase successfully!");
+      print(
+        "Repository: ${levels.length} Commission Levels saved to Firebase successfully!",
+      );
+
+      // Verification ke liye data print karo
+      for (var lvl in levels) {
+        print(
+          "Saved Level ${lvl.level}: ${lvl.percentage}% = Rs ${lvl.amount}",
+        );
+      }
     } catch (e) {
       print("Error saving commissions: $e");
       throw e; // Error controller tak pohnchaye

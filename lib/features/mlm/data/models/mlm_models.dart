@@ -1,30 +1,37 @@
-// File: lib/features/mlm/data/models/mlm_models.dart
-
 class CommissionLevel {
   int level;
   double percentage;
+  double amount;
 
-  CommissionLevel({required this.level, required this.percentage});
+  CommissionLevel({
+    required this.level,
+    required this.percentage,
+    this.amount = 0.0,
+  });
 
-  // Firebase se data lane k liye
   factory CommissionLevel.fromJson(Map<String, dynamic> json) {
     return CommissionLevel(
       level: json['level'] ?? 0,
       percentage: (json['percentage'] ?? 0).toDouble(),
+      amount: (json['amount'] ?? 0).toDouble(),
     );
   }
 
-  // Firebase men save karne k liye
   Map<String, dynamic> toJson() {
-    return {'level': level, 'percentage': percentage};
+    return {'level': level, 'percentage': percentage, 'amount': amount};
+  }
+
+  @override
+  String toString() {
+    return 'CommissionLevel(level: $level, percentage: $percentage%, amount: Rs $amount)';
   }
 }
 
 class MLMNode {
   final String id;
   final String name;
-  final String role; // e.g., Admin, Vendor, Rider
-  final String? profileImage; // Agar image URL ho
+  final String role;
+  final String? profileImage;
   final List<MLMNode> children;
 
   MLMNode({
@@ -35,13 +42,34 @@ class MLMNode {
     this.children = const [],
   });
 
-  // Initials nikalne k liye (Arslan Ali -> AA)
   String get initials {
     if (name.isEmpty) return "U";
-    List<String> parts = name.trim().split(" ");
+    final parts = name.trim().split(" ");
     if (parts.length > 1) {
       return "${parts[0][0]}${parts[1][0]}".toUpperCase();
     }
     return parts[0][0].toUpperCase();
+  }
+
+  factory MLMNode.fromJson(Map<String, dynamic> json) {
+    return MLMNode(
+      id: json['id'],
+      name: json['name'],
+      role: json['role'],
+      profileImage: json['profileImage'],
+      children: (json['children'] as List<dynamic>? ?? [])
+          .map((e) => MLMNode.fromJson(e))
+          .toList(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'role': role,
+      'profileImage': profileImage,
+      'children': children.map((e) => e.toJson()).toList(),
+    };
   }
 }
