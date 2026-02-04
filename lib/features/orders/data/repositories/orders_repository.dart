@@ -6,102 +6,268 @@ class OrdersRepository {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   // --- CUSTOMER ORDERS ---
+  Stream<List<OrderModel>> getOrdersByStatus(List<String> statuses) {
+    print("🔍 OrdersRepository: Fetching orders with statuses: $statuses");
 
-  // Get Top 10 Pending Orders
-  Stream<List<OrderModel>> getPendingOrders({int limit = 10}) {
     return _db
         .collection('orders')
-        .where('status', isEqualTo: 'pending')
-        .orderBy('createdAt', descending: true)
-        .limit(limit)
+        .where('status', whereIn: statuses)
         .snapshots()
-        .map(
-          (snapshot) => snapshot.docs
-              .map((doc) => OrderModel.fromMap(doc.data(), doc.id))
-              .toList(),
-        );
-  }
+        .map((snapshot) {
+          print(
+            "📦 OrdersRepository: Received ${snapshot.docs.length} orders from Firebase",
+          );
 
-  // Get History (All Non-Pending)
-  Stream<List<OrderModel>> getOrderHistory() {
-    return _db
-        .collection('orders')
-        .where('status', whereIn: ['accepted', 'rejected', 'delivered'])
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map(
-          (snapshot) => snapshot.docs
-              .map((doc) => OrderModel.fromMap(doc.data(), doc.id))
-              .toList(),
-        );
+          if (snapshot.docs.isEmpty) {
+            print("⚠️ No orders found. Check:");
+            print("   - Firebase collection name is 'orders'");
+            print("   - status field exists in documents");
+            print("   - status values match: $statuses");
+          }
+
+          return snapshot.docs.map((doc) {
+            try {
+              print("   Processing order: ${doc.id} with data: ${doc.data()}");
+              return OrderModel.fromMap(doc.data(), doc.id);
+            } catch (e, stack) {
+              print("❌ Error parsing order ${doc.id}: $e");
+              print("Stack: $stack");
+              rethrow;
+            }
+          }).toList();
+        })
+        .handleError((error) {
+          print("❌ Stream error in getOrdersByStatus: $error");
+          return <OrderModel>[];
+        });
   }
 
   Future<void> updateOrderStatus(String orderId, String newStatus) async {
-    await _db.collection('orders').doc(orderId).update({'status': newStatus});
+    print("📝 Updating order $orderId to status: $newStatus");
+    try {
+      await _db.collection('orders').doc(orderId).update({'status': newStatus});
+      print("✅ Order status updated successfully");
+    } catch (e) {
+      print("❌ Error updating order status: $e");
+      rethrow;
+    }
+  }
+
+  // --- FEE REQUESTS ---
+  Stream<List<Map<String, dynamic>>> getFeeRequests() {
+    print("🔍 OrdersRepository: Fetching fee requests");
+
+    return _db
+        .collection('fee_requests')
+        .where('status', isEqualTo: 'pending')
+        .snapshots()
+        .map((snap) {
+          print(
+            "💰 OrdersRepository: Received ${snap.docs.length} fee requests from Firebase",
+          );
+
+          if (snap.docs.isEmpty) {
+            print("⚠️ No fee requests found. Check:");
+            print("   - Collection name is 'fee_requests'");
+            print("   - Documents have 'status' field");
+            print("   - Some documents have status = 'pending'");
+          }
+
+          return snap.docs.map((doc) {
+            var data = doc.data();
+            data['id'] = doc.id;
+            print(
+              "   Fee request: ${doc.id} - ${data['userEmail'] ?? 'no email'}",
+            );
+            return data;
+          }).toList();
+        })
+        .handleError((error) {
+          print("❌ Stream error in getFeeRequests: $error");
+          return <Map<String, dynamic>>[];
+        });
+  }
+
+  Future<void> handleFeeRequest(
+    String reqId,
+    String userId,
+    String status, {
+    String reason = "",
+  }) async {
+    print(
+      "📝 Handling fee request: $reqId for user: $userId with status: $status",
+    );
+
+    try {
+      WriteBatch batch = _db.batch();
+
+      batch.update(_db.collection('fee_requests').doc(reqId), {
+        'status': status,
+        'rejectionReason': reason,
+        'processedAt': FieldValue.serverTimestamp(),
+      });
+
+      DocumentReference userRef = _db.collection('users').doc(userId);
+      if (status == 'approved') {
+        batch.update(userRef, {
+          'membershipStatus': 'approved',
+          'isMLMActive': true,
+          'approvedAt': FieldValue.serverTimestamp(),
+        });
+      } else {
+        batch.update(userRef, {
+          'membershipStatus': 'rejected',
+          'rejectionReason': reason,
+          'rejectedAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      await batch.commit();
+      print("✅ Fee request handled successfully");
+    } catch (e) {
+      print("❌ Error handling fee request: $e");
+      rethrow;
+    }
   }
 
   // --- VENDOR REQUESTS ---
+  Stream<List<VendorRequestModel>> getPendingRequests() {
+    print("🔍 OrdersRepository: Fetching pending vendor requests");
 
-  // Get Top 10 Pending Requests
-  Stream<List<VendorRequestModel>> getPendingRequests({int limit = 10}) {
     return _db
         .collection('vendor_requests')
         .where('status', isEqualTo: 'pending')
-        .orderBy('createdAt', descending: true)
-        .limit(limit)
         .snapshots()
-        .map(
-          (snapshot) => snapshot.docs
-              .map((doc) => VendorRequestModel.fromMap(doc.data(), doc.id))
-              .toList(),
-        );
+        .map((snapshot) {
+          print(
+            "🏪 OrdersRepository: Received ${snapshot.docs.length} vendor requests from Firebase",
+          );
+
+          if (snapshot.docs.isEmpty) {
+            print("⚠️ No vendor requests found. Check:");
+            print("   - Collection name is 'vendor_requests'");
+            print("   - Documents have 'status' field = 'pending'");
+          }
+
+          return snapshot.docs.map((doc) {
+            try {
+              print("   Processing vendor request: ${doc.id}");
+              return VendorRequestModel.fromMap(doc.data(), doc.id);
+            } catch (e) {
+              print("❌ Error parsing vendor request ${doc.id}: $e");
+              rethrow;
+            }
+          }).toList();
+        })
+        .handleError((error) {
+          print("❌ Stream error in getPendingRequests: $error");
+          return <VendorRequestModel>[];
+        });
   }
 
-  // Get Vendor Request History
   Stream<List<VendorRequestModel>> getRequestHistory() {
+    print("🔍 OrdersRepository: Fetching vendor request history");
+
     return _db
         .collection('vendor_requests')
         .where('status', whereIn: ['approved', 'rejected'])
-        .orderBy('createdAt', descending: true)
         .snapshots()
-        .map(
-          (snapshot) => snapshot.docs
-              .map((doc) => VendorRequestModel.fromMap(doc.data(), doc.id))
-              .toList(),
-        );
+        .map((snapshot) {
+          print(
+            "📜 OrdersRepository: Received ${snapshot.docs.length} history items",
+          );
+
+          return snapshot.docs.map((doc) {
+            try {
+              return VendorRequestModel.fromMap(doc.data(), doc.id);
+            } catch (e) {
+              print("❌ Error parsing history request ${doc.id}: $e");
+              rethrow;
+            }
+          }).toList();
+        })
+        .handleError((error) {
+          print("❌ Stream error in getRequestHistory: $error");
+          return <VendorRequestModel>[];
+        });
   }
 
-  // UPDATED LOGIC: Agar Approve ho to Product Create bhi karo
   Future<void> updateRequestStatus(String reqId, String newStatus) async {
-    // 1. Status Update karo Request table men
-    await _db.collection('vendor_requests').doc(reqId).update({
-      'status': newStatus,
-    });
+    print("📝 Updating vendor request $reqId to status: $newStatus");
 
-    // 2. Agar Approved hai, to is request ka data utha kar 'products' men dalo
-    if (newStatus == 'approved') {
-      var docSnapshot = await _db
-          .collection('vendor_requests')
-          .doc(reqId)
-          .get();
-      if (docSnapshot.exists) {
-        var data = docSnapshot.data()!;
+    try {
+      await _db.collection('vendor_requests').doc(reqId).update({
+        'status': newStatus,
+        'processedAt': FieldValue.serverTimestamp(),
+      });
 
-        // Add to Products Collection (Customer App men show hone k liye)
-        await _db.collection('products').add({
-          'vendorId': data['vendorId'],
-          'name': data['productName'],
-          'description':
-              data['description'], // Field names model se match kar lena
-          'price': data['price'],
-          'image': data['image'],
-          'category': 'General', // Default category ya request se uthao
-          'rating': 0.0,
-          'reviews': 0,
-          'isPopular': false,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
+      if (newStatus == 'approved') {
+        print("✅ Vendor request approved, adding to products...");
+        var doc = await _db.collection('vendor_requests').doc(reqId).get();
+
+        if (doc.exists) {
+          var data = doc.data()!;
+          await _db.collection('products').add({
+            'vendorId': data['vendorId'],
+            'name': data['productName'],
+            'description': data['description'] ?? '',
+            'price': data['productPrice'] ?? data['price'] ?? 0,
+            'image': data['productImage'] ?? data['image'] ?? '',
+            'category': data['category'] ?? 'General',
+            'createdAt': FieldValue.serverTimestamp(),
+            'fromRequest': reqId,
+          });
+          print("✅ Product added successfully");
+        }
       }
+
+      print("✅ Vendor request status updated successfully");
+    } catch (e) {
+      print("❌ Error updating vendor request: $e");
+      rethrow;
     }
+  }
+
+  // --- DEBUG HELPER ---
+  Future<void> debugCollections() async {
+    print("\n🔍 === FIREBASE DEBUG INFO ===");
+
+    try {
+      var ordersSnapshot = await _db.collection('orders').limit(5).get();
+      print("\n📦 ORDERS Collection:");
+      print("   Total documents found: ${ordersSnapshot.docs.length}");
+      for (var doc in ordersSnapshot.docs) {
+        print("   - ${doc.id}: status=${doc.data()['status']}");
+      }
+    } catch (e) {
+      print("❌ Error reading orders: $e");
+    }
+
+    try {
+      var feeSnapshot = await _db.collection('fee_requests').limit(5).get();
+      print("\n💰 FEE_REQUESTS Collection:");
+      print("   Total documents found: ${feeSnapshot.docs.length}");
+      for (var doc in feeSnapshot.docs) {
+        print("   - ${doc.id}: status=${doc.data()['status']}");
+      }
+    } catch (e) {
+      print("❌ Error reading fee_requests: $e");
+    }
+
+    try {
+      var vendorSnapshot = await _db
+          .collection('vendor_requests')
+          .limit(5)
+          .get();
+      print("\n🏪 VENDOR_REQUESTS Collection:");
+      print("   Total documents found: ${vendorSnapshot.docs.length}");
+      for (var doc in vendorSnapshot.docs) {
+        print("   - ${doc.id}: status=${doc.data()['status']}");
+      }
+    } catch (e) {
+      print("❌ Error reading vendor_requests: $e");
+    }
+
+    print("\n=== END DEBUG INFO ===\n");
   }
 }
