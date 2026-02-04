@@ -8,27 +8,37 @@ import '../../data/repositories/mlm_repository.dart';
 class MLMController extends GetxController {
   final MLMRepository _repository = MLMRepository();
 
-  // Variables
   var isLoading = false.obs;
   var commissionLevels = <CommissionLevel>[].obs;
   var globalSettings = Rxn<MLMGlobalSettings>();
 
-  // Cashback Variables (Reactive)
-  var cashbackPercent = 5.0.obs;
+  var cashbackPercent = 0.0.obs;
   var isCashbackEnabled = true.obs;
+  var totalDistAmount = 0.0.obs;
 
   var rootNode = Rxn<MLMNode>();
   final TextEditingController levelCountInputController =
       TextEditingController();
+  final TextEditingController totalDistAmountController =
+      TextEditingController();
 
-  // Computed Property: Total % = (Cashback if enabled) + (Sum of Levels)
   double get totalCommission {
     double cashback = isCashbackEnabled.value ? cashbackPercent.value : 0.0;
     double levelsTotal = commissionLevels.fold(
-      0,
+      0.0,
       (sum, item) => sum + item.percentage,
     );
-    return cashback + levelsTotal;
+    return double.parse((cashback + levelsTotal).toStringAsFixed(4));
+  }
+
+  double get usedAmount {
+    double cbAmt = isCashbackEnabled.value
+        ? (cashbackPercent.value * totalDistAmount.value) / 100
+        : 0.0;
+    double lvAmt = commissionLevels.fold(0.0, (sum, item) {
+      return sum + ((item.percentage * totalDistAmount.value) / 100);
+    });
+    return cbAmt + lvAmt;
   }
 
   @override
@@ -37,28 +47,31 @@ class MLMController extends GetxController {
     loadData();
   }
 
-  void loadData() async {
+  Future<void> loadData() async {
     try {
       isLoading(true);
 
-      // 1. Fetch Levels
-      var levels = await _repository.getCommissionLevels();
-      commissionLevels.assignAll(levels);
-      levelCountInputController.text = levels.length.toString();
-
-      // 2. Fetch Global Settings
+      // 1. Load Global Settings Pehle (Total Rs aur Levels count ke liye)
       var settingsDoc = await FirebaseFirestore.instance
           .collection('admin_settings')
           .doc('mlm_variables')
           .get();
 
-      if (settingsDoc.exists) {
-        var settings = MLMGlobalSettings.fromMap(settingsDoc.data()!);
-        globalSettings.value = settings;
+      double savedTotalDist = 0.0;
+      int savedLevelCount = 11;
 
-        // Initialize Cashback inputs from Firebase Data
+      if (settingsDoc.exists) {
+        var settingsMap = settingsDoc.data()!;
+        var settings = MLMGlobalSettings.fromMap(settingsMap);
+        globalSettings.value = settings;
         cashbackPercent.value = settings.cashbackPercent;
         isCashbackEnabled.value = settings.isCashbackEnabled;
+
+        savedTotalDist = (settingsMap['totalDistAmount'] ?? 0.0).toDouble();
+        savedLevelCount = (settingsMap['totalLevels'] ?? 11).toInt();
+
+        totalDistAmount.value = savedTotalDist;
+        totalDistAmountController.text = savedTotalDist.toStringAsFixed(0);
       } else {
         var defaults = MLMGlobalSettings.defaults();
         globalSettings.value = defaults;
@@ -66,35 +79,115 @@ class MLMController extends GetxController {
         isCashbackEnabled.value = defaults.isCashbackEnabled;
       }
 
+      // 2. Load Levels from Firebase
+      var levels = await _repository.getCommissionLevels();
+
+      // Agar Firebase se levels aaye hain to unko use karo
+      if (levels.isNotEmpty) {
+        // Har level ka amount percentage se calculate karo
+        for (var lvl in levels) {
+          lvl.amount = (lvl.percentage * savedTotalDist) / 100;
+        }
+        commissionLevels.assignAll(levels);
+      } else {
+        // Agar Firebase empty hai to default levels banao
+        commissionLevels.assignAll([
+          CommissionLevel(
+            level: 1,
+            percentage: 25.0,
+            amount: (25.0 * savedTotalDist) / 100,
+          ),
+          CommissionLevel(
+            level: 2,
+            percentage: 15.0,
+            amount: (15.0 * savedTotalDist) / 100,
+          ),
+          CommissionLevel(
+            level: 3,
+            percentage: 10.0,
+            amount: (10.0 * savedTotalDist) / 100,
+          ),
+          for (int i = 4; i <= savedLevelCount; i++)
+            CommissionLevel(
+              level: i,
+              percentage: 3.0,
+              amount: (3.0 * savedTotalDist) / 100,
+            ),
+        ]);
+      }
+
+      levelCountInputController.text = commissionLevels.length.toString();
+
+      // 3. Load MLM Tree
       var tree = await _repository.getMLMTree();
       rootNode.value = tree;
+
+      print(
+        "DATA LOADED: Levels=${commissionLevels.length}, TotalAmount=$savedTotalDist",
+      );
     } catch (e) {
-      print("Error loading MLM data: $e");
+      print("ERROR LOADING DATA: $e");
+      Get.snackbar(
+        "Error",
+        "Failed to load data: $e",
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
     } finally {
       isLoading(false);
+      commissionLevels.refresh();
+      cashbackPercent.refresh();
     }
   }
 
-  // Update Logic
   void updateTotalLevels(String value) {
     int? newCount = int.tryParse(value);
     if (newCount == null || newCount < 1 || newCount > 50) return;
-    int currentCount = commissionLevels.length;
+    int current = commissionLevels.length;
 
-    if (newCount > currentCount) {
-      for (int i = currentCount; i < newCount; i++) {
-        commissionLevels.add(CommissionLevel(level: i + 1, percentage: 0.0));
+    if (newCount > current) {
+      for (int i = current; i < newCount; i++) {
+        final amount = (0.0 * totalDistAmount.value) / 100;
+        commissionLevels.add(
+          CommissionLevel(level: i + 1, percentage: 0, amount: amount),
+        );
       }
-    } else if (newCount < currentCount) {
-      commissionLevels.removeRange(newCount, currentCount);
+    } else {
+      commissionLevels.removeRange(newCount, current);
     }
     commissionLevels.refresh();
   }
 
+  void updateTotalDistAmount(String value) {
+    final v = double.tryParse(value);
+    if (v != null && v >= 0) {
+      totalDistAmount.value = v;
+
+      // Saare levels ka amount update karo
+      for (var lvl in commissionLevels) {
+        lvl.amount = (lvl.percentage * v) / 100;
+      }
+
+      commissionLevels.refresh();
+      cashbackPercent.refresh();
+    }
+  }
+
   void updateLevelPercentage(int index, String value) {
-    double? val = double.tryParse(value);
-    if (val != null) {
-      commissionLevels[index].percentage = val;
+    final p = double.tryParse(value) ?? 0.0;
+    final total = totalDistAmount.value;
+
+    commissionLevels[index].percentage = p;
+    commissionLevels[index].amount = (p * total) / 100;
+
+    commissionLevels.refresh();
+  }
+
+  void updateLevelByAmount(int index, double amount) {
+    final total = totalDistAmount.value;
+    if (total > 0) {
+      commissionLevels[index].amount = amount;
+      commissionLevels[index].percentage = (amount / total) * 100;
       commissionLevels.refresh();
     }
   }
@@ -104,63 +197,67 @@ class MLMController extends GetxController {
   }
 
   void updateCashbackPercent(String val) {
-    double? v = double.tryParse(val);
-    if (v != null) {
-      cashbackPercent.value = v;
+    final p = double.tryParse(val) ?? 0.0;
+    cashbackPercent.value = p;
+  }
+
+  void updateCashbackByAmount(double amount) {
+    final total = totalDistAmount.value;
+    if (total > 0) {
+      cashbackPercent.value = (amount / total) * 100;
     }
   }
 
-  // Save Config
   Future<void> saveConfig() async {
-    // 1. Validation Logic: Block Save if > 100%
-    if (totalCommission > 100.0) {
+    if (totalCommission > 100.0001) {
       Get.snackbar(
-        "Critical Error",
-        "Total Allocation (${totalCommission.toStringAsFixed(1)}%) exceeds 100%!\nPlease reduce percentages before saving.",
-        backgroundColor: Colors.red[800],
+        "Error",
+        "Total allocation exceeds 100%",
+        backgroundColor: Colors.red,
         colorText: Colors.white,
-        duration: const Duration(seconds: 4),
-        snackPosition: SnackPosition.TOP,
-        icon: const Icon(Icons.error, color: Colors.white),
       );
-      return; // Stop execution
+      return;
     }
 
     try {
       isLoading(true);
+      final total = totalDistAmount.value;
 
-      // 2. Save Levels
+      // Pehle saare levels ka amount calculate karo
+      for (var lvl in commissionLevels) {
+        lvl.amount = (lvl.percentage * total) / 100;
+      }
+
+      // 1. Commission Levels save karo with amounts
       await _repository.saveCommissions(commissionLevels);
 
-      // 3. Save Cashback Settings to MLM Variables in Firebase
-      // FIX: Manually updating the settings object before saving
-      if (globalSettings.value != null) {
-        globalSettings.value!.cashbackPercent = cashbackPercent.value;
-        globalSettings.value!.isCashbackEnabled = isCashbackEnabled.value;
+      // 2. Global Settings save karo
+      Map<String, dynamic> settingsData = globalSettings.value?.toMap() ?? {};
+      settingsData['cashbackPercent'] = cashbackPercent.value;
+      settingsData['isCashbackEnabled'] = isCashbackEnabled.value;
+      settingsData['totalDistAmount'] = total;
+      settingsData['totalLevels'] = commissionLevels.length;
 
-        await FirebaseFirestore.instance
-            .collection('admin_settings')
-            .doc('mlm_variables')
-            .set(globalSettings.value!.toMap(), SetOptions(merge: true));
-      } else {
-        // Fallback if settings are null
-        var newSettings = MLMGlobalSettings.defaults();
-        newSettings.cashbackPercent = cashbackPercent.value;
-        newSettings.isCashbackEnabled = isCashbackEnabled.value;
+      await FirebaseFirestore.instance
+          .collection('admin_settings')
+          .doc('mlm_variables')
+          .set(settingsData, SetOptions(merge: true));
 
-        await FirebaseFirestore.instance
-            .collection('admin_settings')
-            .doc('mlm_variables')
-            .set(newSettings.toMap(), SetOptions(merge: true));
-      }
+      print(
+        "CONFIG SAVED: Total=$total, Levels=${commissionLevels.length}, Cashback=${cashbackPercent.value}",
+      );
 
       Get.snackbar(
         "Success",
-        "Structure Saved! Total Allocation: ${totalCommission.toStringAsFixed(1)}%",
-        backgroundColor: Colors.green[800],
+        "All settings saved successfully!",
+        backgroundColor: Colors.green,
         colorText: Colors.white,
       );
+
+      // Data reload karo taake confirm ho ke save hua hai
+      await loadData();
     } catch (e) {
+      print("ERROR SAVING CONFIG: $e");
       Get.snackbar(
         "Error",
         "Failed to save: $e",
@@ -170,5 +267,12 @@ class MLMController extends GetxController {
     } finally {
       isLoading(false);
     }
+  }
+
+  @override
+  void onClose() {
+    levelCountInputController.dispose();
+    totalDistAmountController.dispose();
+    super.onClose();
   }
 }
