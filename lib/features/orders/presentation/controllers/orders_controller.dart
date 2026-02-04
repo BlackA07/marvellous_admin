@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../data/models/order_model.dart';
@@ -6,19 +7,16 @@ import '../../data/repositories/orders_repository.dart';
 
 class OrdersController extends GetxController {
   final OrdersRepository _repo = OrdersRepository();
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  // Observables for Active Data
   var pendingOrders = <OrderModel>[].obs;
   var pendingRequests = <VendorRequestModel>[].obs;
   var feeRequests = <Map<String, dynamic>>[].obs;
-
-  // Observables for History
   var historyOrders = <OrderModel>[].obs;
   var historyRequests = <VendorRequestModel>[].obs;
 
   var isLoading = false.obs;
 
-  // Computed properties for counts
   int get pendingOrdersCount =>
       pendingOrders.where((o) => o.status == 'pending').length;
   int get pendingRequestsCount => pendingRequests.length;
@@ -27,275 +25,209 @@ class OrdersController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    print("🚀 OrdersController initialized");
-
-    // Debug Firebase data first
-    _debugFirebaseData();
-
-    // Then bind streams
     bindStreams();
   }
 
-  Future<void> _debugFirebaseData() async {
-    print("\n🔍 Running Firebase debug check...");
-    await _repo.debugCollections();
-  }
-
   void bindStreams() {
-    print("📡 Binding streams to observables...");
-
-    // Bind orders stream
     pendingOrders.bindStream(
       _repo.getOrdersByStatus(['pending', 'confirmed', 'shipped']),
     );
-
-    // Bind vendor requests stream
     pendingRequests.bindStream(_repo.getPendingRequests());
-
-    // Bind fee requests stream
     feeRequests.bindStream(_repo.getFeeRequests());
-
-    // Listen to changes for debugging
-    ever(pendingOrders, (orders) {
-      print("📦 Orders updated: ${orders.length} items");
-      if (orders.isNotEmpty) {
-        print(
-          "   First order: ${orders.first.productName} - ${orders.first.status}",
-        );
-      }
-    });
-
-    ever(feeRequests, (requests) {
-      print("💰 Fee requests updated: ${requests.length} items");
-      if (requests.isNotEmpty) {
-        print(
-          "   First request: ${requests.first['userEmail']} - ${requests.first['amount']}",
-        );
-      }
-    });
-
-    ever(pendingRequests, (requests) {
-      print("🏪 Vendor requests updated: ${requests.length} items");
-      if (requests.isNotEmpty) {
-        print("   First request: ${requests.first.productName}");
-      }
-    });
   }
 
-  // --- FETCH HISTORY ---
   void fetchHistory() {
-    print("📜 Fetching history data...");
-
-    // History screens ke liye streams bind karna
     historyOrders.bindStream(
       _repo.getOrdersByStatus(['accepted', 'rejected', 'delivered']),
     );
     historyRequests.bindStream(_repo.getRequestHistory());
   }
 
-  // --- ORDER ACTIONS (UI Alias) ---
-  Future<void> acceptOrder(String id) async {
-    print("✅ Accepting order: $id");
-    await updateOrderStage(id, 'confirmed');
-  }
-
-  Future<void> rejectOrder(String id) async {
-    print("❌ Rejecting order: $id");
-    await updateOrderStage(id, 'rejected');
+  Future<void> _sendNotification({
+    required String userId,
+    required String title,
+    required String body,
+    required String type,
+  }) async {
+    try {
+      await _db
+          .collection('users')
+          .doc(userId)
+          .collection('notifications')
+          .add({
+            'title': title,
+            'body': body,
+            'type': type,
+            'isRead': false,
+            'timestamp': FieldValue.serverTimestamp(),
+          });
+    } catch (e) {
+      print("❌ Notification Error: $e");
+    }
   }
 
   Future<void> updateOrderStage(String id, String nextStage) async {
-    print("📝 Updating order $id to stage: $nextStage");
-
     try {
       isLoading.value = true;
+      var orderDoc = await _db.collection('orders').doc(id).get();
+      String userId = orderDoc.data()?['userId'] ?? '';
+      double grossProfit = (orderDoc.data()?['grossProfit'] ?? 0.0).toDouble();
+
       await _repo.updateOrderStatus(id, nextStage);
 
-      Get.snackbar(
-        "Status Updated",
-        "Order is now ${nextStage.capitalize}",
-        backgroundColor: Colors.blue,
-        colorText: Colors.white,
-        snackPosition: SnackPosition.BOTTOM,
-        duration: const Duration(seconds: 2),
-      );
-
-      print("✅ Order stage updated successfully");
-    } catch (e) {
-      print("❌ Error updating order stage: $e");
-      Get.snackbar(
-        "Error",
-        "Failed to update order: ${e.toString()}",
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-        snackPosition: SnackPosition.BOTTOM,
-      );
-    } finally {
-      isLoading.value = false;
-    }
-  }
-
-  // --- FEE REQUEST ACTIONS ---
-  Future<void> approveFee(String reqId, String userId) async {
-    print("✅ Approving fee request: $reqId for user: $userId");
-
-    try {
-      isLoading.value = true;
-      await _repo.handleFeeRequest(reqId, userId, 'approved');
+      if (userId.isNotEmpty) {
+        if (nextStage == 'delivered') {
+          bool alreadyRewarded = orderDoc.data()?['rewarded'] ?? false;
+          if (!alreadyRewarded) {
+            await _internalProcessReward(userId, grossProfit, id);
+            await _db.collection('orders').doc(id).update({'rewarded': true});
+          }
+        }
+        await _sendNotification(
+          userId: userId,
+          title: "Order $nextStage",
+          body: "Your order #$id is $nextStage.",
+          type: 'order',
+        );
+      }
 
       Get.snackbar(
         "Success",
-        "Membership Approved!",
-        backgroundColor: Colors.green,
+        "Status Updated",
+        backgroundColor: Colors.blue,
         colorText: Colors.white,
-        snackPosition: SnackPosition.BOTTOM,
       );
-
-      print("✅ Fee request approved successfully");
     } catch (e) {
-      print("❌ Error approving fee: $e");
       Get.snackbar(
         "Error",
-        "Failed to approve: ${e.toString()}",
+        e.toString(),
         backgroundColor: Colors.red,
         colorText: Colors.white,
-        snackPosition: SnackPosition.BOTTOM,
       );
     } finally {
       isLoading.value = false;
     }
   }
 
-  Future<void> rejectFee(String reqId, String userId) async {
-    print("❌ Rejecting fee request: $reqId");
+  // --- FIXED CALCULATION LOGIC ---
+  Future<void> _internalProcessReward(String uid, double gp, String oid) async {
+    var varsDoc = await _db
+        .collection('admin_settings')
+        .doc('mlm_variables')
+        .get();
+    var v = varsDoc.data()!;
+    var uDoc = await _db.collection('users').doc(uid).get();
+    var u = uDoc.data()!;
 
-    TextEditingController reasonCtrl = TextEditingController();
+    // 1. Points
+    double pts = gp / (v['profitPerPoint'] ?? 1.0);
 
-    Get.defaultDialog(
-      title: "Reason for Rejection",
-      content: Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: TextField(
-          controller: reasonCtrl,
-          decoration: const InputDecoration(
-            hintText: "Enter reason",
-            border: OutlineInputBorder(),
-          ),
-          maxLines: 3,
-        ),
-      ),
-      textConfirm: "Reject",
-      textCancel: "Cancel",
-      confirmTextColor: Colors.white,
-      buttonColor: Colors.red,
-      onConfirm: () async {
-        if (reasonCtrl.text.trim().isEmpty) {
-          Get.snackbar(
-            "Validation Error",
-            "Please provide a reason",
-            backgroundColor: Colors.orange,
-            colorText: Colors.white,
-          );
-          return;
-        }
+    // 2. Pool Calculation
+    double mDistP = (v['mlmDistributionPercent'] ?? 0.0).toDouble();
+    double cBackP = (v['cashbackPercent'] ?? 0.0).toDouble();
 
-        try {
-          isLoading.value = true;
-          await _repo.handleFeeRequest(
-            reqId,
-            userId,
-            'rejected',
-            reason: reasonCtrl.text.trim(),
-          );
+    double mlmPool = gp * (mDistP / 100);
+    double userBasePool = mlmPool * (cBackP / 100);
 
-          Get.back(); // Close dialog
+    // 3. Multiplier based on Rank
+    double mult = 25.0;
+    double curPts = (u['totalPoints'] ?? 0.0).toDouble();
+    if (curPts > (v['goldLimit'] ?? 2000))
+      mult = 100;
+    else if (curPts > (v['silverLimit'] ?? 500))
+      mult = 75;
+    else if (curPts > (v['bronzeLimit'] ?? 100))
+      mult = 50;
 
-          Get.snackbar(
-            "Rejected",
-            "Request declined.",
-            backgroundColor: Colors.red,
-            colorText: Colors.white,
-            snackPosition: SnackPosition.BOTTOM,
-          );
+    // 4. Bonus for Membership
+    if (u['membershipStatus'] == "approved" && mult < 100) mult += 25;
 
-          print("✅ Fee request rejected successfully");
-        } catch (e) {
-          print("❌ Error rejecting fee: $e");
-          Get.snackbar(
-            "Error",
-            "Failed to reject: ${e.toString()}",
-            backgroundColor: Colors.red,
-            colorText: Colors.white,
-          );
-        } finally {
-          isLoading.value = false;
-        }
-      },
-    );
+    double finalCash = userBasePool * (mult / 100);
+    double compRem = userBasePool - finalCash;
+
+    // 5. Database Updates
+    await _db.collection('users').doc(uid).update({
+      'totalPoints': FieldValue.increment(pts),
+      'walletBalance': FieldValue.increment(finalCash),
+    });
+
+    if (compRem > 0) {
+      await _db.collection('company_finances').doc('balance').set({
+        'totalCompanyBalance': FieldValue.increment(compRem),
+      }, SetOptions(merge: true));
+      await _db
+          .collection('company_finances')
+          .doc('balance')
+          .collection('history')
+          .add({
+            'orderId': oid,
+            'amount': compRem,
+            'source': 'Rank Gap',
+            'timestamp': FieldValue.serverTimestamp(),
+          });
+    }
+
+    await _db.collection('users').doc(uid).collection('wallet_history').add({
+      'amount': finalCash,
+      'points': pts,
+      'type': 'commission',
+      'description': 'Reward for Order #$oid',
+      'timestamp': FieldValue.serverTimestamp(),
+    });
   }
 
-  // --- VENDOR REQUEST ACTIONS ---
   Future<void> acceptRequest(String id) async {
-    print("✅ Accepting vendor request: $id");
-
     try {
       isLoading.value = true;
       await _repo.updateRequestStatus(id, 'approved');
-
       Get.snackbar(
         "Success",
         "Vendor request approved!",
         backgroundColor: Colors.green,
         colorText: Colors.white,
-        snackPosition: SnackPosition.BOTTOM,
       );
-
-      print("✅ Vendor request accepted successfully");
     } catch (e) {
-      print("❌ Error accepting request: $e");
-      Get.snackbar(
-        "Error",
-        "Failed to accept: ${e.toString()}",
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
+      Get.snackbar("Error", e.toString(), backgroundColor: Colors.red);
     } finally {
       isLoading.value = false;
     }
   }
 
   Future<void> rejectRequest(String id) async {
-    print("❌ Rejecting vendor request: $id");
-
     try {
       isLoading.value = true;
       await _repo.updateRequestStatus(id, 'rejected');
-
       Get.snackbar(
         "Rejected",
         "Vendor request rejected.",
         backgroundColor: Colors.orange,
         colorText: Colors.white,
-        snackPosition: SnackPosition.BOTTOM,
       );
-
-      print("✅ Vendor request rejected successfully");
     } catch (e) {
-      print("❌ Error rejecting request: $e");
-      Get.snackbar(
-        "Error",
-        "Failed to reject: ${e.toString()}",
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
+      Get.snackbar("Error", e.toString(), backgroundColor: Colors.red);
     } finally {
       isLoading.value = false;
     }
   }
 
-  @override
-  void onClose() {
-    print("🛑 OrdersController disposed");
-    super.onClose();
+  Future<void> acceptOrder(String id) async =>
+      updateOrderStage(id, 'confirmed');
+  Future<void> rejectOrder(String id) async => updateOrderStage(id, 'rejected');
+
+  Future<void> approveFee(String reqId, String userId) async {
+    await _repo.handleFeeRequest(reqId, userId, 'approved');
+    _sendNotification(
+      userId: userId,
+      title: "Membership Approved",
+      body: "Welcome!",
+      type: 'info',
+    );
   }
+
+  Future<void> rejectFee(String reqId, String userId) async {
+    await _repo.handleFeeRequest(reqId, userId, 'rejected');
+  }
+
+  @override
+  void onClose() => super.onClose();
 }
