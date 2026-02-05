@@ -12,8 +12,9 @@ class ProductFilterDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final isSmall = MediaQuery.of(context).size.width < 600;
 
+    // Local state for dialog
     final RxString localCategory = controller.selectedCategory.value.obs;
-    final RxString localSubCategory = 'All'.obs;
+    final RxString localSubCategory = controller.selectedSubCategory.value.obs;
 
     return Dialog(
       backgroundColor: const Color(0xFF2A2D3E),
@@ -21,6 +22,7 @@ class ProductFilterDialog extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Obx(() {
+          // Get subcategories based on selected category
           final subCategories = {
             'All',
             ...controller.productList
@@ -56,6 +58,7 @@ class ProductFilterDialog extends StatelessWidget {
 
               const SizedBox(height: 20),
 
+              // --- CATEGORY SECTION ---
               Text(
                 "Category",
                 style: GoogleFonts.comicNeue(
@@ -80,7 +83,7 @@ class ProductFilterDialog extends StatelessWidget {
                     selectedColor: Colors.orangeAccent,
                     onSelected: (_) {
                       localCategory.value = cat;
-                      localSubCategory.value = 'All';
+                      localSubCategory.value = 'All'; // Reset subcategory
                     },
                   );
                 }).toList(),
@@ -88,6 +91,7 @@ class ProductFilterDialog extends StatelessWidget {
 
               const SizedBox(height: 20),
 
+              // --- SUBCATEGORY SECTION ---
               Text(
                 "Sub Category",
                 style: GoogleFonts.comicNeue(
@@ -119,6 +123,7 @@ class ProductFilterDialog extends StatelessWidget {
 
               const SizedBox(height: 25),
 
+              // --- ACTION BUTTONS ---
               Row(
                 children: [
                   Expanded(
@@ -139,19 +144,18 @@ class ProductFilterDialog extends StatelessWidget {
                   Expanded(
                     child: ElevatedButton(
                       onPressed: () {
+                        // ✅ FIXED: Properly set both filters
                         controller.updateCategoryFilter(localCategory.value);
-
-                        if (localSubCategory.value != 'All') {
-                          controller.searchQuery.value = localSubCategory.value;
-                        }
-
+                        controller.updateSubCategoryFilter(
+                          localSubCategory.value,
+                        );
                         Get.back();
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.cyanAccent,
                       ),
                       child: const Text(
-                        "Apply / Close",
+                        "Apply",
                         style: TextStyle(color: Colors.black),
                       ),
                     ),

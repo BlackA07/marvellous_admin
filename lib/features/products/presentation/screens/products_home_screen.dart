@@ -3,17 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-// Controller & Model
 import '../../controller/products_controller.dart';
 import '../../models/product_model.dart';
-
-// SCREEN IMPORTS
 import 'add_product_screen.dart';
-import '../../components/product_stats_section.dart'; // New Component
-import '../../components/product_search_bar.dart'; // New Component
-import '../../components/product_inventory_table.dart'; // New Component
-
-// Layout Controller for Navigation
+import '../../components/product_stats_section.dart';
+import '../../components/product_search_bar.dart';
+import '../../components/product_inventory_table.dart';
 import '../../../layout/controller/layout_controller.dart';
 
 class ProductsHomeScreen extends ConsumerStatefulWidget {
@@ -27,7 +22,6 @@ class _ProductsHomeScreenState extends ConsumerState<ProductsHomeScreen> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
-  // Controller yahan initialize ho raha hai, jese apne kaha tha
   final ProductsController controller = Get.put(ProductsController());
 
   @override
@@ -43,7 +37,6 @@ class _ProductsHomeScreenState extends ConsumerState<ProductsHomeScreen> {
     super.dispose();
   }
 
-  // Delete Logic yahan rakhi hai taake centralized rahe
   void _deleteProduct(ProductModel product) {
     Get.defaultDialog(
       title: "Delete Product?",
@@ -136,20 +129,30 @@ class _ProductsHomeScreenState extends ConsumerState<ProductsHomeScreen> {
 
                 final products = controller.productsOnly;
 
-                // Filtering Logic (Same as before)
+                // --- FIXED FILTERING LOGIC ---
                 final filteredList = products.where((product) {
                   String search = controller.searchQuery.value.toLowerCase();
+
+                  // Search match
                   bool matchesSearch =
                       search.isEmpty ||
                       product.name.toLowerCase().contains(search) ||
                       product.modelNumber.toLowerCase().contains(search) ||
-                      product.category.toLowerCase().contains(search);
+                      product.category.toLowerCase().contains(search) ||
+                      product.brand.toLowerCase().contains(search);
 
+                  // Category filter
                   bool matchesCategory =
                       controller.selectedCategory.value == 'All' ||
                       product.category == controller.selectedCategory.value;
 
-                  return matchesSearch && matchesCategory;
+                  // Subcategory filter
+                  bool matchesSubCategory =
+                      controller.selectedSubCategory.value == 'All' ||
+                      product.subCategory ==
+                          controller.selectedSubCategory.value;
+
+                  return matchesSearch && matchesCategory && matchesSubCategory;
                 }).toList();
 
                 return Scrollbar(
@@ -170,32 +173,24 @@ class _ProductsHomeScreenState extends ConsumerState<ProductsHomeScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // 1. STATS SECTION
                         ProductStatsSection(
                           controller: controller,
                           isDesktop: isDesktop,
                           isMobile: isMobile,
                         ),
-
                         const SizedBox(height: 30),
-
-                        // 2. SEARCH BAR & FILTER SECTION
                         ProductSearchBar(
                           controller: controller,
                           isMobile: isMobile,
                         ),
-
                         const SizedBox(height: 20),
-
-                        // 3. INVENTORY TABLE SECTION
                         ProductInventoryTable(
                           filteredList: filteredList,
                           controller: controller,
                           isMobile: isMobile,
                           constraints: constraints,
-                          onDelete: _deleteProduct, // Callback passed here
+                          onDelete: _deleteProduct,
                         ),
-
                         const SizedBox(height: 80),
                       ],
                     ),

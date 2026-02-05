@@ -3,14 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:intl/intl.dart';
 
 // Controllers & Models
 import '../../../../features/products/controller/products_controller.dart';
 import '../../../layout/presentation/screens/main_layout_screen.dart';
 import '../../../products/models/product_model.dart';
 import '../../../vendors/controllers/vendor_controller.dart';
-import '../../../dashboard/presentation/screens/dashboard_screen.dart';
 
 class AddPackageScreen extends StatefulWidget {
   final ProductModel? packageToEdit;
@@ -42,13 +40,18 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
   // Package Specific State
   List<ProductModel> _selectedProducts = [];
   double _totalCalculatedPurchasePrice = 0.0;
-  double _totalCalculatedIndividualSellPrice = 0.0; // New Variable
-  double _totalCalculatedGP = 0.0; // New Variable for Summary
-  double _totalCalculatedPoints = 0.0; // New Variable for Summary
+  double _totalCalculatedIndividualSellPrice = 0.0;
+  double _totalCalculatedGP = 0.0;
+  double _totalCalculatedPoints = 0.0;
 
   String _productSearchQuery = "";
 
-  bool _isSuccess = false; // Popup State
+  // Sorting State
+  int? sortColumnIndex;
+  bool ascending = true;
+  List<ProductModel> _sortedProducts = [];
+
+  bool _isSuccess = false;
 
   final List<String> locationOptions = [
     "Karachi Only",
@@ -57,18 +60,17 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
     "Store Pickup Only",
   ];
 
-  // Colors for Light Theme
+  // Colors
   final Color bgColor = const Color(0xFFF5F7FA);
   final Color cardColor = Colors.white;
   final Color textColor = Colors.black87;
   final Color accentColor = Colors.deepPurple;
-  final Color hintColor = Colors.grey;
+  final Color hintColor = const Color.fromARGB(255, 0, 0, 0);
 
   @override
   void initState() {
     super.initState();
 
-    // Listener to update Points when Sale Price changes
     salePriceCtrl.addListener(() {
       setState(() {});
     });
@@ -76,13 +78,12 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
     if (widget.packageToEdit != null) {
       _loadPackageData();
     } else {
-      selectedLocation = locationOptions[1]; // Default Pakistan
+      selectedLocation = locationOptions[1];
     }
   }
 
   @override
   void dispose() {
-    // Dispose controllers to avoid memory leaks
     nameCtrl.dispose();
     descCtrl.dispose();
     salePriceCtrl.dispose();
@@ -118,12 +119,10 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
     double totalPts = 0;
     List<String> autoImages = [];
 
-    // Calculate total and gather images from selected products
     for (var p in _selectedProducts) {
       totalBuy += p.purchasePrice;
       totalIndividualSell += p.salePrice;
 
-      // Live Calculation for this specific product
       double gp = p.salePrice - p.purchasePrice;
       double pts = productController.calculatePoints(
         p.purchasePrice,
@@ -134,7 +133,6 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
       totalPts += pts;
 
       if (updateImages && p.images.isNotEmpty) {
-        // Avoid duplicates
         if (!autoImages.contains(p.images.first)) {
           autoImages.add(p.images.first);
         }
@@ -169,7 +167,6 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
     nameCtrl.text = "Combo: $generatedName";
   }
 
-  // Manual Image Picker
   Future<void> _pickImages() async {
     final List<XFile> images = await _picker.pickMultiImage();
     if (images.isNotEmpty) {
@@ -199,11 +196,73 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
       _totalCalculatedIndividualSellPrice = 0.0;
       _totalCalculatedGP = 0.0;
       _totalCalculatedPoints = 0.0;
+      _sortedProducts.clear();
+      sortColumnIndex = null;
+      ascending = true;
     });
+  }
+
+  // --- IMPROVED SORTING LOGIC ---
+  void _sortProducts(int columnIndex, bool ascending) {
+    setState(() {
+      sortColumnIndex = columnIndex;
+      this.ascending = ascending;
+    });
+  }
+
+  // Helper method to get sorted products
+  List<ProductModel> _getSortedProducts(List<ProductModel> products) {
+    if (sortColumnIndex == null) return products;
+
+    List<ProductModel> sortedList = List.from(products);
+
+    sortedList.sort((a, b) {
+      int comparison = 0;
+
+      switch (sortColumnIndex) {
+        case 1: // Product Name column
+          comparison = a.name.compareTo(b.name);
+          break;
+        case 2: // Brand column
+          comparison = a.brand.compareTo(b.brand);
+          break;
+        case 3: // Buy Price column
+          comparison = a.purchasePrice.compareTo(b.purchasePrice);
+          break;
+        case 4: // Sell Price column
+          comparison = a.salePrice.compareTo(b.salePrice);
+          break;
+        case 5: // GP column
+          double gpA = a.salePrice - a.purchasePrice;
+          double gpB = b.salePrice - b.purchasePrice;
+          comparison = gpA.compareTo(gpB);
+          break;
+        case 6: // Points column
+          double ptsA = productController.calculatePoints(
+            a.purchasePrice,
+            a.salePrice,
+          );
+          double ptsB = productController.calculatePoints(
+            b.purchasePrice,
+            b.salePrice,
+          );
+          comparison = ptsA.compareTo(ptsB);
+          break;
+        default:
+          return 0;
+      }
+
+      return ascending ? comparison : -comparison;
+    });
+
+    return sortedList;
   }
 
   @override
   Widget build(BuildContext context) {
+    // Get showDecimals from controller
+    bool showDecimals = productController.showDecimals.value;
+
     return Scaffold(
       backgroundColor: bgColor,
       appBar: AppBar(
@@ -229,7 +288,7 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // 1. SELECT PRODUCTS
+                      // 1. SELECT PRODUCTS WITH TABLE
                       Text(
                         "Step 1: Select Products",
                         style: GoogleFonts.orbitron(
@@ -240,155 +299,329 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
                       ),
                       const SizedBox(height: 10),
 
-                      Container(
-                        height: 300,
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: cardColor,
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.05),
-                              blurRadius: 5,
-                            ),
-                          ],
+                      // Search Bar
+                      TextField(
+                        onChanged: (val) =>
+                            setState(() => _productSearchQuery = val),
+                        style: TextStyle(color: textColor),
+                        decoration: InputDecoration(
+                          hintText: "Search products...",
+                          hintStyle: TextStyle(color: hintColor),
+                          prefixIcon: Icon(Icons.search, color: hintColor),
+                          filled: true,
+                          fillColor: cardColor,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 0,
+                          ),
                         ),
-                        child: Column(
-                          children: [
-                            TextField(
-                              onChanged: (val) =>
-                                  setState(() => _productSearchQuery = val),
-                              style: TextStyle(color: textColor),
-                              decoration: InputDecoration(
-                                hintText: "Search items...",
-                                hintStyle: TextStyle(color: hintColor),
-                                prefixIcon: Icon(
-                                  Icons.search,
-                                  color: hintColor,
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(
-                                    color: Colors.grey.shade300,
-                                  ),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(
-                                    color: Colors.grey.shade300,
-                                  ),
-                                ),
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 0,
-                                ),
+                      ),
+
+                      const SizedBox(height: 10),
+
+                      // Product Table
+                      Obx(() {
+                        var allProducts = productController.productsOnly.where((
+                          p,
+                        ) {
+                          return p.name.toLowerCase().contains(
+                            _productSearchQuery.toLowerCase(),
+                          );
+                        }).toList();
+
+                        // Apply sorting if needed
+                        allProducts = _getSortedProducts(allProducts);
+
+                        return Container(
+                          height: 400,
+                          decoration: BoxDecoration(
+                            color: cardColor,
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.05),
+                                blurRadius: 5,
                               ),
-                            ),
-                            const SizedBox(height: 10),
-                            Expanded(
-                              child: Obx(() {
-                                var items = productController.productsOnly
-                                    .where((p) {
-                                      return p.name.toLowerCase().contains(
-                                        _productSearchQuery.toLowerCase(),
+                            ],
+                          ),
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.vertical,
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: DataTable(
+                                columnSpacing: 30,
+                                horizontalMargin: 15,
+                                headingRowHeight: 50,
+                                dataRowHeight: 60,
+                                sortColumnIndex: sortColumnIndex,
+                                sortAscending: ascending,
+                                headingRowColor: MaterialStateProperty.all(
+                                  Colors.grey.shade200,
+                                ),
+                                showCheckboxColumn: false,
+                                columns: [
+                                  DataColumn(
+                                    label: Container(
+                                      width: 70,
+                                      child: _tableHeader("Select"),
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    label: Container(
+                                      width: 220,
+                                      child: _tableHeader("Product"),
+                                    ),
+                                    onSort: (columnIndex, ascending) {
+                                      _sortProducts(columnIndex, ascending);
+                                    },
+                                  ),
+                                  DataColumn(
+                                    label: Container(
+                                      width: 120,
+                                      child: _tableHeader("Brand"),
+                                    ),
+                                    onSort: (columnIndex, ascending) {
+                                      _sortProducts(columnIndex, ascending);
+                                    },
+                                  ),
+                                  DataColumn(
+                                    label: Container(
+                                      width: 110,
+                                      child: _tableHeader("Buy Price"),
+                                    ),
+                                    numeric: true,
+                                    onSort: (columnIndex, ascending) {
+                                      _sortProducts(columnIndex, ascending);
+                                    },
+                                  ),
+                                  DataColumn(
+                                    label: Container(
+                                      width: 110,
+                                      child: _tableHeader("Sell Price"),
+                                    ),
+                                    numeric: true,
+                                    onSort: (columnIndex, ascending) {
+                                      _sortProducts(columnIndex, ascending);
+                                    },
+                                  ),
+                                  DataColumn(
+                                    label: Container(
+                                      width: 100,
+                                      child: _tableHeader("GP"),
+                                    ),
+                                    numeric: true,
+                                    onSort: (columnIndex, ascending) {
+                                      _sortProducts(columnIndex, ascending);
+                                    },
+                                  ),
+                                  DataColumn(
+                                    label: Container(
+                                      width: 100,
+                                      child: _tableHeader(
+                                        "Points",
+                                        color: Colors.amber.shade900,
+                                      ),
+                                    ),
+                                    numeric: true,
+                                    onSort: (columnIndex, ascending) {
+                                      _sortProducts(columnIndex, ascending);
+                                    },
+                                  ),
+                                ],
+                                rows: allProducts.map((product) {
+                                  final isSelected = _selectedProducts.contains(
+                                    product,
+                                  );
+
+                                  final double gp =
+                                      product.salePrice - product.purchasePrice;
+                                  final double pts = productController
+                                      .calculatePoints(
+                                        product.purchasePrice,
+                                        product.salePrice,
                                       );
-                                    })
-                                    .toList();
 
-                                return ListView.builder(
-                                  itemCount: items.length,
-                                  itemBuilder: (context, index) {
-                                    final product = items[index];
-                                    final isSelected = _selectedProducts
-                                        .contains(product);
-
-                                    // Live Calculations for List Item
-                                    final double gp =
-                                        product.salePrice -
-                                        product.purchasePrice;
-                                    final double pts = productController
-                                        .calculatePoints(
-                                          product.purchasePrice,
-                                          product.salePrice,
-                                        );
-
-                                    return CheckboxListTile(
-                                      title: Text(
-                                        product.name,
-                                        style: TextStyle(
-                                          color: textColor,
-                                          fontWeight: FontWeight.w600,
+                                  return DataRow(
+                                    selected: isSelected,
+                                    onSelectChanged: (_) =>
+                                        _toggleProductSelection(product),
+                                    cells: [
+                                      // Checkbox
+                                      DataCell(
+                                        SizedBox(
+                                          width: 70,
+                                          child: Checkbox(
+                                            value: isSelected,
+                                            onChanged: (_) =>
+                                                _toggleProductSelection(
+                                                  product,
+                                                ),
+                                            activeColor: accentColor,
+                                          ),
                                         ),
                                       ),
-                                      subtitle: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            "Buy: PKR ${product.purchasePrice.toInt()} | Sell: PKR ${product.salePrice.toInt()}",
-                                            style: TextStyle(
-                                              color: Colors.grey.shade600,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Row(
+                                      // Product Name + Image
+                                      DataCell(
+                                        Container(
+                                          width: 220,
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
                                             children: [
-                                              Text(
-                                                "GP: PKR ${gp.toInt()}",
-                                                style: TextStyle(
-                                                  color: Colors.blue.shade700,
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 12,
+                                              if (product.images.isNotEmpty)
+                                                Container(
+                                                  width: 35,
+                                                  height: 35,
+                                                  margin: const EdgeInsets.only(
+                                                    right: 8,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          4,
+                                                        ),
+                                                    image: DecorationImage(
+                                                      image: MemoryImage(
+                                                        base64Decode(
+                                                          product.images.first,
+                                                        ),
+                                                      ),
+                                                      fit: BoxFit.cover,
+                                                    ),
+                                                  ),
                                                 ),
-                                              ),
-                                              const SizedBox(width: 10),
-                                              Text(
-                                                "Pts: ${pts.toStringAsFixed(1)}",
-                                                style: TextStyle(
-                                                  color: Colors.amber.shade800,
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 12,
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment.center,
+                                                  children: [
+                                                    Text(
+                                                      product.name,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      maxLines: 2,
+                                                      style:
+                                                          GoogleFonts.comicNeue(
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                            fontSize: 13,
+                                                            color: Colors.black,
+                                                          ),
+                                                    ),
+                                                    if (product
+                                                        .modelNumber
+                                                        .isNotEmpty)
+                                                      Text(
+                                                        product.modelNumber,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                        style:
+                                                            GoogleFonts.comicNeue(
+                                                              color:
+                                                                  Colors.black,
+                                                              fontSize: 11,
+                                                            ),
+                                                      ),
+                                                  ],
                                                 ),
                                               ),
                                             ],
                                           ),
-                                        ],
-                                      ),
-                                      value: isSelected,
-                                      activeColor: accentColor,
-                                      checkColor: Colors.white,
-                                      isThreeLine: true,
-                                      onChanged: (val) =>
-                                          _toggleProductSelection(product),
-                                      secondary: Container(
-                                        width: 40,
-                                        height: 40,
-                                        decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(
-                                            5,
-                                          ),
-                                          image: product.images.isNotEmpty
-                                              ? DecorationImage(
-                                                  image: MemoryImage(
-                                                    base64Decode(
-                                                      product.images.first,
-                                                    ),
-                                                  ),
-                                                  fit: BoxFit.cover,
-                                                )
-                                              : null,
-                                          color: Colors.grey.shade200,
                                         ),
                                       ),
-                                    );
-                                  },
-                                );
-                              }),
+                                      // Brand
+                                      DataCell(
+                                        Container(
+                                          width: 120,
+                                          child: Text(
+                                            product.brand,
+                                            style: GoogleFonts.comicNeue(
+                                              fontSize: 13,
+                                              color: Colors.black,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      // Buy Price
+                                      DataCell(
+                                        Container(
+                                          width: 110,
+                                          child: Text(
+                                            "PKR ${product.purchasePrice.toInt()}",
+                                            textAlign: TextAlign.right,
+                                            style: GoogleFonts.comicNeue(
+                                              color: Colors.red.shade700,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      // Sell Price
+                                      DataCell(
+                                        Container(
+                                          width: 110,
+                                          child: Text(
+                                            "PKR ${product.salePrice.toInt()}",
+                                            textAlign: TextAlign.right,
+                                            style: GoogleFonts.comicNeue(
+                                              color: Colors.green.shade700,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      // GP
+                                      DataCell(
+                                        Container(
+                                          width: 100,
+                                          child: Text(
+                                            "PKR ${gp.toInt()}",
+                                            textAlign: TextAlign.right,
+                                            style: GoogleFonts.comicNeue(
+                                              color: Colors.blue.shade700,
+                                              fontWeight: FontWeight.w900,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      // Points
+                                      DataCell(
+                                        Container(
+                                          width: 100,
+                                          child: Text(
+                                            showDecimals
+                                                ? pts.toStringAsFixed(2)
+                                                : pts.floor().toString(),
+                                            textAlign: TextAlign.right,
+                                            style: GoogleFonts.comicNeue(
+                                              color: Colors.amber.shade900,
+                                              fontWeight: FontWeight.w900,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                }).toList(),
+                              ),
                             ),
-                          ],
-                        ),
-                      ),
+                          ),
+                        );
+                      }),
+
                       const SizedBox(height: 10),
 
                       // --- SUMMARY SECTION ---
@@ -422,7 +655,9 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
                             ),
                             _summaryItem(
                               "Total Pts",
-                              _totalCalculatedPoints.toStringAsFixed(1),
+                              showDecimals
+                                  ? _totalCalculatedPoints.toStringAsFixed(2)
+                                  : _totalCalculatedPoints.floor().toString(),
                               valueColor: Colors.amber[800],
                             ),
                           ],
@@ -627,7 +862,7 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
                       ),
                       const SizedBox(height: 15),
 
-                      // --- NEW: COST & POINTS INFO ---
+                      // --- COST & POINTS INFO ---
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(12),
@@ -653,7 +888,6 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
                             const Divider(height: 10),
                             Builder(
                               builder: (context) {
-                                // Live Points Calculation
                                 double currentSell =
                                     double.tryParse(salePriceCtrl.text) ?? 0;
                                 double points = productController
@@ -663,7 +897,9 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
                                     );
                                 return _buildReadOnlyRow(
                                   "Gross Profit Points:",
-                                  points.toStringAsFixed(1),
+                                  showDecimals
+                                      ? points.toStringAsFixed(2)
+                                      : points.floor().toString(),
                                   Colors.green.shade800,
                                   isBold: true,
                                 );
@@ -673,7 +909,6 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
                         ),
                       ),
 
-                      // ---------------------------------
                       Row(
                         children: [
                           Expanded(
@@ -722,7 +957,6 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
                                 ? null
                                 : () async {
                                     if (_formKey.currentState!.validate()) {
-                                      // Validation Logic
                                       if (_selectedProducts.isEmpty) {
                                         Get.snackbar(
                                           "Error",
@@ -742,7 +976,6 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
                                         return;
                                       }
 
-                                      // Data Preparation
                                       double buy =
                                           _totalCalculatedPurchasePrice;
                                       double sell =
@@ -786,10 +1019,9 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
                                         includedItemIds: _selectedProducts
                                             .map((p) => p.id!)
                                             .toList(),
-                                        showDecimalPoints: true,
+                                        showDecimalPoints: showDecimals,
                                       );
 
-                                      // Save Operation
                                       bool success;
                                       if (widget.packageToEdit == null) {
                                         success = await productController
@@ -886,7 +1118,6 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
                         ),
                       const SizedBox(height: 10),
 
-                      // Close -> Go to Dashboard
                       SizedBox(
                         width: double.infinity,
                         child: OutlinedButton(
@@ -908,6 +1139,17 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _tableHeader(String text, {Color? color}) {
+    return Text(
+      text,
+      style: GoogleFonts.comicNeue(
+        color: color ?? Colors.black,
+        fontWeight: FontWeight.bold,
+        fontSize: 13,
       ),
     );
   }

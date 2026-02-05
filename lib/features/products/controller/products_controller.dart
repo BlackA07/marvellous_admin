@@ -15,6 +15,7 @@ class ProductsController extends GetxController {
   // --- SEARCH & HISTORY ---
   var searchQuery = ''.obs;
   var selectedCategory = 'All'.obs;
+  var selectedSubCategory = 'All'.obs; // ✅ ADDED
 
   // General Search History (for Home Screen)
   var searchHistoryList = <String>[].obs;
@@ -27,7 +28,7 @@ class ProductsController extends GetxController {
 
   // --- SETTINGS (Dynamic) ---
   var profitPerPoint = 100.0.obs; // Default
-  var globalShowDecimals = true.obs; // Default
+  var showDecimals = true.obs; // ✅ RENAMED from globalShowDecimals
 
   // --- PACKAGES ---
   var selectedProductsForPackage = <ProductModel>[].obs;
@@ -51,7 +52,7 @@ class ProductsController extends GetxController {
       if (doc.exists) {
         Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
         profitPerPoint.value = (data['profitPerPoint'] ?? 100.0).toDouble();
-        globalShowDecimals.value = data['showDecimals'] ?? true;
+        showDecimals.value = data['showDecimals'] ?? true; // ✅ FIXED
       }
     } catch (e) {
       print("Settings fetch error: $e");
@@ -76,7 +77,7 @@ class ProductsController extends GetxController {
       await fetchGlobalSettings();
 
       // 2. Apply current settings to the new product
-      product.showDecimalPoints = globalShowDecimals.value;
+      product.showDecimalPoints = showDecimals.value; // ✅ FIXED
 
       // 3. Save to DB (Repository will handle ID generation)
       await _repository.addProduct(product);
@@ -239,6 +240,20 @@ class ProductsController extends GetxController {
     return ['All', ...categories];
   }
 
+  // ✅ NEW: Get available subcategories based on selected category
+  List<String> get availableSubCategories {
+    if (selectedCategory.value == 'All') {
+      Set<String> allSubs = productList.map((p) => p.subCategory).toSet();
+      return ['All', ...allSubs];
+    }
+
+    Set<String> subs = productList
+        .where((p) => p.category == selectedCategory.value)
+        .map((p) => p.subCategory)
+        .toSet();
+    return ['All', ...subs];
+  }
+
   // Combined History + Existing Brands/Names for suggestions (General Search)
   List<String> getSuggestions(String query) {
     Set<String> suggestions = {...searchHistoryList};
@@ -269,7 +284,11 @@ class ProductsController extends GetxController {
           selectedCategory.value == 'All' ||
           product.category == selectedCategory.value;
 
-      return matchesSearch && matchesCategory;
+      bool matchesSubCategory =
+          selectedSubCategory.value == 'All' ||
+          product.subCategory == selectedSubCategory.value;
+
+      return matchesSearch && matchesCategory && matchesSubCategory;
     }).toList();
   }
 
@@ -324,10 +343,18 @@ class ProductsController extends GetxController {
   void clearAllFilters() {
     searchQuery.value = '';
     selectedCategory.value = 'All';
+    selectedSubCategory.value = 'All'; // ✅ ADDED
   }
 
   void updateCategoryFilter(String category) {
     selectedCategory.value = category;
+    // Reset subcategory when category changes
+    selectedSubCategory.value = 'All';
+  }
+
+  // ✅ NEW: Update subcategory filter
+  void updateSubCategoryFilter(String subCategory) {
+    selectedSubCategory.value = subCategory;
   }
 
   // --- Packages Helper Logic ---
