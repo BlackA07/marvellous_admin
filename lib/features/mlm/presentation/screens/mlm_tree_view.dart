@@ -1,5 +1,3 @@
-// File: lib/features/mlm/presentation/screens/mlm_tree_view.dart
-
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../controllers/mlm_controller.dart';
@@ -10,7 +8,6 @@ class MLMTreeViewScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Controller inject kar rahe hen
     final controller = Get.put(MLMController());
 
     return Scaffold(
@@ -19,7 +16,7 @@ class MLMTreeViewScreen extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: controller.loadData,
+            onPressed: () => controller.loadData(),
           ),
         ],
       ),
@@ -29,28 +26,47 @@ class MLMTreeViewScreen extends StatelessWidget {
         }
 
         if (controller.rootNode.value == null) {
-          return const Center(child: Text("No Data Found"));
+          return const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.account_tree, size: 80, color: Colors.grey),
+                SizedBox(height: 20),
+                Text(
+                  "No Network Data Found",
+                  style: TextStyle(fontSize: 18, color: Colors.grey),
+                ),
+                SizedBox(height: 10),
+                Text(
+                  "Make sure a root user exists with isAdmin = true",
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          );
         }
 
         return LayoutBuilder(
           builder: (context, constraints) {
-            // InteractiveViewer se zoom in/out hoga
             return InteractiveViewer(
-              constrained: false, // Infinite scroll allow karta he
-              boundaryMargin: const EdgeInsets.all(100),
+              constrained: false,
+              boundaryMargin: const EdgeInsets.all(200),
               minScale: 0.1,
               maxScale: 4.0,
               child: Container(
-                // Screen k center se start ho
                 constraints: BoxConstraints(
                   minWidth: constraints.maxWidth,
                   minHeight: constraints.maxHeight,
                 ),
                 alignment: Alignment.topCenter,
-                padding: const EdgeInsets.only(top: 50, bottom: 50),
-                child: MLMNodeWidget(
-                  node: controller.rootNode.value!,
-                  isRoot: true,
+                padding: const EdgeInsets.only(top: 50, bottom: 100),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: MLMNodeWidget(
+                    node: controller.rootNode.value!,
+                    isRoot: true,
+                  ),
                 ),
               ),
             );

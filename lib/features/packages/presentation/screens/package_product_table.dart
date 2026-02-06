@@ -31,14 +31,11 @@ class _PackageProductTableState extends State<PackageProductTable> {
   String _productSearchQuery = "";
   int? sortColumnIndex;
   bool ascending = true;
-
   final ScrollController _verticalScroll = ScrollController();
-  final ScrollController _horizontalScroll = ScrollController();
 
   @override
   void dispose() {
     _verticalScroll.dispose();
-    _horizontalScroll.dispose();
     super.dispose();
   }
 
@@ -92,6 +89,7 @@ class _PackageProductTableState extends State<PackageProductTable> {
 
   double get totalSellingPrice =>
       widget.selectedProducts.fold(0, (sum, p) => sum + p.salePrice);
+
   double get totalOriginalPoints =>
       widget.selectedProducts.fold(0, (sum, p) => sum + p.productPoints);
 
@@ -109,7 +107,6 @@ class _PackageProductTableState extends State<PackageProductTable> {
   @override
   Widget build(BuildContext context) {
     bool showDecimals = widget.productController.showDecimals.value;
-    double screenWidth = MediaQuery.of(context).size.width;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -118,7 +115,7 @@ class _PackageProductTableState extends State<PackageProductTable> {
           "Step 1: Select Products",
           style: GoogleFonts.orbitron(
             color: Colors.deepPurple,
-            fontSize: 17, // Thora chota kiya
+            fontSize: 17,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -153,12 +150,10 @@ class _PackageProductTableState extends State<PackageProductTable> {
                 p.deliveryLocation.toLowerCase().contains(query) ||
                 p.modelNumber.toLowerCase().contains(query);
           }).toList();
-
           all = _getSortedProducts(all);
 
           return Container(
-            height: 480, // Height thori kam ki aik page fit karne ke liye
-            width: screenWidth,
+            height: 480,
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
@@ -174,109 +169,138 @@ class _PackageProductTableState extends State<PackageProductTable> {
                 child: SingleChildScrollView(
                   controller: _verticalScroll,
                   scrollDirection: Axis.vertical,
-                  child: Scrollbar(
-                    controller: _horizontalScroll,
-                    thumbVisibility: true,
-                    trackVisibility: true,
-                    thickness: 10,
-                    notificationPredicate: (notif) =>
-                        notif.depth == 0, // Depth set to 0 for this scrollbar
-                    child: SingleChildScrollView(
-                      controller: _horizontalScroll,
-                      scrollDirection: Axis.horizontal,
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(minWidth: screenWidth - 40),
-                        child: DataTable(
-                          sortColumnIndex: sortColumnIndex,
-                          sortAscending: ascending,
-                          columnSpacing:
-                              12, // Space kam kiya taake columns kareeb ayen
-                          horizontalMargin: 10,
-                          headingRowColor: MaterialStateProperty.all(
-                            Colors.grey.shade200,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      return DataTable(
+                        sortColumnIndex: sortColumnIndex,
+                        sortAscending: ascending,
+                        columnSpacing: 4,
+                        horizontalMargin: 8,
+                        headingRowColor: MaterialStateProperty.all(
+                          Colors.grey.shade200,
+                        ),
+                        showCheckboxColumn: false,
+                        dataRowHeight: 70,
+                        columns: [
+                          DataColumn(
+                            label: SizedBox(
+                              width: 35,
+                              child: _headerText("Sel"),
+                            ),
                           ),
-                          showCheckboxColumn: false,
-                          dataRowHeight: 75, // Tightened row height
-                          columns: [
-                            DataColumn(label: _headerText("Select")),
-                            DataColumn(
-                              label: _headerText("Product"),
-                              onSort: _sortProducts,
+                          DataColumn(
+                            label: SizedBox(
+                              width: 130,
+                              child: _headerText("Product"),
                             ),
-                            DataColumn(
-                              label: _headerText("Brand"),
-                              onSort: _sortProducts,
+                            onSort: _sortProducts,
+                          ),
+                          DataColumn(
+                            label: SizedBox(
+                              width: 60,
+                              child: _headerText("Brand"),
                             ),
-                            DataColumn(
-                              label: _headerText("Category"),
-                              onSort: _sortProducts,
+                            onSort: _sortProducts,
+                          ),
+                          DataColumn(
+                            label: SizedBox(
+                              width: 65,
+                              child: _headerText("Cat"),
                             ),
-                            DataColumn(
-                              label: _headerText("Sub Cat"),
-                              onSort: _sortProducts,
+                            onSort: _sortProducts,
+                          ),
+                          DataColumn(
+                            label: SizedBox(
+                              width: 65,
+                              child: _headerText("Sub"),
                             ),
-                            DataColumn(
-                              label: _headerText("Location"),
-                              onSort: _sortProducts,
+                            onSort: _sortProducts,
+                          ),
+                          DataColumn(
+                            label: SizedBox(
+                              width: 60,
+                              child: _headerText("Loc"),
                             ),
-                            DataColumn(
-                              label: _headerText("Buy Price"),
-                              numeric: true,
-                              onSort: _sortProducts,
+                            onSort: _sortProducts,
+                          ),
+                          DataColumn(
+                            label: SizedBox(
+                              width: 55,
+                              child: _headerText("Buy"),
                             ),
-                            DataColumn(
-                              label: _headerText("Sell Price"),
-                              numeric: true,
-                              onSort: _sortProducts,
+                            numeric: true,
+                            onSort: _sortProducts,
+                          ),
+                          DataColumn(
+                            label: SizedBox(
+                              width: 55,
+                              child: _headerText("Sell"),
                             ),
-                            DataColumn(
-                              label: _headerText("GP"),
-                              numeric: true,
-                              onSort: _sortProducts,
+                            numeric: true,
+                            onSort: _sortProducts,
+                          ),
+                          DataColumn(
+                            label: SizedBox(
+                              width: 50,
+                              child: _headerText("GP"),
                             ),
-                            DataColumn(
-                              label: _headerText("Cust Pts"),
-                              numeric: true,
-                              onSort: _sortProducts,
+                            numeric: true,
+                            onSort: _sortProducts,
+                          ),
+                          DataColumn(
+                            label: SizedBox(
+                              width: 50,
+                              child: _headerText("Cust"),
                             ),
-                            DataColumn(
-                              label: _headerText("Orig Pts"),
-                              numeric: true,
-                              onSort: _sortProducts,
+                            numeric: true,
+                            onSort: _sortProducts,
+                          ),
+                          DataColumn(
+                            label: SizedBox(
+                              width: 50,
+                              child: _headerText("Orig"),
                             ),
-                          ],
-                          rows: all.map((product) {
-                            final isSelected = widget.selectedProducts.any(
-                              (p) => p.id == product.id,
-                            );
-                            double origPts = product.productPoints;
-                            String custPtsDisplay = showDecimals
-                                ? origPts.toStringAsFixed(2)
-                                : origPts.floor().toString();
+                            numeric: true,
+                            onSort: _sortProducts,
+                          ),
+                        ],
+                        rows: all.map((product) {
+                          final isSelected = widget.selectedProducts.any(
+                            (p) => p.id == product.id,
+                          );
+                          double origPts = product.productPoints;
+                          String custPtsDisplay = showDecimals
+                              ? origPts.toStringAsFixed(2)
+                              : origPts.floor().toString();
 
-                            return DataRow(
-                              selected: isSelected,
-                              onSelectChanged: (_) =>
-                                  widget.onProductToggle(product),
-                              cells: [
-                                DataCell(
-                                  Checkbox(
+                          return DataRow(
+                            selected: isSelected,
+                            onSelectChanged: (_) =>
+                                widget.onProductToggle(product),
+                            cells: [
+                              DataCell(
+                                SizedBox(
+                                  width: 35,
+                                  child: Checkbox(
                                     value: isSelected,
                                     onChanged: (_) =>
                                         widget.onProductToggle(product),
                                     activeColor: Colors.deepPurple,
                                   ),
                                 ),
-                                DataCell(
-                                  Row(
+                              ),
+                              DataCell(
+                                SizedBox(
+                                  width: 130,
+                                  child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       if (product.images.isNotEmpty)
                                         Container(
-                                          width: 50,
-                                          height: 50,
+                                          width: 40,
+                                          height: 40,
                                           margin: const EdgeInsets.only(
-                                            right: 8,
+                                            right: 6,
                                           ),
                                           decoration: BoxDecoration(
                                             borderRadius: BorderRadius.circular(
@@ -292,9 +316,7 @@ class _PackageProductTableState extends State<PackageProductTable> {
                                             ),
                                           ),
                                         ),
-                                      SizedBox(
-                                        width:
-                                            130, // Limit width of product name to prevent overflow
+                                      Expanded(
                                         child: Column(
                                           mainAxisAlignment:
                                               MainAxisAlignment.center,
@@ -308,7 +330,7 @@ class _PackageProductTableState extends State<PackageProductTable> {
                                               style: GoogleFonts.comicNeue(
                                                 color: Colors.black,
                                                 fontWeight: FontWeight.bold,
-                                                fontSize: 13,
+                                                fontSize: 11,
                                               ),
                                             ),
                                             Text(
@@ -318,7 +340,7 @@ class _PackageProductTableState extends State<PackageProductTable> {
                                               style: GoogleFonts.comicNeue(
                                                 color: Colors.black,
                                                 fontWeight: FontWeight.bold,
-                                                fontSize: 11,
+                                                fontSize: 9,
                                               ),
                                             ),
                                           ],
@@ -327,46 +349,90 @@ class _PackageProductTableState extends State<PackageProductTable> {
                                     ],
                                   ),
                                 ),
-                                DataCell(_cellText(product.brand)),
-                                DataCell(_cellText(product.category)),
-                                DataCell(_cellText(product.subCategory)),
-                                DataCell(_cellText(product.deliveryLocation)),
-                                DataCell(
-                                  _cellText(
+                              ),
+                              DataCell(
+                                SizedBox(
+                                  width: 60,
+                                  child: _cellText(product.brand, maxLines: 2),
+                                ),
+                              ),
+                              DataCell(
+                                SizedBox(
+                                  width: 65,
+                                  child: _cellText(
+                                    product.category,
+                                    maxLines: 2,
+                                  ),
+                                ),
+                              ),
+                              DataCell(
+                                SizedBox(
+                                  width: 65,
+                                  child: _cellText(
+                                    product.subCategory,
+                                    maxLines: 2,
+                                  ),
+                                ),
+                              ),
+                              DataCell(
+                                SizedBox(
+                                  width: 60,
+                                  child: _cellText(
+                                    product.deliveryLocation,
+                                    maxLines: 2,
+                                  ),
+                                ),
+                              ),
+                              DataCell(
+                                SizedBox(
+                                  width: 55,
+                                  child: _cellText(
                                     "${product.purchasePrice.toInt()}",
                                     color: Colors.red,
                                   ),
                                 ),
-                                DataCell(
-                                  _cellText(
+                              ),
+                              DataCell(
+                                SizedBox(
+                                  width: 55,
+                                  child: _cellText(
                                     "${product.salePrice.toInt()}",
                                     color: Colors.purple,
                                   ),
                                 ),
-                                DataCell(
-                                  _cellText(
+                              ),
+                              DataCell(
+                                SizedBox(
+                                  width: 50,
+                                  child: _cellText(
                                     "${(product.salePrice - product.purchasePrice).toInt()}",
                                     color: Colors.blue,
                                   ),
                                 ),
-                                DataCell(
-                                  _cellText(
+                              ),
+                              DataCell(
+                                SizedBox(
+                                  width: 50,
+                                  child: _cellText(
                                     custPtsDisplay,
                                     color: Colors.orange.shade900,
                                   ),
                                 ),
-                                DataCell(
-                                  _cellText(
-                                    origPts.toStringAsFixed(3),
+                              ),
+                              DataCell(
+                                SizedBox(
+                                  width: 50,
+                                  child: _cellText(
+                                    origPts.toStringAsFixed(2),
                                     color: Colors.deepOrange,
                                   ),
                                 ),
-                              ],
-                            );
-                          }).toList(),
-                        ),
-                      ),
-                    ),
+                              ),
+                            ],
+                          );
+                        }).toList(),
+                      );
+                    },
                   ),
                 ),
               ),
@@ -431,17 +497,24 @@ class _PackageProductTableState extends State<PackageProductTable> {
     style: GoogleFonts.comicNeue(
       color: Colors.black,
       fontWeight: FontWeight.bold,
-      fontSize: 14,
-    ), // Thora chota kiya
+      fontSize: 11,
+    ),
+    overflow: TextOverflow.ellipsis,
   );
 
-  Widget _cellText(String text, {Color color = Colors.black}) => Text(
+  Widget _cellText(
+    String text, {
+    Color color = Colors.black,
+    int maxLines = 1,
+  }) => Text(
     text,
     style: GoogleFonts.comicNeue(
       color: color,
       fontWeight: FontWeight.bold,
-      fontSize: 13,
-    ), // Thora chota kiya
+      fontSize: 10,
+    ),
+    maxLines: maxLines,
+    overflow: TextOverflow.ellipsis,
   );
 
   Widget _sumItem(String label, String value, Color color) => Column(
@@ -463,7 +536,7 @@ class _PackageProductTableState extends State<PackageProductTable> {
           fontWeight: FontWeight.w900,
           color: color,
         ),
-      ), // Summary tightened
+      ),
     ],
   );
 }
