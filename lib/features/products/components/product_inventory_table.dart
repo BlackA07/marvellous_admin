@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
-
 import '../controller/products_controller.dart';
 import '../models/product_model.dart';
 import '../presentation/screens/add_product_screen.dart';
@@ -37,7 +36,10 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
 
   // --- PAGINATION STATE ---
   int _currentPage = 1;
-  final int _itemsPerPage = 11; // User requirement: Odd number (9 or 11)
+  final int _itemsPerPage = 11;
+
+  // --- SELECTION STATE ---
+  Set<String> selectedProductIds = {};
 
   // Controllers for Scrolling
   final ScrollController _verticalController = ScrollController();
@@ -47,7 +49,6 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
   @override
   void initState() {
     super.initState();
-    // Scroll Sync Logic
     _topHorizontalController.addListener(() {
       if (_topHorizontalController.offset !=
           _bottomHorizontalController.offset) {
@@ -70,7 +71,6 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
     super.dispose();
   }
 
-  // --- SORTING LOGIC ---
   void _sort<T>(
     Comparable<T> Function(ProductModel p) getField,
     int columnIndex,
@@ -82,7 +82,6 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
         sortColumnIndex = columnIndex;
         ascending = true;
       }
-
       widget.filteredList.sort((a, b) {
         final aValue = getField(a);
         final bValue = getField(b);
@@ -93,41 +92,121 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
     });
   }
 
-  // --- DYNAMIC POINTS CALCULATION (FIXED) ---
   double _calculatePoints(ProductModel product) {
-    // 1. Get Sale and Purchase Price safely
     double sale = product.salePrice;
-
-    // Make sure model has purchasePrice, else treat as 0 to avoid null errors if distinct
     double purchase = product.purchasePrice;
-
-    // 2. Get Profit Per Point from Controller
-    // Using simple .toDouble() in case it's an int or RxDouble
     double profitPerPointVal = 0.0;
+
     try {
       profitPerPointVal = widget.controller.profitPerPoint.toDouble();
     } catch (e) {
-      // Fallback incase variable access fails
       profitPerPointVal = 1.0;
     }
 
-    // 3. CRITICAL: Prevent Division by Zero
     if (profitPerPointVal == 0) {
       return 0.0;
     }
 
-    // 4. Calculate Gross Profit
     double grossProfit = sale - purchase;
-
-    // 5. Calculate Points
     double points = grossProfit / profitPerPointVal;
 
-    // 6. Safety Check: If result is NaN or Infinity, return 0.0
     if (points.isNaN || points.isInfinite) {
       return 0.0;
     }
-
     return points;
+  }
+
+  // --- CALCULATE TOTAL POINTS OF FILTERED LIST ---
+  double _calculateTotalPoints() {
+    double total = 0.0;
+    for (var product in widget.filteredList) {
+      total += _calculatePoints(product);
+    }
+    return total;
+  }
+
+  // --- CALCULATE TOTAL AMOUNT (PRICE) OF FILTERED LIST ---
+  double _calculateTotalAmount() {
+    double total = 0.0;
+    for (var product in widget.filteredList) {
+      total += product.salePrice;
+    }
+    return total;
+  }
+
+  // --- CALCULATE TOTAL POINTS OF SELECTED PRODUCTS ---
+  double _calculateSelectedPoints() {
+    double total = 0.0;
+    for (var product in widget.filteredList) {
+      if (selectedProductIds.contains(product.id)) {
+        total += _calculatePoints(product);
+      }
+    }
+    return total;
+  }
+
+  // --- CALCULATE TOTAL AMOUNT OF SELECTED PRODUCTS ---
+  double _calculateSelectedAmount() {
+    double total = 0.0;
+    for (var product in widget.filteredList) {
+      if (selectedProductIds.contains(product.id)) {
+        total += product.salePrice;
+      }
+    }
+    return total;
+  }
+
+  // --- TOGGLE SELECT ALL ---
+  void _toggleSelectAll(List<ProductModel> currentDisplayList) {
+    setState(() {
+      if (selectedProductIds.length == currentDisplayList.length &&
+          currentDisplayList.isNotEmpty) {
+        selectedProductIds.clear();
+      } else {
+        selectedProductIds = currentDisplayList.map((p) => p.id!).toSet();
+      }
+    });
+  }
+
+  // --- BULK DELETE SELECTED ---
+  void _deleteSelected() {
+    if (selectedProductIds.isEmpty) {
+      Get.snackbar(
+        "No Selection",
+        "Please select products to delete",
+        backgroundColor: Colors.orange,
+        colorText: Colors.white,
+      );
+      return;
+    }
+
+    final int count = selectedProductIds.length;
+
+    Get.defaultDialog(
+      title: "Delete Selected Products?",
+      titleStyle: GoogleFonts.comicNeue(fontWeight: FontWeight.bold),
+      middleText: "Are you sure you want to delete $count product(s)?",
+      textConfirm: "Delete",
+      textCancel: "Cancel",
+      confirmTextColor: Colors.white,
+      buttonColor: Colors.redAccent,
+      backgroundColor: Colors.black,
+      onConfirm: () async {
+        Get.back();
+        for (var id in selectedProductIds) {
+          await widget.controller.deleteProduct(id, isPackage: false);
+        }
+        setState(() {
+          selectedProductIds.clear();
+        });
+        Get.snackbar(
+          "Deleted",
+          "$count product(s) removed",
+          backgroundColor: Colors.black87,
+          colorText: Colors.white,
+        );
+      },
+    );
   }
 
   @override
@@ -135,32 +214,35 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
     const Color cardColor = Color.fromARGB(255, 231, 225, 225);
     const Color textColor = Colors.black;
 
-    // --- COMPACT SIZES ---
     final double _fontSize = widget.isMobile ? 11 : 13;
     final double _iconSize = widget.isMobile ? 16 : 18;
-    final double _rowHeight = widget.isMobile ? 45 : 50;
+    final double _rowHeight = widget.isMobile ? 50 : 55;
     final double _colSpacing = widget.isMobile ? 10 : 20;
 
-    // --- PAGINATION LOGIC ---
     int totalItems = widget.filteredList.length;
     int totalPages = (totalItems / _itemsPerPage).ceil();
     if (totalPages == 0) totalPages = 1;
-
-    // Ensure current page is valid
     if (_currentPage > totalPages) _currentPage = totalPages;
 
-    // Slice the list for current page
     int startIndex = (_currentPage - 1) * _itemsPerPage;
     int endIndex = startIndex + _itemsPerPage;
     if (endIndex > totalItems) endIndex = totalItems;
 
-    // Ye list ab table men show hogi
     final List<ProductModel> currentDisplayList = widget.filteredList.sublist(
       startIndex,
       endIndex,
     );
 
-    final double estimatedTableWidth = widget.isMobile ? 800 : 1200;
+    final double estimatedTableWidth = widget.isMobile ? 900 : 1300;
+
+    // --- TOTALS ---
+    double totalFilteredPoints = _calculateTotalPoints();
+    double totalFilteredAmount = _calculateTotalAmount();
+    double totalSelectedPoints = _calculateSelectedPoints();
+    double totalSelectedAmount = _calculateSelectedAmount();
+
+    // --- Check showDecimals from Firestore (global setting) ---
+    bool showDecimals = widget.controller.showDecimals.value;
 
     return Container(
       decoration: BoxDecoration(
@@ -175,39 +257,156 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
         ],
       ),
       child: SizedBox(
-        // Height allows for pagination controls
-        height: 760,
+        height: 820,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // --- HEADER ---
+            // --- HEADER WITH TOTALS ---
             Padding(
               padding: const EdgeInsets.all(15.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    "Inventory List (${widget.filteredList.length})",
-                    style: GoogleFonts.orbitron(
-                      color: textColor,
-                      fontSize: widget.isMobile ? 16 : 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  if (widget.controller.searchHistoryList.isNotEmpty)
-                    TextButton(
-                      onPressed: () async {
-                        await widget.controller.clearAllHistory();
-                      },
-                      child: const Text(
-                        "Clear History",
-                        style: TextStyle(color: Colors.grey, fontSize: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        "Inventory List (${widget.filteredList.length})",
+                        style: GoogleFonts.orbitron(
+                          color: textColor,
+                          fontSize: widget.isMobile ? 16 : 18,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
+                      if (widget.controller.searchHistoryList.isNotEmpty)
+                        TextButton(
+                          onPressed: () async {
+                            await widget.controller.clearAllHistory();
+                          },
+                          child: const Text(
+                            "Clear History",
+                            style: TextStyle(color: Colors.grey, fontSize: 12),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  // --- TOTAL POINTS & AMOUNT ROW ---
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 8,
+                    children: [
+                      // Total Points
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.amber.shade700),
+                        ),
+                        child: Text(
+                          showDecimals
+                              ? "Total Points: ${totalFilteredPoints.toStringAsFixed(1)}"
+                              : "Total Points: ${totalFilteredPoints.floor()}",
+                          style: GoogleFonts.comicNeue(
+                            color: Colors.amber.shade900,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      // Total Amount
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.green.shade700),
+                        ),
+                        child: Text(
+                          "Total Amount: PKR ${totalFilteredAmount.toInt()}",
+                          style: GoogleFonts.comicNeue(
+                            color: Colors.green.shade900,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      // Selected Totals
+                      if (selectedProductIds.isNotEmpty) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade100,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.blue.shade700),
+                          ),
+                          child: Text(
+                            showDecimals
+                                ? "Selected: ${selectedProductIds.length} (${totalSelectedPoints.toStringAsFixed(1)} pts, PKR ${totalSelectedAmount.toInt()})"
+                                : "Selected: ${selectedProductIds.length} (${totalSelectedPoints.floor()} pts, PKR ${totalSelectedAmount.toInt()})",
+                            style: GoogleFonts.comicNeue(
+                              color: Colors.blue.shade900,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ],
               ),
             ),
             const Divider(color: Colors.grey, height: 1),
+
+            // --- SELECTION TOOLBAR ---
+            if (selectedProductIds.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 15,
+                  vertical: 10,
+                ),
+                color: Colors.blue.shade50,
+                child: Row(
+                  children: [
+                    Text(
+                      "${selectedProductIds.length} selected",
+                      style: GoogleFonts.comicNeue(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        color: Colors.black,
+                      ),
+                    ),
+                    const Spacer(),
+                    TextButton.icon(
+                      onPressed: () =>
+                          setState(() => selectedProductIds.clear()),
+                      icon: const Icon(Icons.clear, size: 16),
+                      label: const Text("Clear"),
+                    ),
+                    const SizedBox(width: 10),
+                    ElevatedButton.icon(
+                      onPressed: _deleteSelected,
+                      icon: const Icon(Icons.delete, size: 16),
+                      label: const Text("Delete Selected"),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.redAccent,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
 
             // --- EMPTY STATE ---
             if (widget.filteredList.isEmpty)
@@ -241,7 +440,6 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                         ),
                       ),
                     ),
-
                     // --- TABLE CONTENT ---
                     Expanded(
                       child: Scrollbar(
@@ -273,7 +471,21 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                                   headingRowHeight: _rowHeight,
                                   columnSpacing: _colSpacing,
                                   horizontalMargin: 10,
+                                  showCheckboxColumn: false, // CRITICAL FIX
                                   columns: [
+                                    // --- SELECT ALL CHECKBOX ---
+                                    DataColumn(
+                                      label: Checkbox(
+                                        value:
+                                            selectedProductIds.length ==
+                                                currentDisplayList.length &&
+                                            currentDisplayList.isNotEmpty,
+                                        onChanged: (_) => _toggleSelectAll(
+                                          currentDisplayList,
+                                        ),
+                                        activeColor: Colors.blue,
+                                      ),
+                                    ),
                                     DataColumn(
                                       label: _tableHeader(
                                         "Product",
@@ -330,7 +542,6 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                                       onSort: (index, _) =>
                                           _sort((p) => p.stockQuantity, index),
                                     ),
-                                    // --- POINTS COLUMN (Modified) ---
                                     DataColumn(
                                       label: _tableHeader(
                                         "Pts (GP)",
@@ -338,7 +549,6 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                                         _fontSize,
                                       ),
                                       numeric: true,
-                                      // Sort based on calculated points
                                       onSort: (index, _) => _sort(
                                         (p) => _calculatePoints(p),
                                         index,
@@ -362,18 +572,50 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                                       ),
                                     ),
                                   ],
-                                  // Use currentDisplayList (Paginated)
                                   rows: currentDisplayList.map((product) {
                                     int stockIn = product.stockQuantity;
                                     int stockOut = product.stockOut;
-                                    // Use safe calculation
                                     double dynamicPoints = _calculatePoints(
                                       product,
                                     );
+                                    bool isSelected = selectedProductIds
+                                        .contains(product.id);
 
                                     return DataRow(
+                                      selected: isSelected,
+                                      onSelectChanged: (selected) {
+                                        setState(() {
+                                          if (selected == true) {
+                                            selectedProductIds.add(product.id!);
+                                          } else {
+                                            selectedProductIds.remove(
+                                              product.id,
+                                            );
+                                          }
+                                        });
+                                      },
                                       cells: [
-                                        // Product Name & Image
+                                        // --- CHECKBOX CELL ---
+                                        DataCell(
+                                          Checkbox(
+                                            value: isSelected,
+                                            onChanged: (val) {
+                                              setState(() {
+                                                if (val == true) {
+                                                  selectedProductIds.add(
+                                                    product.id!,
+                                                  );
+                                                } else {
+                                                  selectedProductIds.remove(
+                                                    product.id,
+                                                  );
+                                                }
+                                              });
+                                            },
+                                            activeColor: Colors.blue,
+                                          ),
+                                        ),
+                                        // --- PRODUCT NAME & MODEL NUMBER ---
                                         DataCell(
                                           Row(
                                             mainAxisSize: MainAxisSize.min,
@@ -401,16 +643,42 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                                                   ),
                                                 ),
                                               SizedBox(
-                                                width: 100,
-                                                child: Text(
-                                                  product.name,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  style: GoogleFonts.comicNeue(
-                                                    color: textColor,
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: _fontSize,
-                                                  ),
+                                                width: 120,
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment.center,
+                                                  children: [
+                                                    Text(
+                                                      product.name,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style:
+                                                          GoogleFonts.comicNeue(
+                                                            color: textColor,
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                            fontSize: _fontSize,
+                                                          ),
+                                                    ),
+                                                    if (product
+                                                        .modelNumber
+                                                        .isNotEmpty)
+                                                      Text(
+                                                        product.modelNumber,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                        style:
+                                                            GoogleFonts.comicNeue(
+                                                              color: Colors
+                                                                  .grey
+                                                                  .shade600,
+                                                              fontSize:
+                                                                  _fontSize - 2,
+                                                            ),
+                                                      ),
+                                                  ],
                                                 ),
                                               ),
                                             ],
@@ -436,12 +704,9 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                                           "$stockIn / $stockOut",
                                           _fontSize,
                                         ),
-
-                                        // --- UPDATED POINTS CELL (SAFE) ---
                                         DataCell(
                                           Text(
-                                            // Check again for safety before printing to string
-                                            product.showDecimalPoints
+                                            showDecimals
                                                 ? dynamicPoints.toStringAsFixed(
                                                     1,
                                                   )
@@ -455,8 +720,6 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                                             ),
                                           ),
                                         ),
-
-                                        // Price Cell
                                         DataCell(
                                           Text(
                                             "PKR ${product.salePrice.toInt()}",
@@ -467,8 +730,6 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                                             ),
                                           ),
                                         ),
-
-                                        // Actions Cell
                                         DataCell(
                                           Row(
                                             mainAxisSize: MainAxisSize.min,
@@ -529,8 +790,7 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                         ),
                       ),
                     ),
-
-                    // --- PAGINATION CONTROLS FOOTER ---
+                    // --- PAGINATION CONTROLS ---
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 20,
@@ -545,7 +805,7 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
                           Text(
-                            "Showing $startIndex - $endIndex of $totalItems",
+                            "Showing ${startIndex + 1} - $endIndex of $totalItems",
                             style: GoogleFonts.comicNeue(
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
@@ -583,7 +843,6 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
     );
   }
 
-  // --- HELPER WIDGETS ---
   Widget _tableHeader(String text, Color color, double fontSize) {
     return Text(
       text,

@@ -76,6 +76,7 @@ class ProductSearchBar extends StatelessWidget {
                         optionsViewBuilder: (context, onSelect, options) {
                           return Material(
                             elevation: 4,
+                            color: Colors.white,
                             borderRadius: BorderRadius.circular(8),
                             child: ListView(
                               shrinkWrap: true,
@@ -84,9 +85,7 @@ class ProductSearchBar extends StatelessWidget {
                                   dense: true,
                                   title: Text(
                                     e,
-                                    style: const TextStyle(
-                                      color: Color.fromARGB(255, 255, 255, 255),
-                                    ),
+                                    style: const TextStyle(color: Colors.black),
                                   ),
                                   trailing: IconButton(
                                     icon: const Icon(Icons.close, size: 16),
@@ -121,6 +120,7 @@ class ProductSearchBar extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 15),
+            // --- FILTER BUTTON ---
             InkWell(
               onTap: () {
                 showDialog(
@@ -138,19 +138,66 @@ class ProductSearchBar extends StatelessWidget {
                 child: const Icon(Icons.filter_list, color: Colors.black),
               ),
             ),
+            const SizedBox(width: 15),
+            // --- REFRESH BUTTON ---
+            InkWell(
+              onTap: () async {
+                controller.updateSearch('');
+                controller.clearAllFilters();
+                controller.fetchProducts();
+                Get.snackbar(
+                  "Refreshed",
+                  "Product list updated",
+                  backgroundColor: Colors.green,
+                  colorText: Colors.white,
+                  duration: const Duration(seconds: 2),
+                  snackPosition: SnackPosition.TOP,
+                );
+              },
+              child: Container(
+                height: 50,
+                width: 50,
+                decoration: BoxDecoration(
+                  color: cardColor,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.refresh, color: Colors.black),
+              ),
+            ),
           ],
         ),
 
+        // --- ACTIVE FILTER CHIPS ---
         Obx(() {
-          if (controller.selectedCategory.value == 'All') {
-            return const SizedBox();
-          }
+          bool hasFilters =
+              controller.selectedCategory.value != 'All' ||
+              controller.selectedSubCategory.value != 'All';
+
+          if (!hasFilters) return const SizedBox();
 
           return Padding(
             padding: const EdgeInsets.only(top: 10),
-            child: Chip(
-              label: Text(controller.selectedCategory.value),
-              onDeleted: () => controller.updateCategoryFilter('All'),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                // Category Chip
+                if (controller.selectedCategory.value != 'All')
+                  Chip(
+                    label: Text(controller.selectedCategory.value),
+                    deleteIcon: const Icon(Icons.close, size: 16),
+                    onDeleted: () => controller.updateCategoryFilter('All'),
+                    backgroundColor: Colors.orange.shade100,
+                  ),
+                // Subcategory Chip
+                if (controller.selectedSubCategory.value != 'All')
+                  Chip(
+                    label: Text(controller.selectedSubCategory.value),
+                    deleteIcon: const Icon(Icons.close, size: 16),
+                    onDeleted: () => controller.updateSubCategoryFilter('All'),
+                    backgroundColor: Colors.red.shade100,
+                  ),
+              ],
             ),
           );
         }),

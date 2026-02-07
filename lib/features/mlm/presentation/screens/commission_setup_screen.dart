@@ -283,13 +283,15 @@ class _SyncInputsState extends State<SyncInputs> {
   void initState() {
     super.initState();
     _pCtrl = TextEditingController(text: widget.initialPercent);
-    _aCtrl = TextEditingController(text: widget.initialAmount.toStringAsFixed(2));
+    _aCtrl = TextEditingController(
+      text: widget.initialAmount.toStringAsFixed(2),
+    );
   }
 
   @override
   void didUpdateWidget(SyncInputs oldWidget) {
     super.didUpdateWidget(oldWidget);
-    
+
     if (!_isUpdating) {
       if (widget.initialPercent != oldWidget.initialPercent) {
         _pCtrl.text = widget.initialPercent;
@@ -303,19 +305,19 @@ class _SyncInputsState extends State<SyncInputs> {
   void _syncAmount() {
     if (_isUpdating) return;
     _isUpdating = true;
-    
+
     final p = double.tryParse(_pCtrl.text) ?? 0;
     final total = widget.controller.totalDistAmount.value;
     final exact = (p * total) / 100;
     _aCtrl.text = exact.toStringAsFixed(2);
-    
+
     _isUpdating = false;
   }
 
   void _syncPercent() {
     if (_isUpdating) return;
     _isUpdating = true;
-    
+
     final a = double.tryParse(_aCtrl.text) ?? 0;
     final total = widget.controller.totalDistAmount.value;
     if (total <= 0) {
@@ -332,7 +334,7 @@ class _SyncInputsState extends State<SyncInputs> {
     } else if (widget.isCashback) {
       widget.controller.updateCashbackByAmount(a);
     }
-    
+
     _isUpdating = false;
   }
 
@@ -396,8 +398,8 @@ class _SyncInputsState extends State<SyncInputs> {
         contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
         filled: true,
-        fillColor: readOnly 
-            ? const Color.fromARGB(255, 240, 240, 240) 
+        fillColor: readOnly
+            ? const Color.fromARGB(255, 240, 240, 240)
             : const Color.fromARGB(255, 209, 176, 176),
       ),
       onChanged: onChanged,
@@ -511,7 +513,7 @@ class _CommissionLevelItem extends StatelessWidget {
   Widget build(BuildContext context) {
     return Obx(() {
       final levelItem = controller.commissionLevels[index];
-      
+
       return Container(
         decoration: BoxDecoration(
           color: cardColor,
