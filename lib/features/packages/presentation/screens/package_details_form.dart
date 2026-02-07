@@ -46,6 +46,12 @@ class PackageDetailsForm extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Common text style for all inputs
+    const TextStyle inputTextStyle = TextStyle(
+      color: Colors.black,
+      fontWeight: FontWeight.w500,
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -65,6 +71,7 @@ class PackageDetailsForm extends StatelessWidget {
             Expanded(
               child: TextFormField(
                 controller: nameCtrl,
+                style: inputTextStyle, // Text color black
                 decoration: _deco("Package Name"),
                 validator: (v) => v!.isEmpty ? "Required" : null,
               ),
@@ -72,9 +79,10 @@ class PackageDetailsForm extends StatelessWidget {
             IconButton(
               icon: const Icon(Icons.auto_fix_high, color: Colors.deepPurple),
               onPressed: () {
-                if (selectedProducts.isNotEmpty)
+                if (selectedProducts.isNotEmpty) {
                   nameCtrl.text =
                       "Combo: ${selectedProducts.map((p) => p.name).join(" + ")}";
+                }
               },
             ),
           ],
@@ -82,6 +90,7 @@ class PackageDetailsForm extends StatelessWidget {
         const SizedBox(height: 15),
         TextFormField(
           controller: descCtrl,
+          style: inputTextStyle, // Text color black
           maxLines: 3,
           decoration: _deco("Description"),
         ),
@@ -92,11 +101,13 @@ class PackageDetailsForm extends StatelessWidget {
               child: Obx(
                 () => DropdownButtonFormField<String>(
                   value: selectedVendorId,
+                  style: inputTextStyle, // Selected item text color black
+                  dropdownColor: Colors.white,
                   items: vendorController.vendors
                       .map(
                         (v) => DropdownMenuItem(
                           value: v.id,
-                          child: Text(v.storeName),
+                          child: Text(v.storeName, style: inputTextStyle),
                         ),
                       )
                       .toList(),
@@ -109,6 +120,8 @@ class PackageDetailsForm extends StatelessWidget {
             Expanded(
               child: DropdownButtonFormField<String>(
                 value: selectedLocation,
+                style: inputTextStyle, // Selected item text color black
+                dropdownColor: Colors.white,
                 items:
                     [
                           "Karachi Only",
@@ -116,7 +129,12 @@ class PackageDetailsForm extends StatelessWidget {
                           "Worldwide",
                           "Store Pickup Only",
                         ]
-                        .map((l) => DropdownMenuItem(value: l, child: Text(l)))
+                        .map(
+                          (l) => DropdownMenuItem(
+                            value: l,
+                            child: Text(l, style: inputTextStyle),
+                          ),
+                        )
                         .toList(),
                 onChanged: onLocationChanged,
                 decoration: _deco("Location"),
@@ -187,8 +205,20 @@ class PackageDetailsForm extends StatelessWidget {
 
   InputDecoration _deco(String l) => InputDecoration(
     labelText: l,
+    labelStyle: const TextStyle(color: Colors.black54), // Label color
     filled: true,
     fillColor: Colors.white,
-    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: const BorderSide(color: Colors.grey),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: BorderSide(color: Colors.grey.shade300),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: const BorderSide(color: Colors.deepPurple, width: 2),
+    ),
   );
 }

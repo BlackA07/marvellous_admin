@@ -25,6 +25,12 @@ class PackagePricingSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Common style for black text in inputs
+    const TextStyle inputStyle = TextStyle(
+      color: Colors.black,
+      fontWeight: FontWeight.w500,
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -44,6 +50,7 @@ class PackagePricingSection extends StatelessWidget {
             Expanded(
               child: TextFormField(
                 controller: originalPriceCtrl,
+                style: inputStyle, // Black text
                 keyboardType: TextInputType.number,
                 decoration: _deco("Fake Price"),
               ),
@@ -52,6 +59,7 @@ class PackagePricingSection extends StatelessWidget {
             Expanded(
               child: TextFormField(
                 controller: salePriceCtrl,
+                style: inputStyle, // Black text
                 keyboardType: TextInputType.number,
                 decoration: _deco("Bundle Sale Price"),
                 validator: (v) => v!.isEmpty ? "Required" : null,
@@ -62,6 +70,7 @@ class PackagePricingSection extends StatelessWidget {
         const SizedBox(height: 15),
         TextFormField(
           controller: stockCtrl,
+          style: inputStyle, // Black text
           keyboardType: TextInputType.number,
           decoration: _deco("Stock Qty"),
         ),
@@ -137,7 +146,15 @@ class PackagePricingSection extends StatelessWidget {
   Widget _priceRow(String l, String v, Color c, [bool b = false]) => Row(
     mainAxisAlignment: MainAxisAlignment.spaceBetween,
     children: [
-      Text(l, style: const TextStyle(fontSize: 13, color: Colors.black54)),
+      // Label color changed to black87 for better visibility
+      Text(
+        l,
+        style: const TextStyle(
+          fontSize: 13,
+          color: Colors.black87,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
       Text(
         v,
         style: TextStyle(
@@ -151,8 +168,13 @@ class PackagePricingSection extends StatelessWidget {
 
   InputDecoration _deco(String l) => InputDecoration(
     labelText: l,
+    labelStyle: const TextStyle(color: Colors.black54), // Label color blackish
     filled: true,
     fillColor: Colors.white,
     border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: BorderSide(color: Colors.grey.shade400),
+    ),
   );
 }

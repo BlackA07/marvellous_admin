@@ -153,7 +153,7 @@ class _PackageProductTableState extends State<PackageProductTable> {
           all = _getSortedProducts(all);
 
           return Container(
-            height: 480,
+            height: 400,
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
@@ -184,48 +184,48 @@ class _PackageProductTableState extends State<PackageProductTable> {
                         columns: [
                           DataColumn(
                             label: SizedBox(
-                              width: 35,
+                              width: 70,
                               child: _headerText("Sel"),
                             ),
                           ),
                           DataColumn(
                             label: SizedBox(
-                              width: 130,
+                              width: 140,
                               child: _headerText("Product"),
                             ),
                             onSort: _sortProducts,
                           ),
                           DataColumn(
                             label: SizedBox(
-                              width: 60,
+                              width: 70,
                               child: _headerText("Brand"),
                             ),
                             onSort: _sortProducts,
                           ),
                           DataColumn(
                             label: SizedBox(
-                              width: 65,
+                              width: 70,
                               child: _headerText("Cat"),
                             ),
                             onSort: _sortProducts,
                           ),
                           DataColumn(
                             label: SizedBox(
-                              width: 65,
+                              width: 70,
                               child: _headerText("Sub"),
                             ),
                             onSort: _sortProducts,
                           ),
                           DataColumn(
                             label: SizedBox(
-                              width: 60,
+                              width: 70,
                               child: _headerText("Loc"),
                             ),
                             onSort: _sortProducts,
                           ),
                           DataColumn(
                             label: SizedBox(
-                              width: 55,
+                              width: 70,
                               child: _headerText("Buy"),
                             ),
                             numeric: true,
@@ -233,7 +233,7 @@ class _PackageProductTableState extends State<PackageProductTable> {
                           ),
                           DataColumn(
                             label: SizedBox(
-                              width: 55,
+                              width: 70,
                               child: _headerText("Sell"),
                             ),
                             numeric: true,
@@ -241,7 +241,7 @@ class _PackageProductTableState extends State<PackageProductTable> {
                           ),
                           DataColumn(
                             label: SizedBox(
-                              width: 50,
+                              width: 70,
                               child: _headerText("GP"),
                             ),
                             numeric: true,
@@ -249,7 +249,7 @@ class _PackageProductTableState extends State<PackageProductTable> {
                           ),
                           DataColumn(
                             label: SizedBox(
-                              width: 50,
+                              width: 70,
                               child: _headerText("Cust"),
                             ),
                             numeric: true,
@@ -257,7 +257,7 @@ class _PackageProductTableState extends State<PackageProductTable> {
                           ),
                           DataColumn(
                             label: SizedBox(
-                              width: 50,
+                              width: 70,
                               child: _headerText("Orig"),
                             ),
                             numeric: true,
@@ -352,13 +352,13 @@ class _PackageProductTableState extends State<PackageProductTable> {
                               ),
                               DataCell(
                                 SizedBox(
-                                  width: 60,
+                                  width: 70,
                                   child: _cellText(product.brand, maxLines: 2),
                                 ),
                               ),
                               DataCell(
                                 SizedBox(
-                                  width: 65,
+                                  width: 70,
                                   child: _cellText(
                                     product.category,
                                     maxLines: 2,
@@ -367,7 +367,7 @@ class _PackageProductTableState extends State<PackageProductTable> {
                               ),
                               DataCell(
                                 SizedBox(
-                                  width: 65,
+                                  width: 70,
                                   child: _cellText(
                                     product.subCategory,
                                     maxLines: 2,
@@ -376,7 +376,7 @@ class _PackageProductTableState extends State<PackageProductTable> {
                               ),
                               DataCell(
                                 SizedBox(
-                                  width: 60,
+                                  width: 70,
                                   child: _cellText(
                                     product.deliveryLocation,
                                     maxLines: 2,
@@ -385,7 +385,7 @@ class _PackageProductTableState extends State<PackageProductTable> {
                               ),
                               DataCell(
                                 SizedBox(
-                                  width: 55,
+                                  width: 70,
                                   child: _cellText(
                                     "${product.purchasePrice.toInt()}",
                                     color: Colors.red,
@@ -394,7 +394,7 @@ class _PackageProductTableState extends State<PackageProductTable> {
                               ),
                               DataCell(
                                 SizedBox(
-                                  width: 55,
+                                  width: 70,
                                   child: _cellText(
                                     "${product.salePrice.toInt()}",
                                     color: Colors.purple,
@@ -403,7 +403,7 @@ class _PackageProductTableState extends State<PackageProductTable> {
                               ),
                               DataCell(
                                 SizedBox(
-                                  width: 50,
+                                  width: 70,
                                   child: _cellText(
                                     "${(product.salePrice - product.purchasePrice).toInt()}",
                                     color: Colors.blue,
@@ -412,7 +412,7 @@ class _PackageProductTableState extends State<PackageProductTable> {
                               ),
                               DataCell(
                                 SizedBox(
-                                  width: 50,
+                                  width: 70,
                                   child: _cellText(
                                     custPtsDisplay,
                                     color: Colors.orange.shade900,
@@ -421,7 +421,7 @@ class _PackageProductTableState extends State<PackageProductTable> {
                               ),
                               DataCell(
                                 SizedBox(
-                                  width: 50,
+                                  width: 70,
                                   child: _cellText(
                                     origPts.toStringAsFixed(2),
                                     color: Colors.deepOrange,
@@ -497,7 +497,7 @@ class _PackageProductTableState extends State<PackageProductTable> {
     style: GoogleFonts.comicNeue(
       color: Colors.black,
       fontWeight: FontWeight.bold,
-      fontSize: 11,
+      fontSize: 13,
     ),
     overflow: TextOverflow.ellipsis,
   );
@@ -511,7 +511,7 @@ class _PackageProductTableState extends State<PackageProductTable> {
     style: GoogleFonts.comicNeue(
       color: color,
       fontWeight: FontWeight.bold,
-      fontSize: 10,
+      fontSize: 13,
     ),
     maxLines: maxLines,
     overflow: TextOverflow.ellipsis,
@@ -532,7 +532,7 @@ class _PackageProductTableState extends State<PackageProductTable> {
       Text(
         value,
         style: TextStyle(
-          fontSize: 15,
+          fontSize: 17,
           fontWeight: FontWeight.w900,
           color: color,
         ),
