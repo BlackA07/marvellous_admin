@@ -4,7 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../../features/categories/controllers/category_controller.dart';
 import '../../../categories/models/category_model.dart';
 
-class AddProductLogistics extends StatelessWidget {
+class AddProductLogistics extends StatefulWidget {
   final CategoryController categoryController;
   final String? selectedCategory;
   final String? selectedSubCategory;
@@ -12,7 +12,10 @@ class AddProductLogistics extends StatelessWidget {
   final Color cardColor, textColor;
   final Function(String?) onCategoryChanged;
   final Function(String?) onSubCategoryChanged;
-  final Function(String?) onLocationChanged;
+  final Function(String) onLocationChanged;
+  // Callback for multi-region data
+  final Function(Map<String, double>, Map<String, String>, double)
+  onDetailsChanged;
 
   const AddProductLogistics({
     Key? key,
@@ -25,19 +28,40 @@ class AddProductLogistics extends StatelessWidget {
     required this.onCategoryChanged,
     required this.onSubCategoryChanged,
     required this.onLocationChanged,
+    required this.onDetailsChanged,
   }) : super(key: key);
+
+  @override
+  State<AddProductLogistics> createState() => _AddProductLogisticsState();
+}
+
+class _AddProductLogisticsState extends State<AddProductLogistics> {
+  // Local state for flexible logistics
+  Map<String, double> deliveryFees = {
+    "Karachi": 0,
+    "Pakistan": 0,
+    "Worldwide": 0,
+  };
+  Map<String, String> deliveryTimes = {
+    "Karachi": "1-2 Days",
+    "Pakistan": "3-5 Days",
+    "Worldwide": "7-15 Days",
+  };
+  double codFee = 0.0;
+
+  void _updateParent() {
+    widget.onDetailsChanged(deliveryFees, deliveryTimes, codFee);
+  }
 
   void _showAddDialog(BuildContext context, bool isSub) {
     TextEditingController ctrl = TextEditingController();
-
-    if (isSub && selectedCategory != null) {
-      var catModel = categoryController.categories.firstWhere(
-        (c) => c.name == selectedCategory,
+    if (isSub && widget.selectedCategory != null) {
+      var catModel = widget.categoryController.categories.firstWhere(
+        (c) => c.name == widget.selectedCategory,
         orElse: () => CategoryModel(name: '', subCategories: []),
       );
-      if (catModel.id != null) {
-        categoryController.selectCategory(catModel);
-      }
+      if (catModel.id != null)
+        widget.categoryController.selectCategory(catModel);
     }
 
     Get.defaultDialog(
@@ -47,47 +71,25 @@ class AddProductLogistics extends StatelessWidget {
         fontWeight: FontWeight.bold,
       ),
       backgroundColor: Colors.white,
-
-      // 🔥 THE ONLY REAL FIX (theme override safe)
-      content: Theme(
-        data: Theme.of(context).copyWith(
-          textTheme: Theme.of(context).textTheme.copyWith(
-            bodyMedium: const TextStyle(color: Colors.black),
-          ),
-          inputDecorationTheme: const InputDecorationTheme(
-            hintStyle: TextStyle(color: Colors.grey),
-          ),
-        ),
-        child: TextField(
-          controller: ctrl,
-          style: const TextStyle(color: Colors.black),
-          decoration: const InputDecoration(
-            hintText: "Enter Name",
-            border: OutlineInputBorder(),
-            focusedBorder: OutlineInputBorder(
-              borderSide: BorderSide(color: Colors.deepPurple),
-            ),
-          ),
+      content: TextField(
+        controller: ctrl,
+        style: const TextStyle(color: Colors.black),
+        decoration: const InputDecoration(
+          hintText: "Enter Name",
+          border: OutlineInputBorder(),
         ),
       ),
-
       textConfirm: "Add",
       textCancel: "Cancel",
-      confirmTextColor: Colors.white,
-      buttonColor: Colors.deepPurple,
-      cancelTextColor: Colors.black,
       onConfirm: () async {
         if (ctrl.text.isNotEmpty) {
-          String newName = ctrl.text;
-
           if (isSub) {
-            await categoryController.addSubCategory(newName);
-            onSubCategoryChanged(newName);
+            await widget.categoryController.addSubCategory(ctrl.text);
+            widget.onSubCategoryChanged(ctrl.text);
           } else {
-            await categoryController.addCategory(newName);
-            onCategoryChanged(newName);
+            await widget.categoryController.addCategory(ctrl.text);
+            widget.onCategoryChanged(ctrl.text);
           }
-
           Get.back();
         }
       },
@@ -99,28 +101,17 @@ class AddProductLogistics extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildHeader("Logistics"),
-
+        _buildHeader("Category & Taxonomy"),
         Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Expanded(
               child: Obx(() {
-                var cats = categoryController.categories;
-
-                if (cats.isNotEmpty && selectedCategory == null) {
-                  Future.microtask(() => onCategoryChanged(cats.first.name));
-                }
-
-                String? validCat = cats.any((c) => c.name == selectedCategory)
-                    ? selectedCategory
-                    : null;
-
+                var cats = widget.categoryController.categories;
                 return _buildDropdown(
                   "Category",
-                  validCat,
+                  widget.selectedCategory,
                   cats.map((c) => c.name).toList(),
-                  onCategoryChanged,
+                  widget.onCategoryChanged,
                 );
               }),
             ),
@@ -131,32 +122,19 @@ class AddProductLogistics extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 15),
-
         Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Expanded(
               child: Obx(() {
-                var cats = categoryController.categories;
-                List<String> subCats = [];
-
-                if (selectedCategory != null) {
-                  var catObj = cats.firstWhere(
-                    (c) => c.name == selectedCategory,
-                    orElse: () => CategoryModel(name: '', subCategories: []),
-                  );
-                  subCats = catObj.subCategories;
-                }
-
-                String? validSub = subCats.contains(selectedSubCategory)
-                    ? selectedSubCategory
-                    : null;
-
+                var cat = widget.categoryController.categories.firstWhere(
+                  (c) => c.name == widget.selectedCategory,
+                  orElse: () => CategoryModel(name: '', subCategories: []),
+                );
                 return _buildDropdown(
                   "Sub Category",
-                  validSub,
-                  subCats,
-                  onSubCategoryChanged,
+                  widget.selectedSubCategory,
+                  cat.subCategories,
+                  widget.onSubCategoryChanged,
                   isOptional: true,
                 );
               }),
@@ -164,22 +142,109 @@ class AddProductLogistics extends StatelessWidget {
             IconButton(
               icon: Icon(
                 Icons.add_circle,
-                color: selectedCategory == null ? Colors.grey : Colors.green,
+                color: widget.selectedCategory == null
+                    ? Colors.grey
+                    : Colors.green,
                 size: 30,
               ),
-              onPressed: selectedCategory == null
+              onPressed: widget.selectedCategory == null
                   ? null
                   : () => _showAddDialog(context, true),
             ),
           ],
         ),
+        const SizedBox(height: 30),
+        _buildHeader("Shipping Logistics"),
+        _buildDropdown(
+          "Main Shipping Scope",
+          widget.selectedLocation,
+          ["Karachi Only", "Pakistan", "Worldwide"],
+          (val) => widget.onLocationChanged(val!),
+        ),
         const SizedBox(height: 15),
 
-        _buildDropdown("Location to Deliver", selectedLocation, [
-          "Karachi Only",
-          "Pakistan",
-          "Worldwide",
-        ], onLocationChanged),
+        // KARACHI SECTION (Always visible)
+        _buildRegionInputs(
+          "Karachi",
+          "Karachi Shipping Fee",
+          "Karachi Delivery Time",
+        ),
+
+        // PAKISTAN SECTION (Visible for Pakistan and Worldwide)
+        if (widget.selectedLocation != "Karachi Only")
+          _buildRegionInputs(
+            "Pakistan",
+            "Outside Karachi (Pakistan) Fee",
+            "Pakistan Delivery Time",
+          ),
+
+        // WORLDWIDE SECTION (Only for Worldwide)
+        if (widget.selectedLocation == "Worldwide")
+          _buildRegionInputs(
+            "Worldwide",
+            "International Shipping Fee",
+            "International Delivery Time",
+          ),
+
+        const SizedBox(height: 15),
+        _buildSimpleInput("Cash on Delivery (COD) Fee", (val) {
+          codFee = double.tryParse(val) ?? 0.0;
+          _updateParent();
+        }),
+      ],
+    );
+  }
+
+  Widget _buildRegionInputs(String key, String feeLabel, String timeLabel) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 15),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildSimpleInput(feeLabel, (val) {
+              deliveryFees[key] = double.tryParse(val) ?? 0.0;
+              _updateParent();
+            }, isNumber: true),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: _buildSimpleInput(timeLabel, (val) {
+              deliveryTimes[key] = val;
+              _updateParent();
+            }),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSimpleInput(
+    String label,
+    Function(String) onChange, {
+    bool isNumber = false,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.comicNeue(
+            color: Colors.black,
+            fontWeight: FontWeight.bold,
+            fontSize: 12,
+          ),
+        ),
+        const SizedBox(height: 5),
+        TextField(
+          onChanged: onChange,
+          keyboardType: isNumber ? TextInputType.number : TextInputType.text,
+          style: const TextStyle(color: Colors.black, fontSize: 13),
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: widget.cardColor,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        ),
       ],
     );
   }
@@ -197,44 +262,28 @@ class AddProductLogistics extends StatelessWidget {
         Text(
           label,
           style: GoogleFonts.comicNeue(
-            color: textColor,
+            color: widget.textColor,
             fontWeight: FontWeight.bold,
           ),
         ),
         const SizedBox(height: 5),
         DropdownButtonFormField<String>(
           value: value,
-          style: const TextStyle(
-            color: Colors.black,
-            fontWeight: FontWeight.w500,
-            fontSize: 15,
-          ),
-          dropdownColor: const Color.fromARGB(255, 155, 159, 184),
-          icon: const Icon(Icons.arrow_drop_down, color: Colors.black),
+          style: const TextStyle(color: Colors.black, fontSize: 14),
+          dropdownColor: Colors.white,
           items: items
               .map(
                 (e) => DropdownMenuItem(
                   value: e,
-                  child: Text(
-                    e,
-                    style: const TextStyle(color: Color.fromARGB(255, 0, 0, 0)),
-                  ),
+                  child: Text(e, style: const TextStyle(color: Colors.black)),
                 ),
               )
               .toList(),
           onChanged: onChanged,
           decoration: InputDecoration(
             filled: true,
-            fillColor: cardColor,
+            fillColor: widget.cardColor,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: Colors.grey.shade300),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Colors.deepPurple),
-            ),
           ),
           validator: (val) =>
               isOptional ? null : (val == null ? "Required" : null),
@@ -257,7 +306,7 @@ class AddProductLogistics extends StatelessWidget {
             Text(
               title,
               style: GoogleFonts.orbitron(
-                color: textColor,
+                color: widget.textColor,
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
               ),

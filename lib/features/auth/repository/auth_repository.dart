@@ -77,12 +77,24 @@ class AuthRepository {
     required String name,
     required String phone,
   }) async {
+    // Level commissions ka empty map banana taake error na aaye
+    Map<String, double> levelEarnings = {};
+    for (int i = 1; i <= 11; i++) {
+      levelEarnings['level_$i'] = 0.0;
+    }
+
     await _firestore.collection('users').doc(uid).set({
       'uid': uid,
       'name': name,
       'email': email,
       'phone': phone,
-      'role': 'admin', // Important: Hum mark kar rahe hain k ye Admin hai
+      'role': 'customer',
+      'rank': 'bronze', // Default Rank
+      'hasPaidFee': false, // Default Fee Status
+      'isMLMActive': false, // Initial False
+      'walletBalance': 0.0,
+      'totalPoints': 0.0,
+      'levelCommissions': levelEarnings, // Auto generated levels
       'createdAt': FieldValue.serverTimestamp(),
     });
   }

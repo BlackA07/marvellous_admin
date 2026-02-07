@@ -9,7 +9,6 @@ class ProductsRepository {
   CollectionReference get _searchHistory =>
       _firestore.collection('admin_search_history');
 
-  // Counter document for reliable ID generation
   DocumentReference get _counterDoc =>
       _firestore.collection('admin_settings').doc('product_counter');
 
@@ -42,7 +41,6 @@ class ProductsRepository {
       );
 
       allItems.sort((a, b) => b.dateAdded.compareTo(a.dateAdded));
-
       return allItems;
     } catch (e) {
       throw Exception("Failed to load items: $e");
@@ -52,24 +50,17 @@ class ProductsRepository {
   Future<void> addProduct(ProductModel product) async {
     try {
       if (!product.isPackage) {
-        // ==========================================
-        // FIX: Use Transaction to get next ID safely
-        // ==========================================
         String newId = await _firestore.runTransaction<String>((
           transaction,
         ) async {
           DocumentSnapshot counterSnap = await transaction.get(_counterDoc);
-
           int currentId = 0;
           if (counterSnap.exists) {
             currentId =
                 (counterSnap.data() as Map<String, dynamic>)['lastProductId'] ??
                 0;
           }
-
           int nextId = currentId + 1;
-
-          // Update counter
           transaction.set(_counterDoc, {
             'lastProductId': nextId,
             'updatedAt': FieldValue.serverTimestamp(),
@@ -79,13 +70,9 @@ class ProductsRepository {
         });
 
         product.id = newId;
-
-        // Save product with the guaranteed unique ID
         await _products.doc(product.id).set(product.toMap());
-
         print("✅ Product added successfully with ID: ${product.id}");
       } else {
-        // Packages use auto-generated IDs
         DocumentReference docRef = await _packages.add(product.toMap());
         product.id = docRef.id;
         print("✅ Package added successfully with ID: ${product.id}");
@@ -101,16 +88,12 @@ class ProductsRepository {
       if (product.id == null || product.id!.isEmpty) {
         throw Exception("Product ID is missing");
       }
-
       if (product.isPackage) {
         await _packages.doc(product.id).update(product.toMap());
-        print("✅ Package updated: ${product.id}");
       } else {
         await _products.doc(product.id).update(product.toMap());
-        print("✅ Product updated: ${product.id}");
       }
     } catch (e) {
-      print("❌ Error updating product: $e");
       throw Exception("Failed to update: $e");
     }
   }
@@ -122,9 +105,7 @@ class ProductsRepository {
       } else {
         await _products.doc(id).delete();
       }
-      print("✅ Product deleted: $id");
     } catch (e) {
-      print("❌ Error deleting product: $e");
       throw Exception("Failed to delete: $e");
     }
   }

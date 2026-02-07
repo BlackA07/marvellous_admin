@@ -4,7 +4,7 @@ import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 
-// Import local components (Ensure paths match your project structure)
+// Import local components
 import 'package_product_table.dart';
 import 'package_details_form.dart';
 import 'package_pricing_section.dart';
@@ -41,6 +41,19 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
   String? selectedLocation;
   List<ProductModel> _selectedProducts = [];
 
+  // New Logistics State for Packages (To satisfy the required model arguments)
+  Map<String, double> deliveryFeesMap = {
+    "Karachi": 0.0,
+    "Pakistan": 0.0,
+    "Worldwide": 0.0,
+  };
+  Map<String, String> deliveryTimeMap = {
+    "Karachi": "1-2 Days",
+    "Pakistan": "3-5 Days",
+    "Worldwide": "7-15 Days",
+  };
+  double codFee = 0.0;
+
   // Calculation State
   double totalBuy = 0.0;
   double totalIndividualSell = 0.0;
@@ -71,6 +84,12 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
     selectedVendorId = pkg.vendorId;
     selectedLocation = pkg.deliveryLocation;
     selectedImagesBase64 = List.from(pkg.images);
+
+    // Load Logistics Maps from existing package
+    deliveryFeesMap = Map<String, double>.from(pkg.deliveryFeesMap);
+    deliveryTimeMap = Map<String, String>.from(pkg.deliveryTimeMap);
+    codFee = pkg.codFee;
+
     _selectedProducts = productController.productsOnly
         .where((p) => pkg.includedItemIds.contains(p.id))
         .toList();
@@ -140,7 +159,6 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // PART 1: PRODUCT TABLE
                       PackageProductTable(
                         productController: productController,
                         selectedProducts: _selectedProducts,
@@ -150,8 +168,6 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
                         totalPts: totalPts,
                       ),
                       const SizedBox(height: 30),
-
-                      // PART 2: PACKAGE DETAILS
                       PackageDetailsForm(
                         nameCtrl: nameCtrl,
                         descCtrl: descCtrl,
@@ -166,10 +182,15 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
                             setState(() => selectedVendorId = val),
                         onLocationChanged: (val) =>
                             setState(() => selectedLocation = val),
+                        onLogisticsChanged: (fees, times, cod) {
+                          setState(() {
+                            deliveryFeesMap = fees;
+                            deliveryTimeMap = times;
+                            codFee = cod;
+                          });
+                        },
                       ),
                       const SizedBox(height: 30),
-
-                      // PART 3: PRICING & SAVE
                       PackagePricingSection(
                         productController: productController,
                         salePriceCtrl: salePriceCtrl,
@@ -237,6 +258,11 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
         isPackage: true,
         includedItemIds: _selectedProducts.map((p) => p.id!).toList(),
         showDecimalPoints: productController.showDecimals.value,
+        deliveryFeesMap: deliveryFeesMap,
+        deliveryTimeMap: deliveryTimeMap,
+        codFee: codFee,
+        averageRating: widget.packageToEdit?.averageRating ?? 0.0,
+        totalReviews: widget.packageToEdit?.totalReviews ?? 0,
       );
 
       bool success = widget.packageToEdit == null

@@ -65,6 +65,19 @@ class _AddProductScreenState extends State<AddProductScreen> {
   bool _isSuccess = false;
   bool _isMobile = false;
 
+  // New Logistics State (Sync with your updated UI and Model)
+  Map<String, double> deliveryFeesMap = {
+    "Karachi": 0,
+    "Pakistan": 0,
+    "Worldwide": 0,
+  };
+  Map<String, String> deliveryTimeMap = {
+    "Karachi": "1-2 Days",
+    "Pakistan": "3-5 Days",
+    "Worldwide": "7-15 Days",
+  };
+  double codFee = 0.0;
+
   // Colors
   final Color bgColor = const Color(0xFFF5F7FA);
   final Color cardColor = Colors.white;
@@ -136,6 +149,11 @@ class _AddProductScreenState extends State<AddProductScreen> {
     selectedImagesBase64 = List.from(product.images);
     selectedDate = product.dateAdded;
     calculatedPoints = product.productPoints;
+
+    // Load Logistics Maps
+    deliveryFeesMap = Map<String, double>.from(product.deliveryFeesMap);
+    deliveryTimeMap = Map<String, String>.from(product.deliveryTimeMap);
+    codFee = product.codFee;
   }
 
   // --- IMAGE PICKER ---
@@ -254,6 +272,13 @@ class _AddProductScreenState extends State<AddProductScreen> {
       selectedSubCategory = null;
       calculatedPoints = 0.0;
       _isMobile = false;
+      deliveryFeesMap = {"Karachi": 0, "Pakistan": 0, "Worldwide": 0};
+      deliveryTimeMap = {
+        "Karachi": "1-2 Days",
+        "Pakistan": "3-5 Days",
+        "Worldwide": "7-15 Days",
+      };
+      codFee = 0.0;
     });
   }
 
@@ -282,7 +307,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
         purchasePrice: double.tryParse(purchaseCtrl.text) ?? 0,
         salePrice: double.tryParse(saleCtrl.text) ?? 0,
         originalPrice: double.tryParse(originalCtrl.text) ?? 0,
-        stockQuantity: 0,
+        stockQuantity: widget.productToEdit?.stockQuantity ?? 0,
         vendorId: "Admin",
         images: selectedImagesBase64,
         dateAdded: selectedDate,
@@ -292,6 +317,12 @@ class _AddProductScreenState extends State<AddProductScreen> {
         showDecimalPoints: true,
         ram: _isMobile ? ramCtrl.text : null,
         storage: _isMobile ? storageCtrl.text : null,
+        // NEW LOGISTICS FIELDS SYNCED HERE
+        deliveryFeesMap: deliveryFeesMap,
+        deliveryTimeMap: deliveryTimeMap,
+        codFee: codFee,
+        averageRating: widget.productToEdit?.averageRating ?? 0.0,
+        totalReviews: widget.productToEdit?.totalReviews ?? 0,
       );
 
       bool success;
@@ -404,7 +435,15 @@ class _AddProductScreenState extends State<AddProductScreen> {
                           onSubCategoryChanged: (val) =>
                               setState(() => selectedSubCategory = val),
                           onLocationChanged: (val) =>
-                              setState(() => selectedLocation = val!),
+                              setState(() => selectedLocation = val),
+                          // FIX: Added the missing onDetailsChanged callback
+                          onDetailsChanged: (fees, times, cod) {
+                            setState(() {
+                              deliveryFeesMap = fees;
+                              deliveryTimeMap = times;
+                              codFee = cod;
+                            });
+                          },
                         ),
                         const SizedBox(height: 30),
 
@@ -457,7 +496,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 ),
               ),
             ),
-
             if (_isSuccess) _buildSuccessOverlay(),
           ],
         ),
@@ -491,7 +529,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 ),
               ),
               const SizedBox(height: 30),
-
               if (widget.productToEdit == null)
                 ElevatedButton.icon(
                   onPressed: () {
@@ -514,12 +551,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   ),
                 ),
               const SizedBox(height: 10),
-
-              // GO TO DASHBOARD
               OutlinedButton.icon(
-                onPressed: () {
-                  Get.offAll(() => MainLayoutScreen());
-                },
+                onPressed: () => Get.offAll(() => MainLayoutScreen()),
                 icon: const Icon(Icons.dashboard, color: Colors.blue),
                 label: const Text(
                   "Go to Dashboard",
@@ -530,12 +563,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 ),
               ),
               const SizedBox(height: 10),
-
-              // ALL PRODUCTS
               OutlinedButton.icon(
-                onPressed: () {
-                  Get.off(() => const ProductsHomeScreen());
-                },
+                onPressed: () => Get.off(() => const ProductsHomeScreen()),
                 icon: const Icon(Icons.list, color: Colors.black),
                 label: const Text(
                   "All Products",

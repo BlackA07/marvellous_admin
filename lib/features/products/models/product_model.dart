@@ -12,20 +12,26 @@ class ProductModel {
   double salePrice;
   double originalPrice;
   int stockQuantity;
-  int stockOut; // New field, default 0
+  int stockOut;
   String vendorId;
   List<String> images;
   String? video;
   DateTime dateAdded;
-
-  String deliveryLocation;
+  String deliveryLocation; // Only Karachi, Pakistan, or Worldwide
   String warranty;
   double productPoints;
+
+  // --- NEW FLEXIBLE LOGISTICS FIELDS ---
+  // Key: "Karachi", "Pakistan", "Worldwide"
+  Map<String, double> deliveryFeesMap;
+  Map<String, String> deliveryTimeMap;
+  double codFee;
+  double averageRating;
+  int totalReviews;
 
   bool isPackage;
   List<String> includedItemIds;
   bool showDecimalPoints;
-
   String? ram;
   String? storage;
 
@@ -49,6 +55,11 @@ class ProductModel {
     required this.deliveryLocation,
     required this.warranty,
     required this.productPoints,
+    required this.deliveryFeesMap,
+    required this.deliveryTimeMap,
+    this.codFee = 0.0,
+    this.averageRating = 0.0,
+    this.totalReviews = 0,
     this.isPackage = false,
     this.includedItemIds = const [],
     this.showDecimalPoints = true,
@@ -77,6 +88,11 @@ class ProductModel {
       'deliveryLocation': deliveryLocation,
       'warranty': warranty,
       'productPoints': productPoints,
+      'deliveryFeesMap': deliveryFeesMap,
+      'deliveryTimeMap': deliveryTimeMap,
+      'codFee': codFee,
+      'averageRating': averageRating,
+      'totalReviews': totalReviews,
       'isPackage': isPackage,
       'includedItemIds': includedItemIds,
       'showDecimalPoints': showDecimalPoints,
@@ -106,6 +122,11 @@ class ProductModel {
       deliveryLocation: map['deliveryLocation'] ?? 'Worldwide',
       warranty: map['warranty'] ?? 'No Warranty',
       productPoints: (map['productPoints'] ?? 0).toDouble(),
+      deliveryFeesMap: Map<String, double>.from(map['deliveryFeesMap'] ?? {}),
+      deliveryTimeMap: Map<String, String>.from(map['deliveryTimeMap'] ?? {}),
+      codFee: (map['codFee'] ?? 0.0).toDouble(),
+      averageRating: (map['averageRating'] ?? 0.0).toDouble(),
+      totalReviews: map['totalReviews'] ?? 0,
       isPackage: map['isPackage'] ?? false,
       includedItemIds: List<String>.from(map['includedItemIds'] ?? []),
       showDecimalPoints: map['showDecimalPoints'] ?? true,
