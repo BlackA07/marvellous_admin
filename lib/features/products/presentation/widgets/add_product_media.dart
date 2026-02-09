@@ -54,7 +54,7 @@ class AddProductMedia extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    "Max 3 (Auto-Crop)",
+                    "Max 3 (Compressed)",
                     style: GoogleFonts.comicNeue(
                       color: Colors.grey,
                       fontSize: 12,
@@ -64,7 +64,6 @@ class AddProductMedia extends StatelessWidget {
               ),
             ),
           ),
-
         if (images.isNotEmpty)
           Container(
             height: 100,

@@ -15,7 +15,7 @@ class ProductsController extends GetxController {
   // --- SEARCH & HISTORY ---
   var searchQuery = ''.obs;
   var selectedCategory = 'All'.obs;
-  var selectedSubCategory = 'All'.obs; // ✅ ADDED
+  var selectedSubCategory = 'All'.obs;
 
   // General Search History (for Home Screen)
   var searchHistoryList = <String>[].obs;
@@ -28,7 +28,7 @@ class ProductsController extends GetxController {
 
   // --- SETTINGS (Dynamic) ---
   var profitPerPoint = 100.0.obs; // Default
-  var showDecimals = true.obs; // ✅ RENAMED from globalShowDecimals
+  var showDecimals = true.obs;
 
   // --- PACKAGES ---
   var selectedProductsForPackage = <ProductModel>[].obs;
@@ -38,7 +38,7 @@ class ProductsController extends GetxController {
     super.onInit();
     fetchProducts();
     fetchHistory();
-    fetchGlobalSettings(); // Load variables
+    fetchGlobalSettings();
   }
 
   // --- SETTINGS LOGIC ---
@@ -52,7 +52,7 @@ class ProductsController extends GetxController {
       if (doc.exists) {
         Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
         profitPerPoint.value = (data['profitPerPoint'] ?? 100.0).toDouble();
-        showDecimals.value = data['showDecimals'] ?? true; // ✅ FIXED
+        showDecimals.value = data['showDecimals'] ?? true;
       }
     } catch (e) {
       print("Settings fetch error: $e");
@@ -62,7 +62,6 @@ class ProductsController extends GetxController {
   // Points Calculation (Uses current profitPerPoint)
   double calculatePoints(double purchase, double sale) {
     if (purchase >= sale) return 0;
-
     double profit = sale - purchase;
     return (profit / profitPerPoint.value);
   }
@@ -77,7 +76,12 @@ class ProductsController extends GetxController {
       await fetchGlobalSettings();
 
       // 2. Apply current settings to the new product
-      product.showDecimalPoints = showDecimals.value; // ✅ FIXED
+      product.showDecimalPoints = showDecimals.value;
+
+      // Logistic fields defaults are already handled by the Model/UI passing
+      // But we ensure averageRating and totalReviews are reset for new items
+      product.averageRating = 0.0;
+      product.totalReviews = 0;
 
       // 3. Save to DB (Repository will handle ID generation)
       await _repository.addProduct(product);
@@ -117,6 +121,9 @@ class ProductsController extends GetxController {
   Future<bool> updateProduct(ProductModel product) async {
     try {
       isLoading(true);
+
+      // Apply latest decimal settings during update
+      product.showDecimalPoints = showDecimals.value;
 
       await _repository.updateProduct(product);
       int index = productList.indexWhere((p) => p.id == product.id);
@@ -240,7 +247,7 @@ class ProductsController extends GetxController {
     return ['All', ...categories];
   }
 
-  // ✅ NEW: Get available subcategories based on selected category
+  // ✅ Get available subcategories based on selected category
   List<String> get availableSubCategories {
     if (selectedCategory.value == 'All') {
       Set<String> allSubs = productList.map((p) => p.subCategory).toSet();
@@ -343,7 +350,7 @@ class ProductsController extends GetxController {
   void clearAllFilters() {
     searchQuery.value = '';
     selectedCategory.value = 'All';
-    selectedSubCategory.value = 'All'; // ✅ ADDED
+    selectedSubCategory.value = 'All';
   }
 
   void updateCategoryFilter(String category) {
@@ -352,7 +359,7 @@ class ProductsController extends GetxController {
     selectedSubCategory.value = 'All';
   }
 
-  // ✅ NEW: Update subcategory filter
+  // Update subcategory filter
   void updateSubCategoryFilter(String subCategory) {
     selectedSubCategory.value = subCategory;
   }
