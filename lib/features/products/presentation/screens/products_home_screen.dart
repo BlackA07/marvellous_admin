@@ -129,11 +129,9 @@ class _ProductsHomeScreenState extends ConsumerState<ProductsHomeScreen> {
 
                 final products = controller.productsOnly;
 
-                // --- FIXED FILTERING LOGIC ---
                 final filteredList = products.where((product) {
                   String search = controller.searchQuery.value.toLowerCase();
 
-                  // Search match
                   bool matchesSearch =
                       search.isEmpty ||
                       product.name.toLowerCase().contains(search) ||
@@ -141,12 +139,10 @@ class _ProductsHomeScreenState extends ConsumerState<ProductsHomeScreen> {
                       product.category.toLowerCase().contains(search) ||
                       product.brand.toLowerCase().contains(search);
 
-                  // Category filter
                   bool matchesCategory =
                       controller.selectedCategory.value == 'All' ||
                       product.category == controller.selectedCategory.value;
 
-                  // Subcategory filter
                   bool matchesSubCategory =
                       controller.selectedSubCategory.value == 'All' ||
                       product.subCategory ==
@@ -165,7 +161,7 @@ class _ProductsHomeScreenState extends ConsumerState<ProductsHomeScreen> {
                     controller: _scrollController,
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.only(
-                      top: 6,
+                      top: 15,
                       left: 10,
                       right: 10,
                       bottom: 20,

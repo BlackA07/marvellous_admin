@@ -1,13 +1,12 @@
 import 'package:country_code_picker/country_code_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart'; // Riverpod
 import 'package:google_fonts/google_fonts.dart';
 import 'package:marvellous_admin/core/common/widgets/metallic_button.dart';
 import 'package:marvellous_admin/core/common/widgets/metallic_textfield.dart';
 import 'package:marvellous_admin/core/common/widgets/trapezoid_button.dart';
 import 'package:marvellous_admin/features/auth/presentation/login_screen.dart';
-import '../controller/auth_controller.dart';
-import '../controller/signup_controller.dart';
+import '../controller/auth_controller.dart'; // Main Auth Controller
 
 class SignUpScreen extends ConsumerStatefulWidget {
   const SignUpScreen({super.key});
@@ -23,21 +22,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _passController = TextEditingController();
   final TextEditingController _confirmPassController = TextEditingController();
-  final TextEditingController _referralCodeController = TextEditingController();
-
   String _selectedCountryCode = "+92";
-
-  // SignUp Controller instance
-  late final SignUpController _signupController;
-
-  @override
-  void initState() {
-    super.initState();
-    _signupController = SignUpController();
-    // Set referral code optional or required
-    _signupController.referralCodeOptional =
-        true; // Change to false if required
-  }
 
   @override
   void dispose() {
@@ -46,8 +31,6 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
     _phoneController.dispose();
     _passController.dispose();
     _confirmPassController.dispose();
-    _referralCodeController.dispose();
-    _signupController.dispose();
     super.dispose();
   }
 
@@ -65,7 +48,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
   }
 
   void _signUp() {
-    // 1. Basic Validation
+    // 1. Validation Logic
     if (_nameController.text.isEmpty ||
         _emailController.text.isEmpty ||
         _phoneController.text.isEmpty ||
@@ -79,26 +62,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
       return;
     }
 
-    // Validate name length
-    if (_nameController.text.trim().length < 3) {
-      _showError("Name must be at least 3 characters long");
-      return;
-    }
-
-    // Validate password length
-    if (_passController.text.length < 6) {
-      _showError("Password must be at least 6 characters");
-      return;
-    }
-
-    // Check if referral code is required but not provided
-    if (!_signupController.referralCodeOptional &&
-        _referralCodeController.text.trim().isEmpty) {
-      _showError("Referral code is required!");
-      return;
-    }
-
-    // 2. Call Firebase Auth Controller with all required parameters
+    // 2. Call Firebase Auth Controller
     ref
         .read(authControllerProvider)
         .signUp(
@@ -106,8 +70,6 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
           email: _emailController.text.trim(),
           password: _passController.text.trim(),
           phone: "$_selectedCountryCode${_phoneController.text.trim()}",
-          referralCode: _referralCodeController.text.trim(),
-          signupController: _signupController,
           context: context,
         );
   }
@@ -363,15 +325,6 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                           controller: _confirmPassController,
                         ),
 
-                        // --- REFERRAL CODE FIELD ---
-                        MetallicTextField(
-                          hintText: _signupController.referralCodeOptional
-                              ? "Referral Code (Optional)"
-                              : "Referral Code *",
-                          icon: Icons.people_outline,
-                          controller: _referralCodeController,
-                        ),
-
                         const SizedBox(height: 30),
 
                         // --- SIGN UP BUTTON ---
@@ -383,7 +336,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                             hasGlowingAura: true,
                             height: 90,
                             width: 300,
-                            onTap: _signUp,
+                            onTap: _signUp, // Firebase Call
                           ),
 
                         const SizedBox(height: 30),

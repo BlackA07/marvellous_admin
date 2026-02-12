@@ -6,8 +6,10 @@ import '../repository/products_repository.dart';
 
 class ProductsController extends GetxController {
   final ProductsRepository _repository = ProductsRepository();
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   var isLoading = true.obs;
+  var isMigrating = false.obs;
 
   // --- MASTER LIST ---
   var productList = <ProductModel>[].obs;
@@ -39,6 +41,160 @@ class ProductsController extends GetxController {
     fetchProducts();
     fetchHistory();
     fetchGlobalSettings();
+  }
+
+  // --- ✨ MIGRATION FUNCTION: Add averageRating & totalReviews to old products ---
+  Future<void> migrateOldProducts() async {
+    try {
+      isMigrating(true);
+      Get.dialog(
+        WillPopScope(
+          onWillPop: () async => false,
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(color: Colors.white),
+                const SizedBox(height: 20),
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Text(
+                    "Migrating Products...\nPlease wait",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.black,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        barrierDismissible: false,
+      );
+
+      int productsUpdated = 0;
+      int packagesUpdated = 0;
+
+      // Migrate Products Collection
+      QuerySnapshot productsSnapshot = await _db.collection('products').get();
+      WriteBatch batch = _db.batch();
+      int batchCount = 0;
+
+      for (var doc in productsSnapshot.docs) {
+        var data = doc.data() as Map<String, dynamic>;
+
+        // Check if fields are missing
+        if (!data.containsKey('averageRating') ||
+            !data.containsKey('totalReviews')) {
+          batch.update(doc.reference, {
+            'averageRating': 0.0,
+            'totalReviews': 0,
+          });
+          productsUpdated++;
+          batchCount++;
+
+          // Firestore batch limit is 500
+          if (batchCount >= 500) {
+            await batch.commit();
+            batch = _db.batch();
+            batchCount = 0;
+          }
+        }
+      }
+
+      if (batchCount > 0) {
+        await batch.commit();
+      }
+
+      // Migrate Packages Collection
+      QuerySnapshot packagesSnapshot = await _db.collection('packages').get();
+      batch = _db.batch();
+      batchCount = 0;
+
+      for (var doc in packagesSnapshot.docs) {
+        var data = doc.data() as Map<String, dynamic>;
+
+        if (!data.containsKey('averageRating') ||
+            !data.containsKey('totalReviews')) {
+          batch.update(doc.reference, {
+            'averageRating': 0.0,
+            'totalReviews': 0,
+          });
+          packagesUpdated++;
+          batchCount++;
+
+          if (batchCount >= 500) {
+            await batch.commit();
+            batch = _db.batch();
+            batchCount = 0;
+          }
+        }
+      }
+
+      if (batchCount > 0) {
+        await batch.commit();
+      }
+
+      // Close loading dialog
+      if (Get.isDialogOpen ?? false) {
+        Get.back();
+      }
+
+      // Show success
+      Get.dialog(
+        Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.check_circle, color: Colors.green, size: 80),
+                const SizedBox(height: 15),
+                const Text(
+                  "Migration Complete!",
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  "Products Updated: $productsUpdated\nPackages Updated: $packagesUpdated",
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: () => Get.back(),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+                  child: const Text("Done"),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      // Refresh product list
+      fetchProducts();
+    } catch (e) {
+      if (Get.isDialogOpen ?? false) {
+        Get.back();
+      }
+      Get.snackbar(
+        "Migration Error",
+        e.toString(),
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } finally {
+      isMigrating(false);
+    }
   }
 
   // --- SETTINGS LOGIC ---
@@ -78,8 +234,7 @@ class ProductsController extends GetxController {
       // 2. Apply current settings to the new product
       product.showDecimalPoints = showDecimals.value;
 
-      // Logistic fields defaults are already handled by the Model/UI passing
-      // But we ensure averageRating and totalReviews are reset for new items
+      // Ensure rating fields are initialized
       product.averageRating = 0.0;
       product.totalReviews = 0;
 
