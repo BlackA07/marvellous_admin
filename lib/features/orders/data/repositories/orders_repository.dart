@@ -53,7 +53,7 @@ class OrdersRepository {
     }
   }
 
-  // --- FEE REQUESTS ---
+  // --- FEE REQUESTS (OLD SYSTEM - Still kept for backward compatibility) ---
   Stream<List<Map<String, dynamic>>> getFeeRequests() {
     print("🔍 OrdersRepository: Fetching fee requests");
 
@@ -128,6 +128,74 @@ class OrdersRepository {
       print("❌ Error handling fee request: $e");
       rethrow;
     }
+  }
+
+  // --- NEW: WITHDRAWAL REQUESTS ---
+  Stream<List<Map<String, dynamic>>> getWithdrawalRequests() {
+    print("🔍 OrdersRepository: Fetching withdrawal requests");
+
+    return _db
+        .collection('finances')
+        .where('type', isEqualTo: 'withdrawal')
+        .where('status', isEqualTo: 'pending')
+        .orderBy('timestamp', descending: true)
+        .snapshots()
+        .map((snap) {
+          print(
+            "💸 OrdersRepository: Received ${snap.docs.length} withdrawal requests",
+          );
+
+          if (snap.docs.isEmpty) {
+            print("⚠️ No withdrawal requests found");
+          }
+
+          return snap.docs.map((doc) {
+            var data = doc.data();
+            data['id'] = doc.id;
+            print(
+              "   Withdrawal: ${doc.id} - Rs.${data['amount']} - ${data['userEmail']}",
+            );
+            return data;
+          }).toList();
+        })
+        .handleError((error) {
+          print("❌ Stream error in getWithdrawalRequests: $error");
+          return <Map<String, dynamic>>[];
+        });
+  }
+
+  // --- NEW: DEPOSIT REQUESTS (Fee Payments via new system) ---
+  Stream<List<Map<String, dynamic>>> getDepositRequests() {
+    print("🔍 OrdersRepository: Fetching deposit requests");
+
+    return _db
+        .collection('finances')
+        .where('type', isEqualTo: 'deposit')
+        .where('status', isEqualTo: 'pending')
+        .orderBy('timestamp', descending: true)
+        .snapshots()
+        .map((snap) {
+          print(
+            "💵 OrdersRepository: Received ${snap.docs.length} deposit requests",
+          );
+
+          if (snap.docs.isEmpty) {
+            print("⚠️ No deposit requests found");
+          }
+
+          return snap.docs.map((doc) {
+            var data = doc.data();
+            data['id'] = doc.id;
+            print(
+              "   Deposit: ${doc.id} - Rs.${data['amount']} - ${data['userEmail']}",
+            );
+            return data;
+          }).toList();
+        })
+        .handleError((error) {
+          print("❌ Stream error in getDepositRequests: $error");
+          return <Map<String, dynamic>>[];
+        });
   }
 
   // --- VENDOR REQUESTS ---
@@ -252,6 +320,19 @@ class OrdersRepository {
       }
     } catch (e) {
       print("❌ Error reading fee_requests: $e");
+    }
+
+    try {
+      var financeSnapshot = await _db.collection('finances').limit(5).get();
+      print("\n💳 FINANCES Collection:");
+      print("   Total documents found: ${financeSnapshot.docs.length}");
+      for (var doc in financeSnapshot.docs) {
+        print(
+          "   - ${doc.id}: type=${doc.data()['type']}, status=${doc.data()['status']}",
+        );
+      }
+    } catch (e) {
+      print("❌ Error reading finances: $e");
     }
 
     try {

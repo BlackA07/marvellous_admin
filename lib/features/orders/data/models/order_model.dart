@@ -10,8 +10,7 @@ class OrderModel {
   final String productName;
   final String productImage;
   final double price;
-  final String
-  status; // 'pending', 'confirmed', 'shipped', 'delivered', 'rejected'
+  final String status;
   final DateTime date;
   final String paymentMethod;
   final String trxId;
@@ -31,6 +30,19 @@ class OrderModel {
     this.paymentMethod = 'N/A',
     this.trxId = '',
   });
+
+  /// ✅ NEW: Factory method for Firestore DocumentSnapshot
+  factory OrderModel.fromFirestore(DocumentSnapshot doc) {
+    try {
+      var data = doc.data() as Map<String, dynamic>;
+      return OrderModel.fromMap(data, doc.id);
+    } catch (e) {
+      print("❌ Error parsing OrderModel from Firestore: $e");
+      print("Document ID: ${doc.id}");
+      print("Document Data: ${doc.data()}");
+      rethrow;
+    }
+  }
 
   factory OrderModel.fromMap(Map<String, dynamic> data, String docId) {
     print("🔍 Parsing order: $docId");
@@ -212,5 +224,10 @@ class OrderModel {
       paymentMethod: paymentMethod ?? this.paymentMethod,
       trxId: trxId ?? this.trxId,
     );
+  }
+
+  @override
+  String toString() {
+    return 'OrderModel(id: $id, customer: $customerName, product: $productName, price: $price, status: $status)';
   }
 }
