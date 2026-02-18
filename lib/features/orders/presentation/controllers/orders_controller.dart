@@ -20,9 +20,10 @@ class OrdersController extends GetxController {
   var pendingRequests = <VendorRequestModel>[].obs;
   var historyRequests = <VendorRequestModel>[].obs;
 
-  // Finance Requests (NEW)
+  // Finance Requests
   var withdrawalRequests = <Map<String, dynamic>>[].obs;
   var depositRequests = <Map<String, dynamic>>[].obs;
+  var orderPaymentRequests = <Map<String, dynamic>>[].obs; // ✅ NEW
 
   // Old Fee Requests (for backward compatibility)
   var feeRequests = <Map<String, dynamic>>[].obs;
@@ -41,8 +42,8 @@ class OrdersController extends GetxController {
     if (doc.exists && doc.data()?['role'] == 'admin') {
       _listenToOrders();
       _listenToVendorRequests();
-      _listenToFinanceRequests(); // ✅ NEW
-      _listenToOldFeeRequests(); // ✅ OLD SYSTEM
+      _listenToFinanceRequests();
+      _listenToOldFeeRequests();
     }
   }
 
@@ -73,9 +74,9 @@ class OrdersController extends GetxController {
         });
   }
 
-  /// ✅ NEW: Listen to withdrawal and deposit requests
+  /// ✅ UPDATED: Listen to all finance request types
   void _listenToFinanceRequests() {
-    // Withdrawal Requests
+    // 1. Withdrawal Requests
     _db
         .collection('finances')
         .where('type', isEqualTo: 'withdrawal')
@@ -92,7 +93,7 @@ class OrdersController extends GetxController {
           );
         });
 
-    // Deposit Requests
+    // 2. Deposit Requests (Fee Payments)
     _db
         .collection('finances')
         .where('type', isEqualTo: 'deposit')
@@ -108,9 +109,25 @@ class OrdersController extends GetxController {
             }).toList(),
           );
         });
+
+    // ✅ 3. Order Payment Requests (NEW)
+    _db
+        .collection('finances')
+        .where('type', isEqualTo: 'order_payment')
+        .where('status', isEqualTo: 'pending')
+        .orderBy('timestamp', descending: true)
+        .snapshots()
+        .listen((snap) {
+          orderPaymentRequests.assignAll(
+            snap.docs.map((doc) {
+              var data = doc.data();
+              data['id'] = doc.id;
+              return data;
+            }).toList(),
+          );
+        });
   }
 
-  /// ✅ OLD: Listen to old fee_requests collection (for backward compatibility)
   void _listenToOldFeeRequests() {
     _db
         .collection('fee_requests')
@@ -173,7 +190,6 @@ class OrdersController extends GetxController {
 
       var data = reqDoc.data()!;
 
-      // Add product to products collection
       await _db.collection('products').add({
         'name': data['productName'],
         'price': data['productPrice'],
@@ -187,7 +203,6 @@ class OrdersController extends GetxController {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      // Update request status
       await _db.collection('vendor_requests').doc(requestId).update({
         'status': 'approved',
         'processedAt': FieldValue.serverTimestamp(),
@@ -233,7 +248,7 @@ class OrdersController extends GetxController {
   }
 
   // ==========================================
-  // NEW: WITHDRAWAL METHODS
+  // WITHDRAWAL METHODS
   // ==========================================
 
   Future<void> approveWithdrawal(
@@ -247,18 +262,15 @@ class OrdersController extends GetxController {
         barrierDismissible: false,
       );
 
-      // Update finance request
       await _db.collection('finances').doc(requestId).update({
         'status': 'approved',
         'processedAt': FieldValue.serverTimestamp(),
       });
 
-      // Deduct from user's wallet
       await _db.collection('users').doc(userId).update({
         'walletBalance': FieldValue.increment(-amount),
       });
 
-      // Add to wallet history
       await _db
           .collection('users')
           .doc(userId)
@@ -270,7 +282,6 @@ class OrdersController extends GetxController {
             'timestamp': FieldValue.serverTimestamp(),
           });
 
-      // ✅ SEND NOTIFICATION - Withdrawal Approved
       await _sendNotification(
         userId: userId,
         title: "Withdrawal Approved ✅",
@@ -279,7 +290,7 @@ class OrdersController extends GetxController {
         type: 'finance',
       );
 
-      Get.back(); // Close loading
+      Get.back();
 
       Get.snackbar(
         "Success ✅",
@@ -315,7 +326,6 @@ class OrdersController extends GetxController {
         'processedAt': FieldValue.serverTimestamp(),
       });
 
-      // Add to wallet history
       await _db
           .collection('users')
           .doc(userId)
@@ -327,7 +337,6 @@ class OrdersController extends GetxController {
             'timestamp': FieldValue.serverTimestamp(),
           });
 
-      // ✅ SEND NOTIFICATION - Withdrawal Rejected
       await _sendNotification(
         userId: userId,
         title: "Withdrawal Rejected ❌",
@@ -335,7 +344,7 @@ class OrdersController extends GetxController {
         type: 'finance',
       );
 
-      Get.back(); // Close loading
+      Get.back();
 
       Get.snackbar(
         "Rejected",
@@ -355,7 +364,7 @@ class OrdersController extends GetxController {
   }
 
   // ==========================================
-  // NEW: DEPOSIT METHODS (WITH BASE64 IMAGE SUPPORT)
+  // DEPOSIT (FEE PAYMENT) METHODS
   // ==========================================
 
   Future<void> approveDeposit(String requestId, String userId) async {
@@ -365,7 +374,6 @@ class OrdersController extends GetxController {
         barrierDismissible: false,
       );
 
-      // Get deposit data
       var depositDoc = await _db.collection('finances').doc(requestId).get();
       if (!depositDoc.exists) {
         Get.back();
@@ -377,20 +385,17 @@ class OrdersController extends GetxController {
       double amount = (data['amount'] ?? 0.0).toDouble();
       String purpose = data['purpose'] ?? '';
 
-      // Update finance request
       await _db.collection('finances').doc(requestId).update({
         'status': 'approved',
         'processedAt': FieldValue.serverTimestamp(),
       });
 
-      // If it's a membership fee, activate membership
       if (purpose == 'membership_fee') {
         await _db.collection('users').doc(userId).update({
           'membershipStatus': 'approved',
           'isMLMActive': true,
         });
 
-        // Add to wallet history
         await _db
             .collection('users')
             .doc(userId)
@@ -402,7 +407,6 @@ class OrdersController extends GetxController {
               'timestamp': FieldValue.serverTimestamp(),
             });
 
-        // ✅ SEND NOTIFICATION - Membership Approved
         await _sendNotification(
           userId: userId,
           title: "Membership Approved ✅",
@@ -411,12 +415,10 @@ class OrdersController extends GetxController {
           type: 'finance',
         );
       } else {
-        // Regular deposit - add to wallet
         await _db.collection('users').doc(userId).update({
           'walletBalance': FieldValue.increment(amount),
         });
 
-        // Add to wallet history
         await _db
             .collection('users')
             .doc(userId)
@@ -428,7 +430,6 @@ class OrdersController extends GetxController {
               'timestamp': FieldValue.serverTimestamp(),
             });
 
-        // ✅ SEND NOTIFICATION - Deposit Approved
         await _sendNotification(
           userId: userId,
           title: "Deposit Approved ✅",
@@ -438,7 +439,7 @@ class OrdersController extends GetxController {
         );
       }
 
-      Get.back(); // Close loading
+      Get.back();
 
       Get.snackbar(
         "Success ✅",
@@ -474,7 +475,6 @@ class OrdersController extends GetxController {
         'processedAt': FieldValue.serverTimestamp(),
       });
 
-      // Update user's membership status if it was a fee payment
       var depositDoc = await _db.collection('finances').doc(requestId).get();
       if (depositDoc.exists) {
         var data = depositDoc.data()!;
@@ -486,7 +486,6 @@ class OrdersController extends GetxController {
         }
       }
 
-      // Add to wallet history
       await _db
           .collection('users')
           .doc(userId)
@@ -498,7 +497,6 @@ class OrdersController extends GetxController {
             'timestamp': FieldValue.serverTimestamp(),
           });
 
-      // ✅ SEND NOTIFICATION - Deposit Rejected
       await _sendNotification(
         userId: userId,
         title: "Payment Rejected ❌",
@@ -506,7 +504,7 @@ class OrdersController extends GetxController {
         type: 'finance',
       );
 
-      Get.back(); // Close loading
+      Get.back();
 
       Get.snackbar(
         "Rejected",
@@ -525,7 +523,137 @@ class OrdersController extends GetxController {
     }
   }
 
-  // ✅ HELPER METHOD: Send Notification
+  // ==========================================
+  // ✅ NEW: ORDER PAYMENT METHODS
+  // ==========================================
+
+  Future<void> approveOrderPayment(String financeId) async {
+    try {
+      Get.dialog(
+        const Center(child: CircularProgressIndicator(color: Colors.green)),
+        barrierDismissible: false,
+      );
+
+      // Get payment data
+      var financeDoc = await _db.collection('finances').doc(financeId).get();
+      if (!financeDoc.exists) {
+        Get.back();
+        Get.snackbar("Error", "Payment not found", backgroundColor: Colors.red);
+        return;
+      }
+
+      var data = financeDoc.data()!;
+      String userId = data['userId'];
+      String orderId = DateTime.now().millisecondsSinceEpoch.toString();
+
+      // ✅ Create order in orders collection
+      await _db.collection('orders').doc(orderId).set({
+        'orderId': orderId,
+        'userId': userId,
+        'userEmail': data['userEmail'],
+        'customerName': data['customerName'],
+        'customerPhone': data['customerPhone'],
+        'customerAddress': data['customerAddress'],
+        'items': data['items'],
+        'subTotal': data['subTotal'],
+        'shippingFee': data['shippingFee'],
+        'grossProfit': data['grossProfit'],
+        'grandTotal': data['totalAmount'],
+        'paymentMethod': data['method'],
+        'trxId': data['trxId'],
+        'status': 'confirmed', // Start at confirmed (payment already verified)
+        'rewarded': false,
+        'isReviewed': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      // ✅ Update finance request status
+      await _db.collection('finances').doc(financeId).update({
+        'status': 'approved',
+        'orderId': orderId, // Link to created order
+        'processedAt': FieldValue.serverTimestamp(),
+      });
+
+      // ✅ Activate MLM
+      await _db.collection('users').doc(userId).update({'isMLMActive': true});
+
+      // ✅ Send notification
+      await _sendNotification(
+        userId: userId,
+        title: "Payment Approved ✅",
+        body:
+            "Your payment has been approved! Order #$orderId is now confirmed and will be shipped soon.",
+        type: 'order',
+      );
+
+      Get.back();
+
+      Get.snackbar(
+        "Success ✅",
+        "Payment approved and order #$orderId created",
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      Get.back();
+      Get.snackbar(
+        "Error",
+        "Failed to approve: ${e.toString()}",
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
+  }
+
+  Future<void> rejectOrderPayment(
+    String financeId,
+    String userId,
+    String reason,
+  ) async {
+    try {
+      Get.dialog(
+        const Center(child: CircularProgressIndicator(color: Colors.red)),
+        barrierDismissible: false,
+      );
+
+      await _db.collection('finances').doc(financeId).update({
+        'status': 'rejected',
+        'rejectionReason': reason,
+        'processedAt': FieldValue.serverTimestamp(),
+      });
+
+      // Send notification
+      await _sendNotification(
+        userId: userId,
+        title: "Payment Rejected ❌",
+        body:
+            "Your order payment has been rejected.\nReason: $reason\n\nPlease contact support if you have questions.",
+        type: 'order',
+      );
+
+      Get.back();
+
+      Get.snackbar(
+        "Rejected",
+        "Payment rejected",
+        backgroundColor: Colors.orange,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      Get.back();
+      Get.snackbar(
+        "Error",
+        "Failed to reject: ${e.toString()}",
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
+  }
+
+  // ==========================================
+  // HELPER METHOD: Send Notification
+  // ==========================================
+
   Future<void> _sendNotification({
     required String userId,
     required String title,
@@ -617,7 +745,6 @@ class OrdersController extends GetxController {
 
   Future<void> fetchHistory() async {
     try {
-      // Fetch order history
       var orderSnap = await _db
           .collection('orders')
           .where('status', whereIn: ['delivered', 'rejected', 'cancelled'])
@@ -627,7 +754,6 @@ class OrdersController extends GetxController {
         orderSnap.docs.map((doc) => OrderModel.fromFirestore(doc)).toList(),
       );
 
-      // Fetch vendor request history
       var vendorSnap = await _db
           .collection('vendor_requests')
           .where('status', whereIn: ['approved', 'rejected'])
