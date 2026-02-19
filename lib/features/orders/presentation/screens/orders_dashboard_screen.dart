@@ -13,10 +13,11 @@ class OrdersDashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final controller = Get.put(OrdersController());
+    // ✅ FIXED: Controller Not Found (Red Error) Fix - Made it permanent
+    final controller = Get.put(OrdersController(), permanent: true);
 
     return DefaultTabController(
-      length: 5,
+      length: 6,
       child: Scaffold(
         backgroundColor: const Color(0xFF0F0F0F),
         appBar: AppBar(
@@ -39,12 +40,17 @@ class OrdersDashboardScreen extends StatelessWidget {
           bottom: TabBar(
             isScrollable: true,
             indicatorColor: Colors.redAccent,
-            labelPadding: const EdgeInsets.symmetric(horizontal: 15),
+            labelPadding: const EdgeInsets.symmetric(horizontal: 12),
             tabs: [
               _buildTabWithBadge(
-                "Orders",
+                "COD Orders",
                 controller.pendingOrders,
                 Icons.shopping_bag,
+              ),
+              _buildTabWithBadge(
+                "Online Pay",
+                controller.orderPaymentRequests,
+                Icons.payment,
               ),
               _buildTabWithBadge(
                 "Vendor",
@@ -71,13 +77,68 @@ class OrdersDashboardScreen extends StatelessWidget {
         ),
         body: TabBarView(
           children: [
-            _buildOrdersTab(controller),
+            _buildOrdersTab(controller), // COD Orders
+            _buildOrderPaymentsTab(controller), // Online Payments
             _buildVendorTab(controller),
             _buildWithdrawalsTab(controller),
             _buildDepositsTab(controller),
             _buildFeeTab(controller),
           ],
         ),
+      ),
+    );
+  }
+
+  // ✅ FIXED: Replaced 'border: Border.all' with 'side: BorderSide'
+  void _showConfirmationDialog({
+    required String title,
+    required String content,
+    required VoidCallback onConfirm,
+  }) {
+    Get.dialog(
+      AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          // 🔥 ERROR WAS HERE: Changed to BorderSide
+          side: BorderSide(color: Colors.redAccent.withOpacity(0.5), width: 1),
+        ),
+        title: Text(
+          title,
+          style: GoogleFonts.orbitron(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: Text(content, style: const TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(),
+            child: const Text(
+              "CANCEL",
+              style: TextStyle(color: Colors.white38),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            onPressed: () {
+              Get.back(); // Close dialog
+              onConfirm(); // Execute rejection action
+            },
+            child: const Text(
+              "YES, REJECT",
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -96,7 +157,11 @@ class OrdersDashboardScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                _debugRow("Pending Orders", controller.pendingOrders.length),
+                _debugRow("COD Orders", controller.pendingOrders.length),
+                _debugRow(
+                  "Online Payments",
+                  controller.orderPaymentRequests.length,
+                ),
                 _debugRow("Vendor Requests", controller.pendingRequests.length),
                 _debugRow(
                   "Withdrawal Requests",
@@ -155,7 +220,7 @@ class OrdersDashboardScreen extends StatelessWidget {
             title,
             style: GoogleFonts.comicNeue(
               fontWeight: FontWeight.bold,
-              fontSize: 12,
+              fontSize: 11,
             ),
           ),
           const SizedBox(width: 5),
@@ -183,7 +248,9 @@ class OrdersDashboardScreen extends StatelessWidget {
     );
   }
 
-  // --- ORDERS TAB ---
+  // ==========================================
+  // 1. COD ORDERS TAB (ONLY COD)
+  // ==========================================
   Widget _buildOrdersTab(OrdersController controller) {
     return Obx(() {
       if (controller.isLoading.value) {
@@ -193,10 +260,7 @@ class OrdersDashboardScreen extends StatelessWidget {
       }
 
       if (controller.pendingOrders.isEmpty) {
-        return _buildEmptyState(
-          "No Active Orders",
-          Icons.shopping_bag_outlined,
-        );
+        return _buildEmptyState("No COD Orders", Icons.shopping_bag_outlined);
       }
 
       return ListView.builder(
@@ -207,12 +271,17 @@ class OrdersDashboardScreen extends StatelessWidget {
           return CommonListCard(
             title: order.productName,
             subtitle:
-                "User: ${order.customerName}\nStatus: ${order.status.toUpperCase()}",
+                "User: ${order.customerName}\nStatus: ${order.status.toUpperCase()}\nPayment: ${order.paymentMethod}",
             imageUrl: order.productImage,
             price: "PKR ${order.price.toStringAsFixed(0)}",
             onView: () => Get.to(() => OrderDetailScreen(order: order)),
             onAccept: () => _showCenteredStatusDialog(context, order),
-            onReject: () => controller.updateOrderStage(order.id, 'rejected'),
+            onReject: () => _showConfirmationDialog(
+              title: "Reject Order?",
+              content: "Are you sure you want to completely reject this order?",
+              onConfirm: () =>
+                  controller.updateOrderStage(order.id, 'rejected'),
+            ),
           );
         },
       );
@@ -311,7 +380,225 @@ class OrdersDashboardScreen extends StatelessWidget {
     );
   }
 
-  // --- WITHDRAWALS TAB ---
+  // ==========================================
+  // 2. ORDER PAYMENTS TAB (ONLINE PAYMENTS)
+  // ==========================================
+  Widget _buildOrderPaymentsTab(OrdersController controller) {
+    return Obx(() {
+      if (controller.isLoading.value) {
+        return const Center(
+          child: CircularProgressIndicator(color: Colors.redAccent),
+        );
+      }
+
+      if (controller.orderPaymentRequests.isEmpty) {
+        return _buildEmptyState(
+          "No Online Payment Requests",
+          Icons.payment_outlined,
+        );
+      }
+
+      return ListView.builder(
+        padding: const EdgeInsets.all(12),
+        itemCount: controller.orderPaymentRequests.length,
+        itemBuilder: (context, index) {
+          final req = controller.orderPaymentRequests[index];
+          return _buildOrderPaymentCard(req, controller);
+        },
+      );
+    });
+  }
+
+  Widget _buildOrderPaymentCard(
+    Map<String, dynamic> req,
+    OrdersController controller,
+  ) {
+    String userId = req['userId'] ?? '';
+    String userName = req['userName'] ?? 'Unknown';
+    String userEmail = req['userEmail'] ?? 'No Email';
+    String customerName = req['customerName'] ?? 'N/A';
+    String customerPhone = req['customerPhone'] ?? 'N/A';
+    String customerAddress = req['customerAddress'] ?? 'N/A';
+    String method = req['method'] ?? 'N/A';
+    String trxId = req['trxId'] ?? 'N/A';
+    double totalAmount = (req['totalAmount'] ?? 0.0).toDouble();
+    var items = req['items'] as List? ?? [];
+    var timestamp = req['timestamp'];
+
+    String formattedDate = 'N/A';
+    if (timestamp != null) {
+      try {
+        formattedDate = DateFormat(
+          'dd MMM, hh:mm a',
+        ).format(timestamp.toDate());
+      } catch (e) {}
+    }
+
+    return Card(
+      color: const Color(0xFF1A1A1A),
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(15),
+        side: BorderSide(color: Colors.blue.withOpacity(0.3)),
+      ),
+      child: ExpansionTile(
+        tilePadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+        leading: CircleAvatar(
+          backgroundColor: Colors.blue.withOpacity(0.2),
+          child: const Icon(Icons.payment, color: Colors.blue),
+        ),
+        title: Text(
+          "$userName (Customer: $customerName)",
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+          ),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              userEmail,
+              style: const TextStyle(color: Colors.white60, fontSize: 11),
+            ),
+            Text(
+              "Rs. ${totalAmount.toStringAsFixed(0)} • ${items.length} items",
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+          ],
+        ),
+        trailing: Text(
+          formattedDate,
+          style: const TextStyle(color: Colors.white38, fontSize: 10),
+        ),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(15),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.3),
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(15),
+                bottomRight: Radius.circular(15),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _detailRow("Customer Name", customerName),
+                _detailRow("Customer Phone", customerPhone),
+                _detailRow("Address", customerAddress),
+                const Divider(color: Colors.white24, height: 20),
+                _detailRow("Payment Method", method),
+                _detailRow("TRX ID", trxId),
+                _detailRow(
+                  "Total Amount",
+                  "Rs. ${totalAmount.toStringAsFixed(0)}",
+                ),
+                const Divider(color: Colors.white24, height: 20),
+                Text(
+                  "Order Items (${items.length}):",
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ...items.map((item) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 5),
+                    child: Text(
+                      "• ${item['name'] ?? 'Unknown'} x${item['quantity'] ?? 1} - Rs.${(item['salePrice'] ?? 0) * (item['quantity'] ?? 1)}",
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                      ),
+                    ),
+                  );
+                }).toList(),
+                const Divider(color: Colors.white24, height: 20),
+                if (req['screenshotBase64'] != null &&
+                    req['screenshotBase64'].toString().isNotEmpty)
+                  GestureDetector(
+                    onTap: () => _showBase64ImageDialog(
+                      req['screenshotBase64'],
+                      req['imageExtension'] ?? 'jpg',
+                    ),
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(vertical: 10),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Icon(Icons.image, color: Colors.blue, size: 18),
+                          SizedBox(width: 8),
+                          Text(
+                            "View Payment Screenshot",
+                            style: TextStyle(color: Colors.blue, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 15),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.check, size: 18),
+                        label: const Text("Approve & Create Order"),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        onPressed: () {
+                          if (userId.isEmpty) {
+                            Get.snackbar(
+                              "Error",
+                              "User ID missing",
+                              backgroundColor: Colors.red,
+                            );
+                            return;
+                          }
+                          controller.approveOrderPayment(req['id']);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.close, size: 18),
+                        label: const Text("Reject"),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        onPressed: () => _showRejectDialog(
+                          req['id'],
+                          userId,
+                          'order_payment',
+                          controller,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==========================================
+  // 3. WITHDRAWALS TAB
+  // ==========================================
   Widget _buildWithdrawalsTab(OrdersController controller) {
     return Obx(() {
       if (controller.isLoading.value) {
@@ -338,7 +625,9 @@ class OrdersDashboardScreen extends StatelessWidget {
     });
   }
 
-  // --- DEPOSITS TAB (WITH BASE64 IMAGE SUPPORT) ---
+  // ==========================================
+  // 4. DEPOSITS TAB
+  // ==========================================
   Widget _buildDepositsTab(OrdersController controller) {
     return Obx(() {
       if (controller.isLoading.value) {
@@ -459,8 +748,6 @@ class OrdersDashboardScreen extends StatelessWidget {
                   ),
                 ] else ...[
                   if (req['trxId'] != null) _detailRow("TRX ID", req['trxId']),
-
-                  // ✅ BASE64 IMAGE SUPPORT
                   if (req['screenshotBase64'] != null &&
                       req['screenshotBase64'].toString().isNotEmpty)
                     GestureDetector(
@@ -481,35 +768,7 @@ class OrdersDashboardScreen extends StatelessWidget {
                             Icon(Icons.image, color: Colors.blue, size: 18),
                             SizedBox(width: 8),
                             Text(
-                              "View Screenshot (Base64)",
-                              style: TextStyle(
-                                color: Colors.blue,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  // ❌ OLD URL SUPPORT (Fallback for old data)
-                  else if (req['screenshotUrl'] != null &&
-                      req['screenshotUrl'].toString().isNotEmpty)
-                    GestureDetector(
-                      onTap: () => _showImageUrlDialog(req['screenshotUrl']),
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(vertical: 10),
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: const [
-                            Icon(Icons.image, color: Colors.blue, size: 18),
-                            SizedBox(width: 8),
-                            Text(
-                              "View Screenshot (URL)",
+                              "View Screenshot",
                               style: TextStyle(
                                 color: Colors.blue,
                                 fontSize: 12,
@@ -579,7 +838,6 @@ class OrdersDashboardScreen extends StatelessWidget {
     );
   }
 
-  // ✅ NEW: Show Base64 Image Dialog
   void _showBase64ImageDialog(String base64Data, String extension) {
     try {
       Get.dialog(
@@ -595,7 +853,7 @@ class OrdersDashboardScreen extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      "Payment Screenshot (.${extension})",
+                      "Screenshot (.${extension})",
                       style: const TextStyle(color: Colors.white),
                     ),
                     IconButton(
@@ -605,7 +863,7 @@ class OrdersDashboardScreen extends StatelessWidget {
                   ],
                 ),
               ),
-              Expanded(
+              Flexible(
                 child: InteractiveViewer(
                   child: Image.memory(
                     base64Decode(base64Data),
@@ -640,37 +898,6 @@ class OrdersDashboardScreen extends StatelessWidget {
     }
   }
 
-  // ❌ OLD: Show URL Image Dialog (for backward compatibility)
-  void _showImageUrlDialog(String url) {
-    Get.dialog(
-      Dialog(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              color: Colors.black,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    "Payment Screenshot",
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white),
-                    onPressed: () => Get.back(),
-                  ),
-                ],
-              ),
-            ),
-            Image.network(url, fit: BoxFit.contain),
-          ],
-        ),
-      ),
-    );
-  }
-
   void _showRejectDialog(
     String reqId,
     String userId,
@@ -682,7 +909,11 @@ class OrdersDashboardScreen extends StatelessWidget {
       AlertDialog(
         backgroundColor: const Color(0xFF1A1A1A),
         title: Text(
-          "Reject ${type == 'withdrawal' ? 'Withdrawal' : 'Deposit'}",
+          "Reject ${type == 'withdrawal'
+              ? 'Withdrawal'
+              : type == 'order_payment'
+              ? 'Payment'
+              : 'Deposit'}",
           style: const TextStyle(color: Colors.white),
         ),
         content: TextField(
@@ -716,6 +947,8 @@ class OrdersDashboardScreen extends StatelessWidget {
               Get.back();
               if (type == 'withdrawal') {
                 controller.rejectWithdrawal(reqId, userId, reason);
+              } else if (type == 'order_payment') {
+                controller.rejectOrderPayment(reqId, userId, reason);
               } else {
                 controller.rejectDeposit(reqId, userId, reason);
               }
@@ -753,7 +986,9 @@ class OrdersDashboardScreen extends StatelessWidget {
     );
   }
 
-  // --- OLD FEE TAB ---
+  // ==========================================
+  // 5. OLD FEE TAB
+  // ==========================================
   Widget _buildFeeTab(OrdersController controller) {
     return Obx(() {
       if (controller.isLoading.value) {
@@ -823,7 +1058,13 @@ class OrdersDashboardScreen extends StatelessWidget {
                         );
                         return;
                       }
-                      controller.rejectFee(req['id'], userId);
+                      _showConfirmationDialog(
+                        title: "Reject Old Fee?",
+                        content:
+                            "Are you sure you want to reject this old fee request?",
+                        onConfirm: () =>
+                            controller.rejectFee(req['id'], userId),
+                      );
                     },
                   ),
                 ],
@@ -835,7 +1076,9 @@ class OrdersDashboardScreen extends StatelessWidget {
     });
   }
 
-  // --- VENDOR TAB ---
+  // ==========================================
+  // 6. VENDOR TAB
+  // ==========================================
   Widget _buildVendorTab(OrdersController controller) {
     return Obx(() {
       if (controller.isLoading.value) {
@@ -860,7 +1103,11 @@ class OrdersDashboardScreen extends StatelessWidget {
             price: "PKR ${req.productPrice}",
             onView: () {},
             onAccept: () => controller.acceptRequest(req.id),
-            onReject: () => controller.rejectRequest(req.id),
+            onReject: () => _showConfirmationDialog(
+              title: "Reject Vendor?",
+              content: "Are you sure you want to reject this vendor request?",
+              onConfirm: () => controller.rejectRequest(req.id),
+            ),
           );
         },
       );
