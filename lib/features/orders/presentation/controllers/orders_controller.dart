@@ -23,9 +23,9 @@ class OrdersController extends GetxController {
   // Finance Requests
   var withdrawalRequests = <Map<String, dynamic>>[].obs;
   var depositRequests = <Map<String, dynamic>>[].obs;
-  var orderPaymentRequests = <Map<String, dynamic>>[].obs; // ✅ NEW
+  var orderPaymentRequests = <Map<String, dynamic>>[].obs;
 
-  // Old Fee Requests (for backward compatibility)
+  // Old Fee Requests
   var feeRequests = <Map<String, dynamic>>[].obs;
 
   @override
@@ -74,9 +74,7 @@ class OrdersController extends GetxController {
         });
   }
 
-  /// ✅ UPDATED: Listen to all finance request types
   void _listenToFinanceRequests() {
-    // 1. Withdrawal Requests
     _db
         .collection('finances')
         .where('type', isEqualTo: 'withdrawal')
@@ -93,7 +91,6 @@ class OrdersController extends GetxController {
           );
         });
 
-    // 2. Deposit Requests (Fee Payments)
     _db
         .collection('finances')
         .where('type', isEqualTo: 'deposit')
@@ -110,7 +107,6 @@ class OrdersController extends GetxController {
           );
         });
 
-    // ✅ 3. Order Payment Requests (NEW)
     _db
         .collection('finances')
         .where('type', isEqualTo: 'order_payment')
@@ -163,6 +159,11 @@ class OrdersController extends GetxController {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
+      // ✅ CLEAR DEBUG PRINT ADDED FOR ADMIN
+      print("\n========================================");
+      print("✅ ADMIN ACTION: Order #$orderId updated to -> $newStatus");
+      print("========================================\n");
+
       Get.snackbar(
         "Success",
         "Order status updated to $newStatus",
@@ -208,6 +209,8 @@ class OrdersController extends GetxController {
         'processedAt': FieldValue.serverTimestamp(),
       });
 
+      print("✅ ADMIN ACTION: Vendor Request $requestId Approved.");
+
       Get.snackbar(
         "Success",
         "Vendor request approved",
@@ -230,6 +233,8 @@ class OrdersController extends GetxController {
         'status': 'rejected',
         'processedAt': FieldValue.serverTimestamp(),
       });
+
+      print("❌ ADMIN ACTION: Vendor Request $requestId Rejected.");
 
       Get.snackbar(
         "Success",
@@ -291,6 +296,7 @@ class OrdersController extends GetxController {
       );
 
       Get.back();
+      print("✅ ADMIN ACTION: Withdrawal $requestId Approved.");
 
       Get.snackbar(
         "Success ✅",
@@ -345,6 +351,7 @@ class OrdersController extends GetxController {
       );
 
       Get.back();
+      print("❌ ADMIN ACTION: Withdrawal $requestId Rejected.");
 
       Get.snackbar(
         "Rejected",
@@ -440,6 +447,7 @@ class OrdersController extends GetxController {
       }
 
       Get.back();
+      print("✅ ADMIN ACTION: Deposit $requestId Approved.");
 
       Get.snackbar(
         "Success ✅",
@@ -505,6 +513,7 @@ class OrdersController extends GetxController {
       );
 
       Get.back();
+      print("❌ ADMIN ACTION: Deposit $requestId Rejected.");
 
       Get.snackbar(
         "Rejected",
@@ -524,7 +533,7 @@ class OrdersController extends GetxController {
   }
 
   // ==========================================
-  // ✅ NEW: ORDER PAYMENT METHODS
+  // ORDER PAYMENT METHODS
   // ==========================================
 
   Future<void> approveOrderPayment(String financeId) async {
@@ -534,7 +543,6 @@ class OrdersController extends GetxController {
         barrierDismissible: false,
       );
 
-      // Get payment data
       var financeDoc = await _db.collection('finances').doc(financeId).get();
       if (!financeDoc.exists) {
         Get.back();
@@ -546,7 +554,6 @@ class OrdersController extends GetxController {
       String userId = data['userId'];
       String orderId = DateTime.now().millisecondsSinceEpoch.toString();
 
-      // ✅ Create order in orders collection
       await _db.collection('orders').doc(orderId).set({
         'orderId': orderId,
         'userId': userId,
@@ -561,23 +568,20 @@ class OrdersController extends GetxController {
         'grandTotal': data['totalAmount'],
         'paymentMethod': data['method'],
         'trxId': data['trxId'],
-        'status': 'confirmed', // Start at confirmed (payment already verified)
+        'status': 'confirmed',
         'rewarded': false,
         'isReviewed': false,
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      // ✅ Update finance request status
       await _db.collection('finances').doc(financeId).update({
         'status': 'approved',
-        'orderId': orderId, // Link to created order
+        'orderId': orderId,
         'processedAt': FieldValue.serverTimestamp(),
       });
 
-      // ✅ Activate MLM
       await _db.collection('users').doc(userId).update({'isMLMActive': true});
 
-      // ✅ Send notification
       await _sendNotification(
         userId: userId,
         title: "Payment Approved ✅",
@@ -587,6 +591,9 @@ class OrdersController extends GetxController {
       );
 
       Get.back();
+      print(
+        "✅ ADMIN ACTION: Order Payment $financeId Approved. Order #$orderId created.",
+      );
 
       Get.snackbar(
         "Success ✅",
@@ -622,7 +629,6 @@ class OrdersController extends GetxController {
         'processedAt': FieldValue.serverTimestamp(),
       });
 
-      // Send notification
       await _sendNotification(
         userId: userId,
         title: "Payment Rejected ❌",
@@ -632,6 +638,7 @@ class OrdersController extends GetxController {
       );
 
       Get.back();
+      print("❌ ADMIN ACTION: Order Payment $financeId Rejected.");
 
       Get.snackbar(
         "Rejected",
@@ -674,14 +681,13 @@ class OrdersController extends GetxController {
             'timestamp': FieldValue.serverTimestamp(),
             if (extraData != null) 'data': extraData,
           });
-      print("✅ Notification sent to user: $userId");
     } catch (e) {
-      print("❌ Failed to send notification: $e");
+      // ignore
     }
   }
 
   // ==========================================
-  // OLD FEE REQUEST METHODS (Backward Compatibility)
+  // OLD FEE REQUEST METHODS
   // ==========================================
 
   Future<void> approveFee(String requestId, String userId) async {
@@ -695,6 +701,8 @@ class OrdersController extends GetxController {
         'membershipStatus': 'approved',
         'isMLMActive': true,
       });
+
+      print("✅ ADMIN ACTION: Old Fee $requestId Approved.");
 
       Get.snackbar(
         "Success",
@@ -722,6 +730,8 @@ class OrdersController extends GetxController {
       await _db.collection('users').doc(userId).update({
         'membershipStatus': 'rejected',
       });
+
+      print("❌ ADMIN ACTION: Old Fee $requestId Rejected.");
 
       Get.snackbar(
         "Rejected",
@@ -765,7 +775,7 @@ class OrdersController extends GetxController {
             .toList(),
       );
     } catch (e) {
-      print("Error fetching history: $e");
+      // ignore
     }
   }
 }

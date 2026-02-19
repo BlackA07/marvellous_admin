@@ -13,7 +13,8 @@ class OrdersDashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final controller = Get.put(OrdersController());
+    // ✅ FIXED: Controller Not Found (Red Error) Fix - Made it permanent
+    final controller = Get.put(OrdersController(), permanent: true);
 
     return DefaultTabController(
       length: 6,
@@ -35,7 +36,7 @@ class OrdersDashboardScreen extends StatelessWidget {
               icon: const Icon(Icons.bug_report, color: Colors.orange),
               onPressed: () => _showDebugInfo(controller),
             ),
-          ], // Yahan list band ho rahi hai
+          ],
           bottom: TabBar(
             isScrollable: true,
             indicatorColor: Colors.redAccent,
@@ -47,7 +48,7 @@ class OrdersDashboardScreen extends StatelessWidget {
                 Icons.shopping_bag,
               ),
               _buildTabWithBadge(
-                "Online Pay", // ✅ NEW TAB
+                "Online Pay",
                 controller.orderPaymentRequests,
                 Icons.payment,
               ),
@@ -77,13 +78,67 @@ class OrdersDashboardScreen extends StatelessWidget {
         body: TabBarView(
           children: [
             _buildOrdersTab(controller), // COD Orders
-            _buildOrderPaymentsTab(controller), // ✅ NEW: Online Payments
+            _buildOrderPaymentsTab(controller), // Online Payments
             _buildVendorTab(controller),
             _buildWithdrawalsTab(controller),
             _buildDepositsTab(controller),
             _buildFeeTab(controller),
           ],
         ),
+      ),
+    );
+  }
+
+  // ✅ FIXED: Replaced 'border: Border.all' with 'side: BorderSide'
+  void _showConfirmationDialog({
+    required String title,
+    required String content,
+    required VoidCallback onConfirm,
+  }) {
+    Get.dialog(
+      AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          // 🔥 ERROR WAS HERE: Changed to BorderSide
+          side: BorderSide(color: Colors.redAccent.withOpacity(0.5), width: 1),
+        ),
+        title: Text(
+          title,
+          style: GoogleFonts.orbitron(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: Text(content, style: const TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(),
+            child: const Text(
+              "CANCEL",
+              style: TextStyle(color: Colors.white38),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            onPressed: () {
+              Get.back(); // Close dialog
+              onConfirm(); // Execute rejection action
+            },
+            child: const Text(
+              "YES, REJECT",
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -194,7 +249,7 @@ class OrdersDashboardScreen extends StatelessWidget {
   }
 
   // ==========================================
-  // ✅ 1. COD ORDERS TAB (ONLY COD)
+  // 1. COD ORDERS TAB (ONLY COD)
   // ==========================================
   Widget _buildOrdersTab(OrdersController controller) {
     return Obx(() {
@@ -221,7 +276,12 @@ class OrdersDashboardScreen extends StatelessWidget {
             price: "PKR ${order.price.toStringAsFixed(0)}",
             onView: () => Get.to(() => OrderDetailScreen(order: order)),
             onAccept: () => _showCenteredStatusDialog(context, order),
-            onReject: () => controller.updateOrderStage(order.id, 'rejected'),
+            onReject: () => _showConfirmationDialog(
+              title: "Reject Order?",
+              content: "Are you sure you want to completely reject this order?",
+              onConfirm: () =>
+                  controller.updateOrderStage(order.id, 'rejected'),
+            ),
           );
         },
       );
@@ -321,7 +381,7 @@ class OrdersDashboardScreen extends StatelessWidget {
   }
 
   // ==========================================
-  // ✅ 2. ORDER PAYMENTS TAB (NEW - ONLINE PAYMENTS)
+  // 2. ORDER PAYMENTS TAB (ONLINE PAYMENTS)
   // ==========================================
   Widget _buildOrderPaymentsTab(OrdersController controller) {
     return Obx(() {
@@ -349,7 +409,6 @@ class OrdersDashboardScreen extends StatelessWidget {
     });
   }
 
-  /// ✅ NEW: Order Payment Card
   Widget _buildOrderPaymentCard(
     Map<String, dynamic> req,
     OrdersController controller,
@@ -437,8 +496,6 @@ class OrdersDashboardScreen extends StatelessWidget {
                   "Rs. ${totalAmount.toStringAsFixed(0)}",
                 ),
                 const Divider(color: Colors.white24, height: 20),
-
-                // Items List
                 Text(
                   "Order Items (${items.length}):",
                   style: const TextStyle(
@@ -460,10 +517,7 @@ class OrdersDashboardScreen extends StatelessWidget {
                     ),
                   );
                 }).toList(),
-
                 const Divider(color: Colors.white24, height: 20),
-
-                // Screenshot
                 if (req['screenshotBase64'] != null &&
                     req['screenshotBase64'].toString().isNotEmpty)
                   GestureDetector(
@@ -491,10 +545,7 @@ class OrdersDashboardScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-
                 const SizedBox(height: 15),
-
-                // Action Buttons
                 Row(
                   children: [
                     Expanded(
@@ -1007,7 +1058,13 @@ class OrdersDashboardScreen extends StatelessWidget {
                         );
                         return;
                       }
-                      controller.rejectFee(req['id'], userId);
+                      _showConfirmationDialog(
+                        title: "Reject Old Fee?",
+                        content:
+                            "Are you sure you want to reject this old fee request?",
+                        onConfirm: () =>
+                            controller.rejectFee(req['id'], userId),
+                      );
                     },
                   ),
                 ],
@@ -1046,7 +1103,11 @@ class OrdersDashboardScreen extends StatelessWidget {
             price: "PKR ${req.productPrice}",
             onView: () {},
             onAccept: () => controller.acceptRequest(req.id),
-            onReject: () => controller.rejectRequest(req.id),
+            onReject: () => _showConfirmationDialog(
+              title: "Reject Vendor?",
+              content: "Are you sure you want to reject this vendor request?",
+              onConfirm: () => controller.rejectRequest(req.id),
+            ),
           );
         },
       );
