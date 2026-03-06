@@ -1,7 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../../data/models/order_model.dart';
 import '../controllers/orders_controller.dart';
@@ -13,7 +16,6 @@ class OrdersDashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ FIXED: Controller Not Found (Red Error) Fix - Made it permanent
     final controller = Get.put(OrdersController(), permanent: true);
 
     return DefaultTabController(
@@ -77,8 +79,8 @@ class OrdersDashboardScreen extends StatelessWidget {
         ),
         body: TabBarView(
           children: [
-            _buildOrdersTab(controller), // COD Orders
-            _buildOrderPaymentsTab(controller), // Online Payments
+            _buildOrdersTab(controller),
+            _buildOrderPaymentsTab(controller),
             _buildVendorTab(controller),
             _buildWithdrawalsTab(controller),
             _buildDepositsTab(controller),
@@ -89,7 +91,9 @@ class OrdersDashboardScreen extends StatelessWidget {
     );
   }
 
-  // ✅ FIXED: Replaced 'border: Border.all' with 'side: BorderSide'
+  // ══════════════════════════════════════════════════════════════════════════
+  //  CONFIRMATION DIALOG
+  // ══════════════════════════════════════════════════════════════════════════
   void _showConfirmationDialog({
     required String title,
     required String content,
@@ -100,7 +104,6 @@ class OrdersDashboardScreen extends StatelessWidget {
         backgroundColor: const Color(0xFF1A1A1A),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
-          // 🔥 ERROR WAS HERE: Changed to BorderSide
           side: BorderSide(color: Colors.redAccent.withOpacity(0.5), width: 1),
         ),
         title: Text(
@@ -127,8 +130,8 @@ class OrdersDashboardScreen extends StatelessWidget {
               ),
             ),
             onPressed: () {
-              Get.back(); // Close dialog
-              onConfirm(); // Execute rejection action
+              Get.back();
+              onConfirm();
             },
             child: const Text(
               "YES, REJECT",
@@ -143,6 +146,9 @@ class OrdersDashboardScreen extends StatelessWidget {
     );
   }
 
+  // ══════════════════════════════════════════════════════════════════════════
+  //  DEBUG INFO
+  // ══════════════════════════════════════════════════════════════════════════
   void _showDebugInfo(OrdersController controller) {
     Get.dialog(
       AlertDialog(
@@ -248,9 +254,9 @@ class OrdersDashboardScreen extends StatelessWidget {
     );
   }
 
-  // ==========================================
-  // 1. COD ORDERS TAB (ONLY COD)
-  // ==========================================
+  // ══════════════════════════════════════════════════════════════════════════
+  //  TAB 1: COD ORDERS
+  // ══════════════════════════════════════════════════════════════════════════
   Widget _buildOrdersTab(OrdersController controller) {
     return Obx(() {
       if (controller.isLoading.value) {
@@ -258,11 +264,9 @@ class OrdersDashboardScreen extends StatelessWidget {
           child: CircularProgressIndicator(color: Colors.redAccent),
         );
       }
-
       if (controller.pendingOrders.isEmpty) {
         return _buildEmptyState("No COD Orders", Icons.shopping_bag_outlined);
       }
-
       return ListView.builder(
         padding: const EdgeInsets.all(12),
         itemCount: controller.pendingOrders.length,
@@ -380,9 +384,9 @@ class OrdersDashboardScreen extends StatelessWidget {
     );
   }
 
-  // ==========================================
-  // 2. ORDER PAYMENTS TAB (ONLINE PAYMENTS)
-  // ==========================================
+  // ══════════════════════════════════════════════════════════════════════════
+  //  TAB 2: ONLINE PAYMENTS
+  // ══════════════════════════════════════════════════════════════════════════
   Widget _buildOrderPaymentsTab(OrdersController controller) {
     return Obx(() {
       if (controller.isLoading.value) {
@@ -390,14 +394,12 @@ class OrdersDashboardScreen extends StatelessWidget {
           child: CircularProgressIndicator(color: Colors.redAccent),
         );
       }
-
       if (controller.orderPaymentRequests.isEmpty) {
         return _buildEmptyState(
           "No Online Payment Requests",
           Icons.payment_outlined,
         );
       }
-
       return ListView.builder(
         padding: const EdgeInsets.all(12),
         itemCount: controller.orderPaymentRequests.length,
@@ -424,7 +426,6 @@ class OrdersDashboardScreen extends StatelessWidget {
     double totalAmount = (req['totalAmount'] ?? 0.0).toDouble();
     var items = req['items'] as List? ?? [];
     var timestamp = req['timestamp'];
-
     String formattedDate = 'N/A';
     if (timestamp != null) {
       try {
@@ -596,9 +597,9 @@ class OrdersDashboardScreen extends StatelessWidget {
     );
   }
 
-  // ==========================================
-  // 3. WITHDRAWALS TAB
-  // ==========================================
+  // ══════════════════════════════════════════════════════════════════════════
+  //  TAB 3: WITHDRAWALS
+  // ══════════════════════════════════════════════════════════════════════════
   Widget _buildWithdrawalsTab(OrdersController controller) {
     return Obx(() {
       if (controller.isLoading.value) {
@@ -606,28 +607,26 @@ class OrdersDashboardScreen extends StatelessWidget {
           child: CircularProgressIndicator(color: Colors.redAccent),
         );
       }
-
       if (controller.withdrawalRequests.isEmpty) {
         return _buildEmptyState(
           "No Withdrawal Requests",
           Icons.account_balance_wallet_outlined,
         );
       }
-
       return ListView.builder(
         padding: const EdgeInsets.all(12),
         itemCount: controller.withdrawalRequests.length,
         itemBuilder: (context, index) {
           final req = controller.withdrawalRequests[index];
-          return _buildFinanceCard(req, 'withdrawal', controller);
+          return _buildFinanceCard(context, req, 'withdrawal', controller);
         },
       );
     });
   }
 
-  // ==========================================
-  // 4. DEPOSITS TAB
-  // ==========================================
+  // ══════════════════════════════════════════════════════════════════════════
+  //  TAB 4: DEPOSITS
+  // ══════════════════════════════════════════════════════════════════════════
   Widget _buildDepositsTab(OrdersController controller) {
     return Obx(() {
       if (controller.isLoading.value) {
@@ -635,23 +634,26 @@ class OrdersDashboardScreen extends StatelessWidget {
           child: CircularProgressIndicator(color: Colors.redAccent),
         );
       }
-
       if (controller.depositRequests.isEmpty) {
         return _buildEmptyState("No Deposit Requests", Icons.payments_outlined);
       }
-
       return ListView.builder(
         padding: const EdgeInsets.all(12),
         itemCount: controller.depositRequests.length,
         itemBuilder: (context, index) {
           final req = controller.depositRequests[index];
-          return _buildFinanceCard(req, 'deposit', controller);
+          return _buildFinanceCard(context, req, 'deposit', controller);
         },
       );
     });
   }
 
+  // ══════════════════════════════════════════════════════════════════════════
+  //  FINANCE CARD (Withdrawal + Deposit)
+  //  CHANGE: Withdrawal approve button ab screenshot dialog kholega
+  // ══════════════════════════════════════════════════════════════════════════
   Widget _buildFinanceCard(
+    BuildContext context,
     Map<String, dynamic> req,
     String type,
     OrdersController controller,
@@ -662,7 +664,6 @@ class OrdersDashboardScreen extends StatelessWidget {
     String userEmail = req['userEmail'] ?? 'No Email';
     String method = req['method'] ?? 'N/A';
     var timestamp = req['timestamp'];
-
     String formattedDate = 'N/A';
     if (timestamp != null) {
       try {
@@ -733,23 +734,71 @@ class OrdersDashboardScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (type == 'withdrawal') ...[
-                  if (req['accountName'] != null)
+                  // ─── Withdrawal Details ───────────────────────────────────
+                  if ((req['accountName'] ?? '').toString().isNotEmpty)
                     _detailRow("Account Name", req['accountName']),
-                  if (req['mobileNumber'] != null)
+                  if ((req['mobileNumber'] ?? '').toString().isNotEmpty)
                     _detailRow("Mobile", req['mobileNumber']),
-                  if (req['iban'] != null) _detailRow("IBAN", req['iban']),
-                  if (req['bankName'] != null)
+                  if ((req['iban'] ?? '').toString().isNotEmpty)
+                    _detailRow("IBAN", req['iban']),
+                  if ((req['bankName'] ?? '').toString().isNotEmpty)
                     _detailRow("Bank", req['bankName']),
-                  if (req['walletAddress'] != null)
-                    _detailRow("Wallet", req['walletAddress']),
+                  if ((req['walletAddress'] ?? '').toString().isNotEmpty)
+                    _detailRow("Wallet Address", req['walletAddress']),
+                  if ((req['userEmail_detail'] ?? '').toString().isNotEmpty)
+                    _detailRow("USDT Email", req['userEmail_detail']),
                   _detailRow(
-                    "Available Balance",
-                    "Rs. ${(req['availableBalance'] ?? 0.0).toStringAsFixed(0)}",
+                    "Requested Amount",
+                    "Rs. ${(req['requestedAmount'] ?? amount).toStringAsFixed(0)}",
                   ),
+                  _detailRow(
+                    "Fee Deducted (50%)",
+                    "Rs. ${(req['feeDeducted'] ?? 0.0).toStringAsFixed(0)}",
+                  ),
+                  _detailRow(
+                    "Client Receives",
+                    "Rs. ${(req['amountToReceive'] ?? amount).toStringAsFixed(0)}",
+                  ),
+                  _detailRow(
+                    "Membership",
+                    req['isUnpaidMember'] == true
+                        ? '❌ Unpaid'
+                        : '✅ Paid Member',
+                  ),
+                  // User screenshot (if provided)
+                  if ((req['screenshotBase64'] ?? '').toString().isNotEmpty)
+                    GestureDetector(
+                      onTap: () => _showBase64ImageDialog(
+                        req['screenshotBase64'],
+                        req['imageExtension'] ?? 'jpg',
+                      ),
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(vertical: 8),
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(Icons.image, color: Colors.blue, size: 18),
+                            SizedBox(width: 8),
+                            Text(
+                              "View User Screenshot",
+                              style: TextStyle(
+                                color: Colors.blue,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                 ] else ...[
+                  // ─── Deposit Details ──────────────────────────────────────
                   if (req['trxId'] != null) _detailRow("TRX ID", req['trxId']),
-                  if (req['screenshotBase64'] != null &&
-                      req['screenshotBase64'].toString().isNotEmpty)
+                  if ((req['screenshotBase64'] ?? '').toString().isNotEmpty)
                     GestureDetector(
                       onTap: () => _showBase64ImageDialog(
                         req['screenshotBase64'],
@@ -790,6 +839,8 @@ class OrdersDashboardScreen extends StatelessWidget {
                           backgroundColor: Colors.green,
                           padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
+
+                        // In _buildFinanceCard function, onPressed for Approve button:
                         onPressed: () {
                           if (userId.isEmpty) {
                             Get.snackbar(
@@ -799,12 +850,18 @@ class OrdersDashboardScreen extends StatelessWidget {
                             );
                             return;
                           }
+
                           if (type == 'withdrawal') {
+                            // ✅ Direct approve karo - screenshot wala dialog mat dikhao
+                            // Agar screenshot wala dialog chahiye to comment out karo
                             controller.approveWithdrawal(
                               req['id'],
                               userId,
                               amount,
                             );
+
+                            // Agar screenshot dialog chahiye to ye use karo:
+                            // _showWithdrawalApproveDialog(context, req, userId, amount, controller);
                           } else {
                             controller.approveDeposit(req['id'], userId);
                           }
@@ -838,6 +895,326 @@ class OrdersDashboardScreen extends StatelessWidget {
     );
   }
 
+  // ══════════════════════════════════════════════════════════════════════════
+  //  ✅ NEW: Withdrawal Approve Dialog with Screenshot Upload
+  // ══════════════════════════════════════════════════════════════════════════
+  void _showWithdrawalApproveDialog(
+    BuildContext context,
+    Map<String, dynamic> req,
+    String userId,
+    double amount,
+    OrdersController controller,
+  ) {
+    File? pickedFile;
+    String? base64Img;
+    String? imgExt;
+    bool isLoading = false;
+    String? error;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setState) {
+            return Dialog(
+              backgroundColor: const Color(0xFF1A1A1A),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.check_circle,
+                          color: Colors.green,
+                          size: 22,
+                        ),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Approve Withdrawal',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Rs. ${amount.toStringAsFixed(0)} — ${req['userName'] ?? ''}',
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Screenshot Upload Area
+                    GestureDetector(
+                      onTap: isLoading
+                          ? null
+                          : () async {
+                              final picker = ImagePicker();
+                              final picked = await picker.pickImage(
+                                source: ImageSource.gallery,
+                                imageQuality: 70,
+                                maxWidth: 1000,
+                              );
+                              if (picked == null) return;
+                              final file = File(picked.path);
+                              final bytes = await file.readAsBytes();
+                              if (bytes.lengthInBytes > 1024 * 1024) {
+                                setState(
+                                  () => error =
+                                      'Image too large (max 1MB). Please compress.',
+                                );
+                                return;
+                              }
+                              setState(() {
+                                pickedFile = file;
+                                base64Img = base64Encode(bytes);
+                                imgExt = picked.path
+                                    .split('.')
+                                    .last
+                                    .toLowerCase();
+                                error = null;
+                              });
+                            },
+                      child: Container(
+                        width: double.infinity,
+                        height: 130,
+                        decoration: BoxDecoration(
+                          color: Colors.black26,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: pickedFile != null
+                                ? Colors.green.withOpacity(0.5)
+                                : Colors.white24,
+                          ),
+                        ),
+                        child: pickedFile != null
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(11),
+                                child: Image.file(
+                                  pickedFile!,
+                                  fit: BoxFit.cover,
+                                ),
+                              )
+                            : const Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.cloud_upload_outlined,
+                                    color: Colors.white38,
+                                    size: 32,
+                                  ),
+                                  SizedBox(height: 8),
+                                  Text(
+                                    'Tap to upload payment proof',
+                                    style: TextStyle(
+                                      color: Colors.white38,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  Text(
+                                    '(optional — user ko dikhega)',
+                                    style: TextStyle(
+                                      color: Colors.white24,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                      ),
+                    ),
+
+                    if (error != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        error!,
+                        style: const TextStyle(
+                          color: Colors.redAccent,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+
+                    const SizedBox(height: 16),
+
+                    if (isLoading)
+                      const Center(
+                        child: CircularProgressIndicator(color: Colors.green),
+                      )
+                    else
+                      Row(
+                        children: [
+                          // ─── Approve WITHOUT screenshot ───────────────────
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () {
+                                Navigator.of(ctx).pop();
+                                controller.approveWithdrawal(
+                                  req['id'],
+                                  userId,
+                                  amount,
+                                );
+                              },
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.white54,
+                                side: const BorderSide(color: Colors.white24),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 10,
+                                ),
+                              ),
+                              child: const Text(
+                                'Approve\n(No SS)',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(fontSize: 11),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          // ─── Approve WITH screenshot ──────────────────────
+                          Expanded(
+                            flex: 2,
+                            child: ElevatedButton.icon(
+                              // "Approve + Screenshot" button ke onPressed mein:
+                              onPressed: pickedFile == null
+                                  ? null
+                                  : () async {
+                                      setState(() => isLoading = true);
+                                      try {
+                                        double requestedAmount =
+                                            (req['requestedAmount'] ?? amount)
+                                                .toDouble();
+                                        bool isUnpaid =
+                                            req['isUnpaidMember'] ?? false;
+                                        double feeDeducted = isUnpaid
+                                            ? requestedAmount * 0.50
+                                            : 0.0;
+                                        double amountToReceive =
+                                            requestedAmount - feeDeducted;
+
+                                        // 1. Update finances doc
+                                        await FirebaseFirestore.instance
+                                            .collection('finances')
+                                            .doc(req['id'])
+                                            .update({
+                                              'status': 'approved',
+                                              'adminScreenshotBase64':
+                                                  base64Img,
+                                              'adminImageExtension': imgExt,
+                                              'feeDeducted': feeDeducted,
+                                              'amountToReceive':
+                                                  amountToReceive,
+                                              'processedAt':
+                                                  FieldValue.serverTimestamp(),
+                                            });
+
+                                        // 2. Apply fee if unpaid
+                                        if (isUnpaid && feeDeducted > 0) {
+                                          var userDoc = await FirebaseFirestore
+                                              .instance
+                                              .collection('users')
+                                              .doc(userId)
+                                              .get();
+                                          var userData = userDoc.data() ?? {};
+                                          double currentPaid =
+                                              (userData['paidFees'] ?? 0.0)
+                                                  .toDouble();
+
+                                          await FirebaseFirestore.instance
+                                              .collection('users')
+                                              .doc(userId)
+                                              .update({
+                                                'paidFees':
+                                                    currentPaid + feeDeducted,
+                                              });
+                                        }
+
+                                        // 3. Add history - NO WALLET DEDUCTION
+                                        await FirebaseFirestore.instance
+                                            .collection('users')
+                                            .doc(userId)
+                                            .collection('wallet_history')
+                                            .add({
+                                              'amount': amountToReceive,
+                                              'type': 'withdrawal_approved',
+                                              'description':
+                                                  '✅ Withdrawal Approved',
+                                              'requestedAmount':
+                                                  requestedAmount,
+                                              'feeDeducted': feeDeducted,
+                                              'amountToReceive':
+                                                  amountToReceive,
+                                              'timestamp':
+                                                  FieldValue.serverTimestamp(),
+                                            });
+
+                                        if (ctx.mounted)
+                                          Navigator.of(ctx).pop();
+                                        Get.snackbar(
+                                          'Approved ✅',
+                                          'Withdrawal approved with screenshot',
+                                          backgroundColor: Colors.green,
+                                          colorText: Colors.white,
+                                        );
+                                      } catch (e) {
+                                        setState(() {
+                                          isLoading = false;
+                                          error = 'Error: $e';
+                                        });
+                                      }
+                                    },
+                              icon: const Icon(Icons.check, size: 16),
+                              label: const Text('Approve + Screenshot'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green,
+                                foregroundColor: Colors.white,
+                                disabledBackgroundColor: Colors.green
+                                    .withOpacity(0.3),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 10,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+
+                    const SizedBox(height: 4),
+                    Center(
+                      child: TextButton(
+                        onPressed: isLoading
+                            ? null
+                            : () => Navigator.of(ctx).pop(),
+                        child: const Text(
+                          'Cancel',
+                          style: TextStyle(color: Colors.white38),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  IMAGE VIEWER DIALOG
+  // ══════════════════════════════════════════════════════════════════════════
   void _showBase64ImageDialog(String base64Data, String extension) {
     try {
       Get.dialog(
@@ -853,7 +1230,7 @@ class OrdersDashboardScreen extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      "Screenshot (.${extension})",
+                      "Screenshot (.$extension)",
                       style: const TextStyle(color: Colors.white),
                     ),
                     IconButton(
@@ -898,6 +1275,9 @@ class OrdersDashboardScreen extends StatelessWidget {
     }
   }
 
+  // ══════════════════════════════════════════════════════════════════════════
+  //  REJECT DIALOG
+  // ══════════════════════════════════════════════════════════════════════════
   void _showRejectDialog(
     String reqId,
     String userId,
@@ -986,9 +1366,9 @@ class OrdersDashboardScreen extends StatelessWidget {
     );
   }
 
-  // ==========================================
-  // 5. OLD FEE TAB
-  // ==========================================
+  // ══════════════════════════════════════════════════════════════════════════
+  //  TAB 5: OLD FEE REQUESTS
+  // ══════════════════════════════════════════════════════════════════════════
   Widget _buildFeeTab(OrdersController controller) {
     return Obx(() {
       if (controller.isLoading.value) {
@@ -996,14 +1376,12 @@ class OrdersDashboardScreen extends StatelessWidget {
           child: CircularProgressIndicator(color: Colors.redAccent),
         );
       }
-
       if (controller.feeRequests.isEmpty) {
         return _buildEmptyState(
           "No Old Fee Requests",
           Icons.verified_user_outlined,
         );
       }
-
       return ListView.builder(
         padding: const EdgeInsets.all(12),
         itemCount: controller.feeRequests.length,
@@ -1034,8 +1412,8 @@ class OrdersDashboardScreen extends StatelessWidget {
                   IconButton(
                     icon: const Icon(Icons.check_circle, color: Colors.green),
                     onPressed: () {
-                      final userId = req['userId'];
-                      if (userId == null || userId.isEmpty) {
+                      final uid = req['userId'];
+                      if (uid == null || uid.isEmpty) {
                         Get.snackbar(
                           "Error",
                           "User ID not found",
@@ -1043,14 +1421,14 @@ class OrdersDashboardScreen extends StatelessWidget {
                         );
                         return;
                       }
-                      controller.approveFee(req['id'], userId);
+                      controller.approveFee(req['id'], uid);
                     },
                   ),
                   IconButton(
                     icon: const Icon(Icons.cancel, color: Colors.red),
                     onPressed: () {
-                      final userId = req['userId'];
-                      if (userId == null || userId.isEmpty) {
+                      final uid = req['userId'];
+                      if (uid == null || uid.isEmpty) {
                         Get.snackbar(
                           "Error",
                           "User ID not found",
@@ -1062,8 +1440,7 @@ class OrdersDashboardScreen extends StatelessWidget {
                         title: "Reject Old Fee?",
                         content:
                             "Are you sure you want to reject this old fee request?",
-                        onConfirm: () =>
-                            controller.rejectFee(req['id'], userId),
+                        onConfirm: () => controller.rejectFee(req['id'], uid),
                       );
                     },
                   ),
@@ -1076,9 +1453,9 @@ class OrdersDashboardScreen extends StatelessWidget {
     });
   }
 
-  // ==========================================
-  // 6. VENDOR TAB
-  // ==========================================
+  // ══════════════════════════════════════════════════════════════════════════
+  //  TAB 6: VENDOR REQUESTS
+  // ══════════════════════════════════════════════════════════════════════════
   Widget _buildVendorTab(OrdersController controller) {
     return Obx(() {
       if (controller.isLoading.value) {
@@ -1086,11 +1463,9 @@ class OrdersDashboardScreen extends StatelessWidget {
           child: CircularProgressIndicator(color: Colors.redAccent),
         );
       }
-
       if (controller.pendingRequests.isEmpty) {
         return _buildEmptyState("No Vendor Requests", Icons.store_outlined);
       }
-
       return ListView.builder(
         padding: const EdgeInsets.all(12),
         itemCount: controller.pendingRequests.length,

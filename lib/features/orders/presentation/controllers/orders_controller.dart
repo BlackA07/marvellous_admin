@@ -154,12 +154,77 @@ class OrdersController extends GetxController {
 
   Future<void> updateOrderStage(String orderId, String newStatus) async {
     try {
+      // ✅ Pehle order data fetch karo — userId chahiye notification ke liye
+      DocumentSnapshot orderDoc = await _db
+          .collection('orders')
+          .doc(orderId)
+          .get();
+      if (!orderDoc.exists) return;
+      var orderData = orderDoc.data() as Map<String, dynamic>;
+      String userId = orderData['userId'] ?? '';
+
+      // ✅ Firestore update
       await _db.collection('orders').doc(orderId).update({
         'status': newStatus,
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      // ✅ CLEAR DEBUG PRINT ADDED FOR ADMIN
+      // ✅ Turant notification — user ko real-time milegi
+      if (userId.isNotEmpty) {
+        String title = '';
+        String body = '';
+
+        switch (newStatus) {
+          case 'confirmed':
+            title = "Order Confirmed! 🎉";
+            body =
+                "Your order #$orderId has been confirmed and is being prepared.";
+            break;
+          case 'shipped':
+            title = "Order Shipped! 📦";
+            body = "Your order #$orderId is on its way to you!";
+            break;
+          case 'delivered':
+            title = "Order Delivered! ✅";
+            body = "Your order #$orderId has been delivered successfully!";
+            break;
+          case 'rejected':
+            title = "Order Rejected ❌";
+            body =
+                "Your order #$orderId has been rejected. Please contact support.";
+            break;
+        }
+
+        if (title.isNotEmpty) {
+          await _sendNotification(
+            userId: userId,
+            title: title,
+            body: body,
+            type: 'order',
+          );
+        }
+
+        // ✅ Delivered hote hi review notification bhi bhejo (3 sec baad)
+        if (newStatus == 'delivered') {
+          bool isReviewed = orderData['isReviewed'] ?? false;
+          if (!isReviewed) {
+            Future.delayed(const Duration(seconds: 3), () async {
+              await _sendNotification(
+                userId: userId,
+                title: "Review Your Order 🌟",
+                body: "How was your experience? Share your review!",
+                type: 'review',
+                extraData: {
+                  'orderId': orderId,
+                  'showReviewButton': true,
+                  'items': orderData['items'] ?? [],
+                },
+              );
+            });
+          }
+        }
+      }
+
       print("\n========================================");
       print("✅ ADMIN ACTION: Order #$orderId updated to -> $newStatus");
       print("========================================\n");
@@ -255,6 +320,9 @@ class OrdersController extends GetxController {
   // ==========================================
   // WITHDRAWAL METHODS
   // ==========================================
+  // ==========================================
+  // WITHDRAWAL METHODS (FIXED VERSION)
+  // ==========================================
 
   Future<void> approveWithdrawal(
     String requestId,
@@ -267,45 +335,114 @@ class OrdersController extends GetxController {
         barrierDismissible: false,
       );
 
+      // 🔍 Pehle finance document fetch karo - isUnpaidMember check karne ke liye
+      var financeDoc = await _db.collection('finances').doc(requestId).get();
+      if (!financeDoc.exists) {
+        Get.back();
+        Get.snackbar(
+          "Error",
+          "Withdrawal request not found",
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
+        return;
+      }
+
+      var data = financeDoc.data()!;
+      double requestedAmount = (data['requestedAmount'] ?? amount).toDouble();
+      bool isUnpaidMember = data['isUnpaidMember'] ?? false;
+      double feeDeducted = isUnpaidMember ? requestedAmount * 0.50 : 0.0;
+      double amountToReceive = requestedAmount - feeDeducted;
+
+      print("📝 Processing withdrawal approval:");
+      print("   - Request ID: $requestId");
+      print("   - User ID: $userId");
+      print("   - Requested Amount: Rs. $requestedAmount");
+      print("   - Is Unpaid: $isUnpaidMember");
+      print("   - Fee Deducted: Rs. $feeDeducted");
+      print("   - User Receives: Rs. $amountToReceive");
+      print(
+        "   ⚠️ NOTE: Amount already deducted at request time, no further deduction",
+      );
+
+      // ✅ 1. Update finances doc status
       await _db.collection('finances').doc(requestId).update({
         'status': 'approved',
+        'feeDeducted': feeDeducted,
+        'amountToReceive': amountToReceive,
         'processedAt': FieldValue.serverTimestamp(),
       });
 
-      await _db.collection('users').doc(userId).update({
-        'walletBalance': FieldValue.increment(-amount),
+      // ✅ 2. Apply fee to paidFees if unpaid member
+      if (isUnpaidMember && feeDeducted > 0) {
+        // Get current paidFees
+        var userDoc = await _db.collection('users').doc(userId).get();
+        var userData = userDoc.data() as Map<String, dynamic>? ?? {};
+        double currentPaid = (userData['paidFees'] ?? 0.0).toDouble();
+        double totalFee =
+            (await _db.collection('admin_settings').doc('mlm_variables').get())
+                .data()?['membershipFee'] ??
+            0.0;
+
+        double newPaid = currentPaid + feeDeducted;
+        bool isFullyPaid = newPaid >= totalFee;
+
+        Map<String, dynamic> userUpdate = {'paidFees': newPaid};
+
+        if (isFullyPaid) {
+          userUpdate['membershipStatus'] = 'approved';
+          userUpdate['isMLMActive'] = true;
+        }
+
+        await _db.collection('users').doc(userId).update(userUpdate);
+
+        // Add fee credit history
+        await _db.collection('users').doc(userId).collection('wallet_history').add({
+          'amount': feeDeducted,
+          'type': isFullyPaid ? 'fee_payment_approved' : 'fee_partial_approved',
+          'description': isFullyPaid
+              ? 'Withdrawal fee completed membership!'
+              : 'Withdrawal fee credited: Rs. ${feeDeducted.toStringAsFixed(0)}',
+          'timestamp': FieldValue.serverTimestamp(),
+        });
+      }
+
+      // ✅ 3. Add withdrawal approved history (positive entry - informational only)
+      await _db.collection('users').doc(userId).collection('wallet_history').add({
+        'amount': amountToReceive,
+        'type': 'withdrawal_approved',
+        'description': isUnpaidMember
+            ? 'Withdrawal approved - Rs.${amountToReceive.toStringAsFixed(0)} sent (Rs.${feeDeducted.toStringAsFixed(0)} fee applied)'
+            : 'Withdrawal approved - Rs.${amountToReceive.toStringAsFixed(0)} sent',
+        'requestedAmount': requestedAmount,
+        'feeDeducted': feeDeducted,
+        'amountToReceive': amountToReceive,
+        'timestamp': FieldValue.serverTimestamp(),
       });
 
-      await _db
-          .collection('users')
-          .doc(userId)
-          .collection('wallet_history')
-          .add({
-            'amount': -amount,
-            'type': 'withdrawal_approved',
-            'description': 'Withdrawal Approved',
-            'timestamp': FieldValue.serverTimestamp(),
-          });
-
+      // ✅ 4. Send notification
       await _sendNotification(
         userId: userId,
         title: "Withdrawal Approved ✅",
-        body:
-            "Your withdrawal of Rs. ${amount.toStringAsFixed(0)} has been processed successfully!",
+        body: isUnpaidMember
+            ? "Your withdrawal of Rs. ${amountToReceive.toStringAsFixed(0)} has been approved. Fee Rs. ${feeDeducted.toStringAsFixed(0)} applied to membership."
+            : "Your withdrawal of Rs. ${amount.toStringAsFixed(0)} has been approved!",
         type: 'finance',
       );
 
-      Get.back();
-      print("✅ ADMIN ACTION: Withdrawal $requestId Approved.");
+      Get.back(); // Close progress dialog
+
+      print("✅ WITHDRAWAL APPROVED SUCCESSFULLY - NO DOUBLE DEDUCTION");
 
       Get.snackbar(
         "Success ✅",
-        "Withdrawal approved and processed",
+        "Withdrawal approved successfully",
         backgroundColor: Colors.green,
         colorText: Colors.white,
       );
     } catch (e) {
-      Get.back();
+      Get.back(); // Close progress dialog
+      print("❌ Withdrawal approval error: $e");
       Get.snackbar(
         "Error",
         "Failed to approve: ${e.toString()}",
