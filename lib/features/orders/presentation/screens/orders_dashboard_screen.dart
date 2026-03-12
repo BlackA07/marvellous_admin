@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -91,9 +92,6 @@ class OrdersDashboardScreen extends StatelessWidget {
     );
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  //  CONFIRMATION DIALOG
-  // ══════════════════════════════════════════════════════════════════════════
   void _showConfirmationDialog({
     required String title,
     required String content,
@@ -146,9 +144,6 @@ class OrdersDashboardScreen extends StatelessWidget {
     );
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  //  DEBUG INFO
-  // ══════════════════════════════════════════════════════════════════════════
   void _showDebugInfo(OrdersController controller) {
     Get.dialog(
       AlertDialog(
@@ -650,7 +645,6 @@ class OrdersDashboardScreen extends StatelessWidget {
 
   // ══════════════════════════════════════════════════════════════════════════
   //  FINANCE CARD (Withdrawal + Deposit)
-  //  CHANGE: Withdrawal approve button ab screenshot dialog kholega
   // ══════════════════════════════════════════════════════════════════════════
   Widget _buildFinanceCard(
     BuildContext context,
@@ -734,7 +728,6 @@ class OrdersDashboardScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (type == 'withdrawal') ...[
-                  // ─── Withdrawal Details ───────────────────────────────────
                   if ((req['accountName'] ?? '').toString().isNotEmpty)
                     _detailRow("Account Name", req['accountName']),
                   if ((req['mobileNumber'] ?? '').toString().isNotEmpty)
@@ -765,7 +758,6 @@ class OrdersDashboardScreen extends StatelessWidget {
                         ? '❌ Unpaid'
                         : '✅ Paid Member',
                   ),
-                  // User screenshot (if provided)
                   if ((req['screenshotBase64'] ?? '').toString().isNotEmpty)
                     GestureDetector(
                       onTap: () => _showBase64ImageDialog(
@@ -796,7 +788,6 @@ class OrdersDashboardScreen extends StatelessWidget {
                       ),
                     ),
                 ] else ...[
-                  // ─── Deposit Details ──────────────────────────────────────
                   if (req['trxId'] != null) _detailRow("TRX ID", req['trxId']),
                   if ((req['screenshotBase64'] ?? '').toString().isNotEmpty)
                     GestureDetector(
@@ -839,8 +830,6 @@ class OrdersDashboardScreen extends StatelessWidget {
                           backgroundColor: Colors.green,
                           padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
-
-                        // In _buildFinanceCard function, onPressed for Approve button:
                         onPressed: () {
                           if (userId.isEmpty) {
                             Get.snackbar(
@@ -850,18 +839,14 @@ class OrdersDashboardScreen extends StatelessWidget {
                             );
                             return;
                           }
-
                           if (type == 'withdrawal') {
-                            // ✅ Direct approve karo - screenshot wala dialog mat dikhao
-                            // Agar screenshot wala dialog chahiye to comment out karo
-                            controller.approveWithdrawal(
-                              req['id'],
+                            _showWithdrawalApproveDialog(
+                              context,
+                              req,
                               userId,
                               amount,
+                              controller,
                             );
-
-                            // Agar screenshot dialog chahiye to ye use karo:
-                            // _showWithdrawalApproveDialog(context, req, userId, amount, controller);
                           } else {
                             controller.approveDeposit(req['id'], userId);
                           }
@@ -896,7 +881,9 @@ class OrdersDashboardScreen extends StatelessWidget {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  //  ✅ NEW: Withdrawal Approve Dialog with Screenshot Upload
+  //  ✅ FIXED: Withdrawal Approve Dialog
+  //  Image.file() ki jagah Image.memory(bytes) use kiya
+  //  Bytes directly memory mein store hoti hain — file path pe depend nahi
   // ══════════════════════════════════════════════════════════════════════════
   void _showWithdrawalApproveDialog(
     BuildContext context,
@@ -905,7 +892,8 @@ class OrdersDashboardScreen extends StatelessWidget {
     double amount,
     OrdersController controller,
   ) {
-    File? pickedFile;
+    // ✅ State variables — Uint8List bytes use karo, File nahi
+    Uint8List? pickedBytes;
     String? base64Img;
     String? imgExt;
     bool isLoading = false;
@@ -922,7 +910,7 @@ class OrdersDashboardScreen extends StatelessWidget {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: Padding(
+              child: SingleChildScrollView(
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -957,78 +945,125 @@ class OrdersDashboardScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
 
-                    // Screenshot Upload Area
+                    // ✅ FIXED: Screenshot Upload Area
+                    // Pehle: Image.file(_pickedFile!) — file show nahi hoti thi
+                    // Ab: Image.memory(pickedBytes!) — bytes direct memory se show hoti hain
                     GestureDetector(
                       onTap: isLoading
                           ? null
                           : () async {
-                              final picker = ImagePicker();
-                              final picked = await picker.pickImage(
-                                source: ImageSource.gallery,
-                                imageQuality: 70,
-                                maxWidth: 1000,
-                              );
-                              if (picked == null) return;
-                              final file = File(picked.path);
-                              final bytes = await file.readAsBytes();
-                              if (bytes.lengthInBytes > 1024 * 1024) {
-                                setState(
-                                  () => error =
-                                      'Image too large (max 1MB). Please compress.',
+                              try {
+                                final picker = ImagePicker();
+                                final picked = await picker.pickImage(
+                                  source: ImageSource.gallery,
+                                  imageQuality: 70,
+                                  maxWidth: 1000,
                                 );
-                                return;
-                              }
-                              setState(() {
-                                pickedFile = file;
-                                base64Img = base64Encode(bytes);
-                                imgExt = picked.path
+                                if (picked == null) return;
+
+                                // ✅ readAsBytes() se seedha bytes lo
+                                final bytes = await picked.readAsBytes();
+
+                                if (bytes.lengthInBytes > 2 * 1024 * 1024) {
+                                  setState(
+                                    () => error =
+                                        'Image too large (max 2MB). Please compress.',
+                                  );
+                                  return;
+                                }
+
+                                final ext = picked.path
                                     .split('.')
                                     .last
                                     .toLowerCase();
-                                error = null;
-                              });
+
+                                setState(() {
+                                  pickedBytes = bytes; // ✅ Uint8List store karo
+                                  base64Img = base64Encode(bytes);
+                                  imgExt = ext;
+                                  error = null;
+                                });
+                              } catch (e) {
+                                setState(
+                                  () => error = 'Error picking image: $e',
+                                );
+                              }
                             },
                       child: Container(
                         width: double.infinity,
-                        height: 130,
+                        height: 180,
                         decoration: BoxDecoration(
                           color: Colors.black26,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: pickedFile != null
-                                ? Colors.green.withOpacity(0.5)
+                            color: pickedBytes != null
+                                ? Colors.green.withOpacity(0.7)
+                                : error != null
+                                ? Colors.red.withOpacity(0.7)
                                 : Colors.white24,
+                            width: 1.5,
                           ),
                         ),
-                        child: pickedFile != null
+                        child: pickedBytes != null
+                            // ✅ Image.memory se bytes seedha render karo
                             ? ClipRRect(
                                 borderRadius: BorderRadius.circular(11),
-                                child: Image.file(
-                                  pickedFile!,
+                                child: Image.memory(
+                                  pickedBytes!,
                                   fit: BoxFit.cover,
+                                  width: double.infinity,
+                                  height: 180,
+                                  errorBuilder: (c, e, s) => const Center(
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.broken_image,
+                                          color: Colors.red,
+                                          size: 40,
+                                        ),
+                                        SizedBox(height: 8),
+                                        Text(
+                                          'Image load error\nTap to re-select',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            color: Colors.red,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 ),
                               )
-                            : const Column(
+                            : Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Icon(
                                     Icons.cloud_upload_outlined,
-                                    color: Colors.white38,
-                                    size: 32,
+                                    color: error != null
+                                        ? Colors.red.shade300
+                                        : Colors.white38,
+                                    size: 42,
                                   ),
-                                  SizedBox(height: 8),
+                                  const SizedBox(height: 10),
                                   Text(
-                                    'Tap to upload payment proof',
+                                    'Tap to Upload Payment Proof',
                                     style: TextStyle(
-                                      color: Colors.white38,
-                                      fontSize: 12,
+                                      color: error != null
+                                          ? Colors.red.shade300
+                                          : Colors.white54,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
-                                  Text(
-                                    '(optional — user ko dikhega)',
+                                  const SizedBox(height: 4),
+                                  const Text(
+                                    'COMPULSORY — User will see this',
                                     style: TextStyle(
                                       color: Colors.white24,
-                                      fontSize: 10,
+                                      fontSize: 11,
                                     ),
                                   ),
                                 ],
@@ -1036,19 +1071,67 @@ class OrdersDashboardScreen extends StatelessWidget {
                       ),
                     ),
 
+                    // Re-upload & status row
+                    if (pickedBytes != null) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.check_circle,
+                            color: Colors.green,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 6),
+                          const Text(
+                            'Screenshot selected ✓',
+                            style: TextStyle(color: Colors.green, fontSize: 12),
+                          ),
+                          const Spacer(),
+                          GestureDetector(
+                            onTap: isLoading
+                                ? null
+                                : () => setState(() {
+                                    pickedBytes = null;
+                                    base64Img = null;
+                                    imgExt = null;
+                                  }),
+                            child: const Text(
+                              '🗑️ Remove',
+                              style: TextStyle(
+                                color: Colors.redAccent,
+                                fontSize: 12,
+                                decoration: TextDecoration.underline,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+
                     if (error != null) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        error!,
-                        style: const TextStyle(
-                          color: Colors.redAccent,
-                          fontSize: 11,
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Colors.red.withOpacity(0.3),
+                          ),
+                        ),
+                        child: Text(
+                          error!,
+                          style: const TextStyle(
+                            color: Colors.redAccent,
+                            fontSize: 12,
+                          ),
                         ),
                       ),
                     ],
 
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 20),
 
+                    // Action Buttons
                     if (isLoading)
                       const Center(
                         child: CircularProgressIndicator(color: Colors.green),
@@ -1056,117 +1139,44 @@ class OrdersDashboardScreen extends StatelessWidget {
                     else
                       Row(
                         children: [
-                          // ─── Approve WITHOUT screenshot ───────────────────
                           Expanded(
                             child: OutlinedButton(
-                              onPressed: () {
-                                Navigator.of(ctx).pop();
-                                controller.approveWithdrawal(
-                                  req['id'],
-                                  userId,
-                                  amount,
-                                );
-                              },
+                              onPressed: () => Navigator.of(ctx).pop(),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: Colors.white54,
                                 side: const BorderSide(color: Colors.white24),
                                 padding: const EdgeInsets.symmetric(
-                                  vertical: 10,
+                                  vertical: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
                                 ),
                               ),
-                              child: const Text(
-                                'Approve\n(No SS)',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(fontSize: 11),
-                              ),
+                              child: const Text('Cancel'),
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          // ─── Approve WITH screenshot ──────────────────────
+                          const SizedBox(width: 10),
                           Expanded(
                             flex: 2,
                             child: ElevatedButton.icon(
-                              // "Approve + Screenshot" button ke onPressed mein:
-                              onPressed: pickedFile == null
+                              // ✅ pickedBytes check karo, File nahi
+                              onPressed: pickedBytes == null
                                   ? null
                                   : () async {
-                                      setState(() => isLoading = true);
+                                      setState(() {
+                                        isLoading = true;
+                                        error = null;
+                                      });
                                       try {
-                                        double requestedAmount =
-                                            (req['requestedAmount'] ?? amount)
-                                                .toDouble();
-                                        bool isUnpaid =
-                                            req['isUnpaidMember'] ?? false;
-                                        double feeDeducted = isUnpaid
-                                            ? requestedAmount * 0.50
-                                            : 0.0;
-                                        double amountToReceive =
-                                            requestedAmount - feeDeducted;
-
-                                        // 1. Update finances doc
-                                        await FirebaseFirestore.instance
-                                            .collection('finances')
-                                            .doc(req['id'])
-                                            .update({
-                                              'status': 'approved',
-                                              'adminScreenshotBase64':
-                                                  base64Img,
-                                              'adminImageExtension': imgExt,
-                                              'feeDeducted': feeDeducted,
-                                              'amountToReceive':
-                                                  amountToReceive,
-                                              'processedAt':
-                                                  FieldValue.serverTimestamp(),
-                                            });
-
-                                        // 2. Apply fee if unpaid
-                                        if (isUnpaid && feeDeducted > 0) {
-                                          var userDoc = await FirebaseFirestore
-                                              .instance
-                                              .collection('users')
-                                              .doc(userId)
-                                              .get();
-                                          var userData = userDoc.data() ?? {};
-                                          double currentPaid =
-                                              (userData['paidFees'] ?? 0.0)
-                                                  .toDouble();
-
-                                          await FirebaseFirestore.instance
-                                              .collection('users')
-                                              .doc(userId)
-                                              .update({
-                                                'paidFees':
-                                                    currentPaid + feeDeducted,
-                                              });
-                                        }
-
-                                        // 3. Add history - NO WALLET DEDUCTION
-                                        await FirebaseFirestore.instance
-                                            .collection('users')
-                                            .doc(userId)
-                                            .collection('wallet_history')
-                                            .add({
-                                              'amount': amountToReceive,
-                                              'type': 'withdrawal_approved',
-                                              'description':
-                                                  '✅ Withdrawal Approved',
-                                              'requestedAmount':
-                                                  requestedAmount,
-                                              'feeDeducted': feeDeducted,
-                                              'amountToReceive':
-                                                  amountToReceive,
-                                              'timestamp':
-                                                  FieldValue.serverTimestamp(),
-                                            });
-
+                                        await controller.approveWithdrawal(
+                                          requestId: req['id'],
+                                          userId: userId,
+                                          amount: amount,
+                                          base64Image: base64Img!,
+                                          imageExtension: imgExt!,
+                                        );
                                         if (ctx.mounted)
                                           Navigator.of(ctx).pop();
-                                        Get.snackbar(
-                                          'Approved ✅',
-                                          'Withdrawal approved with screenshot',
-                                          backgroundColor: Colors.green,
-                                          colorText: Colors.white,
-                                        );
                                       } catch (e) {
                                         setState(() {
                                           isLoading = false;
@@ -1174,34 +1184,24 @@ class OrdersDashboardScreen extends StatelessWidget {
                                         });
                                       }
                                     },
-                              icon: const Icon(Icons.check, size: 16),
-                              label: const Text('Approve + Screenshot'),
+                              icon: const Icon(Icons.check, size: 18),
+                              label: const Text('Approve with Screenshot'),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.green,
                                 foregroundColor: Colors.white,
                                 disabledBackgroundColor: Colors.green
                                     .withOpacity(0.3),
                                 padding: const EdgeInsets.symmetric(
-                                  vertical: 10,
+                                  vertical: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
                                 ),
                               ),
                             ),
                           ),
                         ],
                       ),
-
-                    const SizedBox(height: 4),
-                    Center(
-                      child: TextButton(
-                        onPressed: isLoading
-                            ? null
-                            : () => Navigator.of(ctx).pop(),
-                        child: const Text(
-                          'Cancel',
-                          style: TextStyle(color: Colors.white38),
-                        ),
-                      ),
-                    ),
                   ],
                 ),
               ),
@@ -1217,51 +1217,108 @@ class OrdersDashboardScreen extends StatelessWidget {
   // ══════════════════════════════════════════════════════════════════════════
   void _showBase64ImageDialog(String base64Data, String extension) {
     try {
+      if (base64Data.isEmpty) {
+        Get.snackbar(
+          "Error",
+          "Image data is empty",
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
+        return;
+      }
+
+      Uint8List bytes;
+      try {
+        bytes = base64Decode(base64Data);
+      } catch (e) {
+        Get.snackbar(
+          "Error",
+          "Invalid image format: $e",
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
+        return;
+      }
+
       Get.dialog(
         Dialog(
-          backgroundColor: Colors.black,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                color: Colors.black87,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      "Screenshot (.$extension)",
-                      style: const TextStyle(color: Colors.white),
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.all(20),
+          child: Container(
+            width: double.infinity,
+            height: MediaQuery.of(Get.context!).size.height * 0.7,
+            decoration: BoxDecoration(
+              color: Colors.black,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  decoration: const BoxDecoration(
+                    color: Colors.black87,
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(16),
+                      topRight: Radius.circular(16),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white),
-                      onPressed: () => Get.back(),
-                    ),
-                  ],
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        "Screenshot (.$extension)",
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white),
+                        onPressed: () => Get.back(),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              Flexible(
-                child: InteractiveViewer(
-                  child: Image.memory(
-                    base64Decode(base64Data),
-                    fit: BoxFit.contain,
-                    errorBuilder: (context, error, stack) => const Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.error, color: Colors.red, size: 50),
-                          SizedBox(height: 10),
-                          Text(
-                            "Failed to load image",
-                            style: TextStyle(color: Colors.white),
-                          ),
-                        ],
+                Expanded(
+                  child: InteractiveViewer(
+                    minScale: 0.5,
+                    maxScale: 4.0,
+                    child: Center(
+                      child: Image.memory(
+                        bytes,
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  Icons.broken_image,
+                                  color: Colors.red,
+                                  size: 60,
+                                ),
+                                const SizedBox(height: 10),
+                                Text(
+                                  "Failed to load image: $error",
+                                  style: const TextStyle(color: Colors.white),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          );
+                        },
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       );
