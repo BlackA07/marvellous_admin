@@ -1,27 +1,10 @@
-import 'dart:convert';
-import 'dart:io';
-import 'dart:typed_data';
+// Path: lib/features/orders/controllers/orders_controller.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../data/models/order_model.dart';
 import '../../data/models/vendor_request_model.dart';
-
-// ══════════════════════════════════════════════════════════════════════════════
-//  ORDERS CONTROLLER — ADMIN APP
-//
-//  CHANGES:
-//  1. updateOrderStage() — All notifications now include full extraData
-//     (orderId, grandTotal, subTotal, shippingFee, codCharges,
-//      paymentMethod, customerAddress, items) so customer app can
-//     show order details in the notification detail sheet.
-//
-//  2. approveOrderPayment() — Order is now created with status 'pending'
-//     (not 'confirmed'). A separate "Payment Confirmed" notification is
-//     sent. Admin still needs to manually move order through
-//     pending → confirmed → shipped → delivered.
-// ══════════════════════════════════════════════════════════════════════════════
 
 class OrdersController extends GetxController {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -158,87 +141,46 @@ class OrdersController extends GetxController {
   }
 
   // ════════════════════════════════════════════════════════════════════════════
-  //  ORDER STATUS UPDATE
-  //
-  //  ALL notifications now include extraData with full order details so
-  //  the customer app notification sheet can display them properly.
-  //
-  //  When newStatus == 'delivered':
-  //    Atomic transaction sets status='delivered' + rewardPending=true.
-  //    Customer app listener picks up rewardPending=true and processes rewards.
-  //
-  //  For confirmed / shipped / rejected:
-  //    Simple update + notification with full order details.
+  //  ORDER STATUS UPDATE (WITH INSTANT ATOMIC REWARDS)
   // ════════════════════════════════════════════════════════════════════════════
   Future<void> updateOrderStage(String orderId, String newStatus) async {
     try {
       final orderRef = _db.collection('orders').doc(orderId);
 
       if (newStatus == 'delivered') {
-        // ── Atomic delivery + reward trigger ──────────────────────────────
-        bool success = false;
-        String? userId;
-        Map<String, dynamic>? orderData;
+        Get.dialog(
+          const Center(child: CircularProgressIndicator(color: Colors.green)),
+          barrierDismissible: false,
+        );
 
-        await _db.runTransaction((transaction) async {
-          final snap = await transaction.get(orderRef);
-          if (!snap.exists) throw Exception('Order not found');
+        DocumentSnapshot snap = await orderRef.get();
+        if (!snap.exists) throw Exception('Order not found');
+        var data = snap.data() as Map<String, dynamic>;
 
-          final data = snap.data() as Map<String, dynamic>;
-          final currentStatus = data['status']?.toString().toLowerCase() ?? '';
+        if (data['rewarded'] == true) {
+          Get.back();
+          throw Exception('ALREADY_REWARDED');
+        }
 
-          if (currentStatus == 'delivered')
-            throw Exception('ALREADY_DELIVERED');
-          if (data['rewarded'] == true) throw Exception('ALREADY_REWARDED');
+        bool success = await _processInstantRewardsAtomically(orderId, data);
 
-          transaction.update(orderRef, {
+        if (success) {
+          await orderRef.update({
             'status': 'delivered',
-            'rewardPending': true,
+            'rewarded': true,
+            'rewardPending': false,
             'rewardProcessing': false,
+            'rewardedAt': FieldValue.serverTimestamp(),
             'updatedAt': FieldValue.serverTimestamp(),
           });
 
-          success = true;
-          userId = data['userId'] as String?;
-          orderData = data;
-        });
-
-        if (!success) return;
-
-        print("✅ ADMIN: Order #$orderId marked DELIVERED | rewardPending=true");
-
-        if (userId != null && userId!.isNotEmpty) {
-          // ── Delivered notification with full order details ──────────────
-          await _sendNotification(
-            userId: userId!,
-            title: "Order Delivered! 🎉",
-            body:
-                "Great news! Your order #$orderId has been delivered successfully. We hope you love it!",
-            type: 'order',
-            extraData: _buildOrderExtraData(orderId, orderData!),
+          debugPrint(
+            "✅ ADMIN: Order #$orderId DELIVERED and REWARDS DISTRIBUTED instantly!",
           );
-
-          // Review notification after 3 seconds
-          final bool isReviewed = orderData?['isReviewed'] ?? false;
-          if (!isReviewed) {
-            Future.delayed(const Duration(seconds: 3), () async {
-              await _sendNotification(
-                userId: userId!,
-                title: "How was your order? 🌟",
-                body:
-                    "Please take a moment to review your order #$orderId. Your feedback helps us improve!",
-                type: 'review',
-                extraData: {
-                  'orderId': orderId,
-                  'showReviewButton': true,
-                  'items': orderData?['items'] ?? [],
-                },
-              );
-            });
-          }
         }
+
+        Get.back();
       } else {
-        // ── Non-delivery status update ────────────────────────────────────
         DocumentSnapshot orderDoc = await orderRef.get();
         if (!orderDoc.exists) return;
         var data = orderDoc.data() as Map<String, dynamic>;
@@ -249,7 +191,7 @@ class OrdersController extends GetxController {
           'updatedAt': FieldValue.serverTimestamp(),
         });
 
-        print("✅ ADMIN: Order #$orderId → $newStatus");
+        debugPrint("✅ ADMIN: Order #$orderId → $newStatus");
 
         if (userId.isNotEmpty) {
           String title = '';
@@ -279,7 +221,6 @@ class OrdersController extends GetxController {
               title: title,
               body: body,
               type: 'order',
-              // ✅ Full order details in every status notification
               extraData: _buildOrderExtraData(orderId, data),
             );
           }
@@ -293,48 +234,435 @@ class OrdersController extends GetxController {
         colorText: Colors.white,
       );
     } on FirebaseException catch (e) {
-      final msg = e.message ?? e.code;
-      if (msg.contains('ALREADY_DELIVERED') ||
-          msg.contains('ALREADY_REWARDED')) {
-        Get.snackbar(
-          "Already Processed",
-          "This order was already marked as delivered.",
-          backgroundColor: Colors.orange,
-          colorText: Colors.white,
-        );
-      } else {
-        Get.snackbar(
-          "Error",
-          "Failed to update order: $msg",
-          backgroundColor: Colors.red,
-          colorText: Colors.white,
-        );
-      }
+      if (Get.isDialogOpen ?? false) Get.back();
+      _handleOrderUpdateError(e.message ?? e.code);
     } catch (e) {
-      final msg = e.toString();
-      if (msg.contains('ALREADY_DELIVERED') ||
-          msg.contains('ALREADY_REWARDED')) {
-        Get.snackbar(
-          "Already Processed",
-          "This order was already marked as delivered.",
-          backgroundColor: Colors.orange,
-          colorText: Colors.white,
-        );
-      } else {
-        Get.snackbar(
-          "Error",
-          "Failed to update order: $msg",
-          backgroundColor: Colors.red,
-          colorText: Colors.white,
-        );
-      }
+      if (Get.isDialogOpen ?? false) Get.back();
+      _handleOrderUpdateError(e.toString());
+    }
+  }
+
+  void _handleOrderUpdateError(String msg) {
+    if (msg.contains('ALREADY_DELIVERED') || msg.contains('ALREADY_REWARDED')) {
+      Get.snackbar(
+        "Already Processed",
+        "This order was already marked as delivered.",
+        backgroundColor: Colors.orange,
+        colorText: Colors.white,
+      );
+    } else {
+      Get.snackbar(
+        "Error",
+        "Failed to update order: $msg",
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
     }
   }
 
   // ════════════════════════════════════════════════════════════════════════════
-  //  HELPER: Build extraData map from order document
-  //  Used in all order status notifications so customer sheet shows details
+  //  INSTANT ATOMIC REWARDS & MLM DISTRIBUTION
   // ════════════════════════════════════════════════════════════════════════════
+  Future<bool> _processInstantRewardsAtomically(
+    String orderId,
+    Map<String, dynamic> orderData,
+  ) async {
+    String buyerUid = orderData['userId'] ?? '';
+    if (buyerUid.isEmpty) return false;
+
+    double grossProfit = (orderData['grossProfit'] ?? 0.0).toDouble();
+
+    if (grossProfit <= 0) {
+      debugPrint("⚠️ Order $orderId has 0 gross profit. Skipping rewards.");
+      return true;
+    }
+
+    WriteBatch batch = _db.batch();
+    double totalCompanyShare = 0.0;
+
+    try {
+      // 1. Fetch MLM Settings
+      DocumentSnapshot settingsDoc = await _db
+          .collection('admin_settings')
+          .doc('mlm_variables')
+          .get();
+      Map<String, dynamic> settings =
+          settingsDoc.data() as Map<String, dynamic>? ?? {};
+
+      double mlmDistPercent = (settings['mlmDistributionPercent'] ?? 56.95)
+          .toDouble();
+      double cashbackPercent =
+          (settings['cashbackPercent'] ?? 14.705882352941178).toDouble();
+      int maxLevels = (settings['totalLevels'] ?? 13).toInt();
+
+      double mlmPool = grossProfit * (mlmDistPercent / 100);
+
+      // ── Points formula from Firebase global_config ──────────────────────
+      double profitPerPoint = 199.0;
+      bool showDecimals = false;
+      try {
+        final globalConfigDoc = await _db
+            .collection('admin_settings')
+            .doc('global_config')
+            .get();
+        if (globalConfigDoc.exists) {
+          final gData = globalConfigDoc.data()!;
+          profitPerPoint = (gData['profitPerPoint'] ?? 199.0).toDouble();
+          showDecimals = gData['showDecimals'] ?? false;
+          if (profitPerPoint <= 0) profitPerPoint = 199.0;
+        }
+      } catch (_) {}
+
+      final double rawPoints = grossProfit / profitPerPoint;
+      num pointsEarned = showDecimals
+          ? double.parse(rawPoints.toStringAsFixed(2))
+          : rawPoints.floor();
+
+      // Fetch Commission Levels
+      QuerySnapshot commSnap = await _db
+          .collection('admin_settings')
+          .doc('mlm_variables')
+          .collection('commission_levels')
+          .get();
+      Map<String, double> commPercentages = {};
+      for (var doc in commSnap.docs) {
+        var d = doc.data() as Map<String, dynamic>;
+        commPercentages[doc.id] = (d['percentage'] ?? 0.0).toDouble();
+      }
+
+      // 2. Fetch Buyer Data
+      DocumentSnapshot buyerDoc = await _db
+          .collection('users')
+          .doc(buyerUid)
+          .get();
+      if (!buyerDoc.exists) return false;
+      Map<String, dynamic> buyerData = buyerDoc.data() as Map<String, dynamic>;
+
+      double buyerPoints = (buyerData['totalPoints'] ?? 0.0).toDouble();
+      String buyerMemStatus = buyerData['membershipStatus'] ?? 'unpaid';
+      String buyerName =
+          buyerData['name'] ?? buyerData['username'] ?? 'Customer';
+
+      // 3. Calculate Buyer Cashback
+      double buyerRankMultiplier = _getRankMultiplier(buyerPoints, settings);
+      if (buyerMemStatus == 'approved' && buyerRankMultiplier < 100.0) {
+        buyerRankMultiplier += 25.0;
+      }
+
+      double maxCashback = mlmPool * (cashbackPercent / 100);
+      double finalCashback = double.parse(
+        (maxCashback * (buyerRankMultiplier / 100)).toStringAsFixed(2),
+      );
+      totalCompanyShare += (maxCashback - finalCashback);
+
+      // Add cashback to Buyer Wallet
+      _addWalletTransactionToBatch(
+        batch: batch,
+        uid: buyerUid,
+        memStatus: buyerMemStatus,
+        amount: finalCashback,
+        type: 'cashback',
+        description: 'Order cashback #$orderId',
+        extraData: {
+          'orderId': orderId,
+          'points': pointsEarned,
+          'grossProfit': grossProfit,
+          'rankMultiplier': buyerRankMultiplier,
+          'items': orderData['items'] ?? [],
+        },
+      );
+
+      // Update Buyer Points
+      batch.update(_db.collection('users').doc(buyerUid), {
+        'totalPoints': FieldValue.increment(pointsEarned.toDouble()),
+        'totalCashbackEarned': FieldValue.increment(finalCashback),
+      });
+
+      // ── REWARD NOTIFICATION — detailed with cashback + points ───────────
+      final String rankLabel = _rankLabelFromMultiplier(buyerRankMultiplier);
+      final String rewardBody =
+          'Order #$orderId delivered! 🎉\n'
+          'Rs.${finalCashback.toStringAsFixed(0)} cashback credited to your wallet.\n'
+          '$pointsEarned points earned. (Rank: $rankLabel)';
+
+      _addNotificationToBatch(
+        batch,
+        buyerUid,
+        "Order Delivered & Rewards Credited! 🎉",
+        rewardBody,
+        'reward',
+        {
+          ..._buildOrderExtraData(orderId, orderData),
+          'grossProfit': grossProfit,
+          'pointsEarned': pointsEarned,
+          'cashbackCredited': finalCashback,
+          'rankMultiplier': buyerRankMultiplier,
+          'status': 'delivered',
+        },
+      );
+
+      // ── REVIEW NOTIFICATION — 3 sec delay outside batch ─────────────────
+      // Sent after batch commit so orderId exists in Firestore
+      Future.delayed(const Duration(seconds: 3), () async {
+        try {
+          await _db
+              .collection('users')
+              .doc(buyerUid)
+              .collection('notifications')
+              .add({
+                'title': 'How was your order? 🌟',
+                'body':
+                    'Please take a moment to review your order #$orderId. Your feedback helps us improve!',
+                'type': 'review',
+                'isRead': false,
+                'timestamp': FieldValue.serverTimestamp(),
+                'data': {
+                  'orderId': orderId,
+                  'showReviewButton': true,
+                  'items': orderData['items'] ?? [],
+                },
+              });
+        } catch (e) {
+          debugPrint('⚠️ Review notification error: $e');
+        }
+      });
+
+      // 4. MLM Upline Distribution
+      double poolForUplines = mlmPool - maxCashback;
+      double totalBaseUsed = 0.0;
+      String currentParentUid = buyerData['mlmParentUid'] ?? '';
+
+      for (int level = 1; level <= maxLevels; level++) {
+        if (currentParentUid.isEmpty) break;
+
+        DocumentSnapshot uplineDoc = await _db
+            .collection('users')
+            .doc(currentParentUid)
+            .get();
+        if (!uplineDoc.exists) break;
+
+        Map<String, dynamic> uplineData =
+            uplineDoc.data() as Map<String, dynamic>;
+        bool isMLMActive = uplineData['isMLMActive'] ?? false;
+
+        if (!isMLMActive) {
+          currentParentUid = uplineData['mlmParentUid'] ?? '';
+          continue;
+        }
+
+        double levelPercent = commPercentages['level_$level'] ?? 0.0;
+        if (levelPercent > 0) {
+          double baseComm = mlmPool * (levelPercent / 100);
+          double uplinePoints = (uplineData['totalPoints'] ?? 0.0).toDouble();
+          String uplineMemStatus = uplineData['membershipStatus'] ?? 'unpaid';
+          String uplineName =
+              uplineData['name'] ?? uplineData['username'] ?? 'User';
+
+          double rankMulti = _getRankMultiplier(uplinePoints, settings);
+          if (uplineMemStatus == 'approved' && rankMulti < 100.0) {
+            rankMulti += 25.0;
+          }
+
+          double finalComm = double.parse(
+            (baseComm * (rankMulti / 100)).toStringAsFixed(2),
+          );
+          totalCompanyShare += (baseComm - finalComm);
+          totalBaseUsed += baseComm;
+
+          if (finalComm > 0) {
+            _addWalletTransactionToBatch(
+              batch: batch,
+              uid: currentParentUid,
+              memStatus: uplineMemStatus,
+              amount: finalComm,
+              type: 'commission',
+              description:
+                  'Level $level Commission from $buyerName\'s order #$orderId',
+              extraData: {
+                'orderId': orderId,
+                'level': level,
+                'fromUser': buyerName,
+                'fromUid': buyerUid,
+                'rankMultiplier': rankMulti,
+                'grossProfit': grossProfit,
+              },
+            );
+
+            // ── MLM Commission Notification — detailed ───────────────────
+            final String uplineRankLabel = _rankLabelFromMultiplier(rankMulti);
+            final String commBody =
+                'Rs.${finalComm.toStringAsFixed(0)} commission credited! 💰\n'
+                'Level $level • From: $buyerName\'s order\n'
+                'Order #$orderId • Rank: $uplineRankLabel';
+
+            _addNotificationToBatch(
+              batch,
+              currentParentUid,
+              "Commission Earned! 💰",
+              commBody,
+              'finance',
+              {
+                'orderId': orderId,
+                'level': level,
+                'fromUser': buyerName,
+                'fromUid': buyerUid,
+                'amount': finalComm,
+                'rankMultiplier': rankMulti,
+              },
+            );
+          }
+        }
+        currentParentUid = uplineData['mlmParentUid'] ?? '';
+      }
+
+      double unallocated = poolForUplines - totalBaseUsed;
+      if (unallocated > 0) totalCompanyShare += unallocated;
+
+      // 5. Update Company Finances
+      if (totalCompanyShare > 0) {
+        batch.set(
+          _db.collection('company_finances').doc('balance'),
+          {'totalCompanyBalance': FieldValue.increment(totalCompanyShare)},
+          SetOptions(merge: true),
+        );
+
+        DocumentReference histRef = _db
+            .collection('company_finances')
+            .doc('balance')
+            .collection('history')
+            .doc();
+        batch.set(histRef, {
+          'orderId': orderId,
+          'amount': totalCompanyShare,
+          'source': 'MLM System (Gaps & Unallocated)',
+          'timestamp': FieldValue.serverTimestamp(),
+        });
+      }
+
+      // 6. Commit batch atomically
+      await batch.commit();
+
+      // Stock updates (non-critical, outside batch)
+      final List items = orderData['items'] ?? [];
+      for (final item in items) {
+        final pid = item['productId']?.toString() ?? '';
+        if (pid.isNotEmpty) {
+          int qty = int.tryParse(item['quantity']?.toString() ?? '1') ?? 1;
+          _db
+              .collection('products')
+              .doc(pid)
+              .update({'stockOut': FieldValue.increment(qty)})
+              .catchError((e) {});
+        }
+      }
+
+      return true;
+    } catch (e) {
+      debugPrint("❌ ATOMIC REWARD BATCH ERROR: $e");
+      return false;
+    }
+  }
+
+  // ── Helper: rank label from multiplier ────────────────────────────────────
+  String _rankLabelFromMultiplier(double m) {
+    if (m <= 25) return 'Bronze';
+    if (m <= 50) return 'Silver';
+    if (m <= 75) return 'Gold';
+    return 'Diamond';
+  }
+
+  double _getRankMultiplier(double points, Map<String, dynamic> settings) {
+    double bronze = (settings['bronzeLimit'] ?? 100.0).toDouble();
+    double silver = (settings['silverLimit'] ?? 200.0).toDouble();
+    double gold = (settings['goldLimit'] ?? 300.0).toDouble();
+    if (points <= bronze) return 25.0;
+    if (points <= silver) return 50.0;
+    if (points <= gold) return 75.0;
+    return 100.0;
+  }
+
+  void _addWalletTransactionToBatch({
+    required WriteBatch batch,
+    required String uid,
+    required String memStatus,
+    required double amount,
+    required String type,
+    required String description,
+    required Map<String, dynamic> extraData,
+  }) {
+    if (amount <= 0) return;
+
+    double toShopping = 0.0;
+    double toMain = amount;
+
+    if (memStatus == 'approved') {
+      toShopping = double.parse((amount * 0.25).toStringAsFixed(2));
+      toMain = double.parse((amount - toShopping).toStringAsFixed(2));
+    }
+
+    Map<String, dynamic> updates = {
+      'totalCommissionEarned': FieldValue.increment(amount),
+    };
+    if (toMain > 0) updates['walletBalance'] = FieldValue.increment(toMain);
+    if (toShopping > 0)
+      updates['shoppingWalletBalance'] = FieldValue.increment(toShopping);
+
+    batch.update(_db.collection('users').doc(uid), updates);
+
+    if (toMain > 0) {
+      DocumentReference mainHist = _db
+          .collection('users')
+          .doc(uid)
+          .collection('wallet_history')
+          .doc();
+      batch.set(mainHist, {
+        'type': type,
+        'amount': toMain,
+        'description': description,
+        'timestamp': FieldValue.serverTimestamp(),
+        ...extraData,
+      });
+    }
+
+    if (toShopping > 0) {
+      DocumentReference shopHist = _db
+          .collection('users')
+          .doc(uid)
+          .collection('wallet_history')
+          .doc();
+      batch.set(shopHist, {
+        'type': 'shopping_wallet_credit',
+        'amount': toShopping,
+        'description': 'Shopping Wallet (25%) — $description',
+        'timestamp': FieldValue.serverTimestamp(),
+        ...extraData,
+      });
+    }
+  }
+
+  void _addNotificationToBatch(
+    WriteBatch batch,
+    String uid,
+    String title,
+    String body,
+    String type,
+    Map<String, dynamic> extra,
+  ) {
+    DocumentReference notifRef = _db
+        .collection('users')
+        .doc(uid)
+        .collection('notifications')
+        .doc();
+    batch.set(notifRef, {
+      'title': title,
+      'body': body,
+      'type': type,
+      'isRead': false,
+      'timestamp': FieldValue.serverTimestamp(),
+      'data': extra,
+    });
+  }
+
   Map<String, dynamic> _buildOrderExtraData(
     String orderId,
     Map<String, dynamic> orderData,
@@ -426,7 +754,7 @@ class OrdersController extends GetxController {
   }
 
   // ════════════════════════════════════════════════════════════════════════════
-  //  WITHDRAWAL — APPROVE (screenshot compulsory)
+  //  WITHDRAWAL — APPROVE
   // ════════════════════════════════════════════════════════════════════════════
   Future<void> approveWithdrawal({
     required String requestId,
@@ -524,7 +852,7 @@ class OrdersController extends GetxController {
         userId: userId,
         title: "Withdrawal Approved ✅",
         body: isUnpaidMember
-            ? "Rs.${amountToReceive.toStringAsFixed(0)} has been sent to your $paymentMethod account. Rs.${feeDeducted.toStringAsFixed(0)} was applied to your membership fee. Check payment proof in notification details."
+            ? "Rs.${amountToReceive.toStringAsFixed(0)} sent to your $paymentMethod account. Rs.${feeDeducted.toStringAsFixed(0)} was applied to your membership fee. Check payment proof in notification details."
             : "Rs.${amountToReceive.toStringAsFixed(0)} has been sent to your $paymentMethod account. Check payment proof in notification details.",
         type: 'finance',
         extraData: {
@@ -553,7 +881,7 @@ class OrdersController extends GetxController {
   }
 
   // ════════════════════════════════════════════════════════════════════════════
-  //  WITHDRAWAL — REJECT (full refund)
+  //  WITHDRAWAL — REJECT
   // ════════════════════════════════════════════════════════════════════════════
   Future<void> rejectWithdrawal(
     String requestId,
@@ -810,13 +1138,6 @@ class OrdersController extends GetxController {
 
   // ════════════════════════════════════════════════════════════════════════════
   //  ORDER PAYMENT — APPROVE
-  //
-  //  ✅ CHANGE: Order status is now 'pending' (not 'confirmed').
-  //  Admin verified payment — order enters the queue as pending.
-  //  Admin must then manually move: pending → confirmed → shipped → delivered.
-  //
-  //  Notification sent: "Payment Confirmed" — tells user payment was received
-  //  and their order is now in the system, pending processing.
   // ════════════════════════════════════════════════════════════════════════════
   Future<void> approveOrderPayment(String financeId) async {
     try {
@@ -843,7 +1164,6 @@ class OrdersController extends GetxController {
       String paymentMethod = data['method'] ?? 'Online Payment';
       String customerAddress = data['customerAddress'] ?? '';
 
-      // ✅ Order created with 'pending' status — not 'confirmed'
       await _db.collection('orders').doc(orderId).set({
         'orderId': orderId,
         'userId': userId,
@@ -859,7 +1179,7 @@ class OrdersController extends GetxController {
         'grandTotal': grandTotal,
         'paymentMethod': paymentMethod,
         'trxId': data['trxId'],
-        'status': 'pending', // ✅ pending, not confirmed
+        'status': 'pending',
         'rewarded': false,
         'rewardPending': false,
         'rewardProcessing': false,
@@ -873,7 +1193,6 @@ class OrdersController extends GetxController {
         'processedAt': FieldValue.serverTimestamp(),
       });
 
-      // ✅ "Payment Confirmed" notification — full order details included
       await _sendNotification(
         userId: userId,
         title: "Payment Confirmed! ✅",
@@ -1063,7 +1382,7 @@ class OrdersController extends GetxController {
             if (extraData != null) 'data': extraData,
           });
     } catch (e) {
-      print("⚠️ [OrdersController] _sendNotification error: $e");
+      debugPrint("⚠️ [OrdersController] _sendNotification error: $e");
     }
   }
 }

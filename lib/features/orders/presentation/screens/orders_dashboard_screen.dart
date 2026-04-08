@@ -1,3 +1,4 @@
+// Path: lib/features/orders/presentation/screens/orders_dashboard_screen.dart
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -249,19 +250,14 @@ class OrdersDashboardScreen extends StatelessWidget {
     );
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  //  TAB 1: COD ORDERS
-  // ══════════════════════════════════════════════════════════════════════════
   Widget _buildOrdersTab(OrdersController controller) {
     return Obx(() {
-      if (controller.isLoading.value) {
+      if (controller.isLoading.value)
         return const Center(
           child: CircularProgressIndicator(color: Colors.redAccent),
         );
-      }
-      if (controller.pendingOrders.isEmpty) {
+      if (controller.pendingOrders.isEmpty)
         return _buildEmptyState("No COD Orders", Icons.shopping_bag_outlined);
-      }
       return ListView.builder(
         padding: const EdgeInsets.all(12),
         itemCount: controller.pendingOrders.length,
@@ -350,7 +346,7 @@ class OrdersDashboardScreen extends StatelessWidget {
 
   void _handleUpdate(String id, String status) {
     Get.find<OrdersController>().updateOrderStage(id, status);
-    Get.back();
+    if (Get.isDialogOpen ?? false) Get.back();
   }
 
   Widget _dialogBtn(String text, Color color, VoidCallback onTap) {
@@ -379,28 +375,25 @@ class OrdersDashboardScreen extends StatelessWidget {
     );
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  //  TAB 2: ONLINE PAYMENTS
-  // ══════════════════════════════════════════════════════════════════════════
   Widget _buildOrderPaymentsTab(OrdersController controller) {
     return Obx(() {
-      if (controller.isLoading.value) {
+      if (controller.isLoading.value)
         return const Center(
           child: CircularProgressIndicator(color: Colors.redAccent),
         );
-      }
-      if (controller.orderPaymentRequests.isEmpty) {
+      if (controller.orderPaymentRequests.isEmpty)
         return _buildEmptyState(
           "No Online Payment Requests",
           Icons.payment_outlined,
         );
-      }
       return ListView.builder(
         padding: const EdgeInsets.all(12),
         itemCount: controller.orderPaymentRequests.length,
         itemBuilder: (context, index) {
-          final req = controller.orderPaymentRequests[index];
-          return _buildOrderPaymentCard(req, controller);
+          return _buildOrderPaymentCard(
+            controller.orderPaymentRequests[index],
+            controller,
+          );
         },
       );
     });
@@ -421,14 +414,9 @@ class OrdersDashboardScreen extends StatelessWidget {
     double totalAmount = (req['totalAmount'] ?? 0.0).toDouble();
     var items = req['items'] as List? ?? [];
     var timestamp = req['timestamp'];
-    String formattedDate = 'N/A';
-    if (timestamp != null) {
-      try {
-        formattedDate = DateFormat(
-          'dd MMM, hh:mm a',
-        ).format(timestamp.toDate());
-      } catch (e) {}
-    }
+    String formattedDate = timestamp != null
+        ? DateFormat('dd MMM, hh:mm a').format(timestamp.toDate())
+        : 'N/A';
 
     return Card(
       color: const Color(0xFF1A1A1A),
@@ -501,18 +489,20 @@ class OrdersDashboardScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 8),
-                ...items.map((item) {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 5),
-                    child: Text(
-                      "• ${item['name'] ?? 'Unknown'} x${item['quantity'] ?? 1} - Rs.${(item['salePrice'] ?? 0) * (item['quantity'] ?? 1)}",
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 12,
+                ...items
+                    .map(
+                      (item) => Padding(
+                        padding: const EdgeInsets.only(bottom: 5),
+                        child: Text(
+                          "• ${item['name'] ?? 'Unknown'} x${item['quantity'] ?? 1} - Rs.${(item['salePrice'] ?? 0) * (item['quantity'] ?? 1)}",
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                        ),
                       ),
-                    ),
-                  );
-                }).toList(),
+                    )
+                    .toList(),
                 const Divider(color: Colors.white24, height: 20),
                 if (req['screenshotBase64'] != null &&
                     req['screenshotBase64'].toString().isNotEmpty)
@@ -592,60 +582,51 @@ class OrdersDashboardScreen extends StatelessWidget {
     );
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  //  TAB 3: WITHDRAWALS
-  // ══════════════════════════════════════════════════════════════════════════
   Widget _buildWithdrawalsTab(OrdersController controller) {
     return Obx(() {
-      if (controller.isLoading.value) {
+      if (controller.isLoading.value)
         return const Center(
           child: CircularProgressIndicator(color: Colors.redAccent),
         );
-      }
-      if (controller.withdrawalRequests.isEmpty) {
+      if (controller.withdrawalRequests.isEmpty)
         return _buildEmptyState(
           "No Withdrawal Requests",
           Icons.account_balance_wallet_outlined,
         );
-      }
       return ListView.builder(
         padding: const EdgeInsets.all(12),
         itemCount: controller.withdrawalRequests.length,
-        itemBuilder: (context, index) {
-          final req = controller.withdrawalRequests[index];
-          return _buildFinanceCard(context, req, 'withdrawal', controller);
-        },
+        itemBuilder: (context, index) => _buildFinanceCard(
+          context,
+          controller.withdrawalRequests[index],
+          'withdrawal',
+          controller,
+        ),
       );
     });
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  //  TAB 4: DEPOSITS
-  // ══════════════════════════════════════════════════════════════════════════
   Widget _buildDepositsTab(OrdersController controller) {
     return Obx(() {
-      if (controller.isLoading.value) {
+      if (controller.isLoading.value)
         return const Center(
           child: CircularProgressIndicator(color: Colors.redAccent),
         );
-      }
-      if (controller.depositRequests.isEmpty) {
+      if (controller.depositRequests.isEmpty)
         return _buildEmptyState("No Deposit Requests", Icons.payments_outlined);
-      }
       return ListView.builder(
         padding: const EdgeInsets.all(12),
         itemCount: controller.depositRequests.length,
-        itemBuilder: (context, index) {
-          final req = controller.depositRequests[index];
-          return _buildFinanceCard(context, req, 'deposit', controller);
-        },
+        itemBuilder: (context, index) => _buildFinanceCard(
+          context,
+          controller.depositRequests[index],
+          'deposit',
+          controller,
+        ),
       );
     });
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  //  FINANCE CARD (Withdrawal + Deposit)
-  // ══════════════════════════════════════════════════════════════════════════
   Widget _buildFinanceCard(
     BuildContext context,
     Map<String, dynamic> req,
@@ -658,14 +639,9 @@ class OrdersDashboardScreen extends StatelessWidget {
     String userEmail = req['userEmail'] ?? 'No Email';
     String method = req['method'] ?? 'N/A';
     var timestamp = req['timestamp'];
-    String formattedDate = 'N/A';
-    if (timestamp != null) {
-      try {
-        formattedDate = DateFormat(
-          'dd MMM, hh:mm a',
-        ).format(timestamp.toDate());
-      } catch (e) {}
-    }
+    String formattedDate = timestamp != null
+        ? DateFormat('dd MMM, hh:mm a').format(timestamp.toDate())
+        : 'N/A';
 
     return Card(
       color: const Color(0xFF1A1A1A),
@@ -880,11 +856,6 @@ class OrdersDashboardScreen extends StatelessWidget {
     );
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  //  ✅ FIXED: Withdrawal Approve Dialog
-  //  Image.file() ki jagah Image.memory(bytes) use kiya
-  //  Bytes directly memory mein store hoti hain — file path pe depend nahi
-  // ══════════════════════════════════════════════════════════════════════════
   void _showWithdrawalApproveDialog(
     BuildContext context,
     Map<String, dynamic> req,
@@ -892,7 +863,6 @@ class OrdersDashboardScreen extends StatelessWidget {
     double amount,
     OrdersController controller,
   ) {
-    // ✅ State variables — Uint8List bytes use karo, File nahi
     Uint8List? pickedBytes;
     String? base64Img;
     String? imgExt;
@@ -916,16 +886,11 @@ class OrdersDashboardScreen extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Header
                     Row(
-                      children: [
-                        const Icon(
-                          Icons.check_circle,
-                          color: Colors.green,
-                          size: 22,
-                        ),
-                        const SizedBox(width: 8),
-                        const Text(
+                      children: const [
+                        Icon(Icons.check_circle, color: Colors.green, size: 22),
+                        SizedBox(width: 8),
+                        Text(
                           'Approve Withdrawal',
                           style: TextStyle(
                             color: Colors.white,
@@ -944,10 +909,6 @@ class OrdersDashboardScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 16),
-
-                    // ✅ FIXED: Screenshot Upload Area
-                    // Pehle: Image.file(_pickedFile!) — file show nahi hoti thi
-                    // Ab: Image.memory(pickedBytes!) — bytes direct memory se show hoti hain
                     GestureDetector(
                       onTap: isLoading
                           ? null
@@ -960,10 +921,7 @@ class OrdersDashboardScreen extends StatelessWidget {
                                   maxWidth: 1000,
                                 );
                                 if (picked == null) return;
-
-                                // ✅ readAsBytes() se seedha bytes lo
                                 final bytes = await picked.readAsBytes();
-
                                 if (bytes.lengthInBytes > 2 * 1024 * 1024) {
                                   setState(
                                     () => error =
@@ -971,14 +929,12 @@ class OrdersDashboardScreen extends StatelessWidget {
                                   );
                                   return;
                                 }
-
                                 final ext = picked.path
                                     .split('.')
                                     .last
                                     .toLowerCase();
-
                                 setState(() {
-                                  pickedBytes = bytes; // ✅ Uint8List store karo
+                                  pickedBytes = bytes;
                                   base64Img = base64Encode(bytes);
                                   imgExt = ext;
                                   error = null;
@@ -1005,7 +961,6 @@ class OrdersDashboardScreen extends StatelessWidget {
                           ),
                         ),
                         child: pickedBytes != null
-                            // ✅ Image.memory se bytes seedha render karo
                             ? ClipRRect(
                                 borderRadius: BorderRadius.circular(11),
                                 child: Image.memory(
@@ -1070,8 +1025,6 @@ class OrdersDashboardScreen extends StatelessWidget {
                               ),
                       ),
                     ),
-
-                    // Re-upload & status row
                     if (pickedBytes != null) ...[
                       const SizedBox(height: 8),
                       Row(
@@ -1107,7 +1060,6 @@ class OrdersDashboardScreen extends StatelessWidget {
                         ],
                       ),
                     ],
-
                     if (error != null) ...[
                       const SizedBox(height: 8),
                       Container(
@@ -1128,10 +1080,7 @@ class OrdersDashboardScreen extends StatelessWidget {
                         ),
                       ),
                     ],
-
                     const SizedBox(height: 20),
-
-                    // Action Buttons
                     if (isLoading)
                       const Center(
                         child: CircularProgressIndicator(color: Colors.green),
@@ -1159,7 +1108,6 @@ class OrdersDashboardScreen extends StatelessWidget {
                           Expanded(
                             flex: 2,
                             child: ElevatedButton.icon(
-                              // ✅ pickedBytes check karo, File nahi
                               onPressed: pickedBytes == null
                                   ? null
                                   : () async {
@@ -1212,9 +1160,6 @@ class OrdersDashboardScreen extends StatelessWidget {
     );
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  //  IMAGE VIEWER DIALOG
-  // ══════════════════════════════════════════════════════════════════════════
   void _showBase64ImageDialog(String base64Data, String extension) {
     try {
       if (base64Data.isEmpty) {
@@ -1226,20 +1171,7 @@ class OrdersDashboardScreen extends StatelessWidget {
         );
         return;
       }
-
-      Uint8List bytes;
-      try {
-        bytes = base64Decode(base64Data);
-      } catch (e) {
-        Get.snackbar(
-          "Error",
-          "Invalid image format: $e",
-          backgroundColor: Colors.red,
-          colorText: Colors.white,
-        );
-        return;
-      }
-
+      Uint8List bytes = base64Decode(base64Data);
       Get.dialog(
         Dialog(
           backgroundColor: Colors.transparent,
@@ -1292,27 +1224,25 @@ class OrdersDashboardScreen extends StatelessWidget {
                       child: Image.memory(
                         bytes,
                         fit: BoxFit.contain,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Container(
-                            padding: const EdgeInsets.all(20),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(
-                                  Icons.broken_image,
-                                  color: Colors.red,
-                                  size: 60,
-                                ),
-                                const SizedBox(height: 10),
-                                Text(
-                                  "Failed to load image: $error",
-                                  style: const TextStyle(color: Colors.white),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ],
-                            ),
-                          );
-                        },
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          padding: const EdgeInsets.all(20),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.broken_image,
+                                color: Colors.red,
+                                size: 60,
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                "Failed to load image: $error",
+                                style: const TextStyle(color: Colors.white),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -1332,9 +1262,6 @@ class OrdersDashboardScreen extends StatelessWidget {
     }
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  //  REJECT DIALOG
-  // ══════════════════════════════════════════════════════════════════════════
   void _showRejectDialog(
     String reqId,
     String userId,
@@ -1423,22 +1350,17 @@ class OrdersDashboardScreen extends StatelessWidget {
     );
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  //  TAB 5: OLD FEE REQUESTS
-  // ══════════════════════════════════════════════════════════════════════════
   Widget _buildFeeTab(OrdersController controller) {
     return Obx(() {
-      if (controller.isLoading.value) {
+      if (controller.isLoading.value)
         return const Center(
           child: CircularProgressIndicator(color: Colors.redAccent),
         );
-      }
-      if (controller.feeRequests.isEmpty) {
+      if (controller.feeRequests.isEmpty)
         return _buildEmptyState(
           "No Old Fee Requests",
           Icons.verified_user_outlined,
         );
-      }
       return ListView.builder(
         padding: const EdgeInsets.all(12),
         itemCount: controller.feeRequests.length,
@@ -1510,19 +1432,14 @@ class OrdersDashboardScreen extends StatelessWidget {
     });
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  //  TAB 6: VENDOR REQUESTS
-  // ══════════════════════════════════════════════════════════════════════════
   Widget _buildVendorTab(OrdersController controller) {
     return Obx(() {
-      if (controller.isLoading.value) {
+      if (controller.isLoading.value)
         return const Center(
           child: CircularProgressIndicator(color: Colors.redAccent),
         );
-      }
-      if (controller.pendingRequests.isEmpty) {
+      if (controller.pendingRequests.isEmpty)
         return _buildEmptyState("No Vendor Requests", Icons.store_outlined);
-      }
       return ListView.builder(
         padding: const EdgeInsets.all(12),
         itemCount: controller.pendingRequests.length,
