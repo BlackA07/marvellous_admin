@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'vendor_account_detail_screen.dart'; // Nayi detail screen ka import
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -21,7 +22,7 @@ class OrdersDashboardScreen extends StatelessWidget {
     final controller = Get.put(OrdersController(), permanent: true);
 
     return DefaultTabController(
-      length: 6,
+      length: 7,
       child: Scaffold(
         backgroundColor: const Color(0xFF0F0F0F),
         appBar: AppBar(
@@ -57,6 +58,11 @@ class OrdersDashboardScreen extends StatelessWidget {
                 Icons.payment,
               ),
               _buildTabWithBadge(
+                "New Vendors",
+                controller.pendingVendorAccounts,
+                Icons.person_add,
+              ),
+              _buildTabWithBadge(
                 "Vendor",
                 controller.pendingRequests,
                 Icons.store,
@@ -83,6 +89,7 @@ class OrdersDashboardScreen extends StatelessWidget {
           children: [
             _buildOrdersTab(controller),
             _buildOrderPaymentsTab(controller),
+            _buildVendorAccountsTab(controller),
             _buildVendorTab(controller),
             _buildWithdrawalsTab(controller),
             _buildDepositsTab(controller),
@@ -91,6 +98,65 @@ class OrdersDashboardScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Widget _buildVendorAccountsTab(OrdersController controller) {
+    return Obx(() {
+      if (controller.isLoading.value) {
+        return const Center(
+          child: CircularProgressIndicator(color: Colors.redAccent),
+        );
+      }
+      if (controller.pendingVendorAccounts.isEmpty) {
+        return _buildEmptyState(
+          "No New Vendor Requests",
+          Icons.person_add_disabled,
+        );
+      }
+      return ListView.builder(
+        padding: const EdgeInsets.all(12),
+        itemCount: controller.pendingVendorAccounts.length,
+        itemBuilder: (context, index) {
+          final vendor = controller.pendingVendorAccounts[index];
+          return Card(
+            color: const Color(0xFF1A1A1A),
+            margin: const EdgeInsets.only(bottom: 12),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(15),
+              side: BorderSide(color: Colors.blueAccent.withOpacity(0.3)),
+            ),
+            child: ListTile(
+              contentPadding: const EdgeInsets.all(12),
+              leading: CircleAvatar(
+                radius: 25,
+                backgroundColor: Colors.blueAccent.withOpacity(0.2),
+                child: const Icon(Icons.storefront, color: Colors.blueAccent),
+              ),
+              title: Text(
+                vendor['storeName'] ?? 'No Store Name',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              subtitle: Text(
+                "Owner: ${vendor['ownerName'] ?? 'N/A'}\nStatus: PENDING",
+                style: const TextStyle(color: Colors.white60),
+              ),
+              trailing: const Icon(
+                Icons.arrow_forward_ios,
+                color: Colors.white38,
+                size: 16,
+              ),
+              onTap: () {
+                Get.to(() => VendorAccountDetailScreen(vendorData: vendor));
+              },
+            ),
+          );
+        },
+      );
+    });
   }
 
   void _showConfirmationDialog({

@@ -19,6 +19,8 @@ class OrdersController extends GetxController {
   // Vendor Requests
   var pendingRequests = <VendorRequestModel>[].obs;
   var historyRequests = <VendorRequestModel>[].obs;
+  // --- NEW: Vendor Account Signups ---
+  var pendingVendorAccounts = <Map<String, dynamic>>[].obs;
 
   // Finance Requests
   var withdrawalRequests = <Map<String, dynamic>>[].obs;
@@ -43,7 +45,166 @@ class OrdersController extends GetxController {
       _listenToOrders();
       _listenToVendorRequests();
       _listenToFinanceRequests();
+      _listenToVendorAccounts();
       _listenToOldFeeRequests();
+    }
+  }
+  // ════════════════════════════════════════════════════════════════════════════
+  //  NEW: VENDOR ACCOUNT APPROVAL LOGIC
+  // ════════════════════════════════════════════════════════════════════════════
+
+  void _listenToVendorAccounts() {
+    _db
+        .collection('vendors')
+        .where('status', isEqualTo: 'pending')
+        .snapshots()
+        .listen((snap) {
+          pendingVendorAccounts.assignAll(
+            snap.docs.map((doc) {
+              var data = doc.data();
+              data['id'] = doc.id;
+              return data;
+            }).toList(),
+          );
+        });
+  }
+
+  // orders_controller.dart mein SIRF approveVendorAccount function replace karo
+  // Koi extra import nahi chahiye - cloud_firestore already imported hai
+
+  Future<void> approveVendorAccount(String vendorUid) async {
+    try {
+      Get.dialog(
+        const Center(child: CircularProgressIndicator(color: Colors.green)),
+        barrierDismissible: false,
+      );
+
+      // 1. Vendor doc fetch karo
+      DocumentSnapshot vendorDoc = await _db
+          .collection('vendors')
+          .doc(vendorUid)
+          .get();
+
+      if (!vendorDoc.exists) {
+        Get.back();
+        Get.snackbar(
+          "Error",
+          "Vendor not found",
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
+        return;
+      }
+
+      Map<String, dynamic> vendorData =
+          vendorDoc.data() as Map<String, dynamic>;
+
+      // 2. Vendor status approve karo
+      await _db.collection('vendors').doc(vendorUid).update({
+        'status': 'approved',
+        'approvedAt': FieldValue.serverTimestamp(),
+      });
+
+      // 3. ✅ Pending new categories Firestore mein sync karo
+      // (Vendor ne signup ke waqt jo naye categories type kiye the)
+      List<Map<String, dynamic>> pendingNewCats =
+          List<Map<String, dynamic>>.from(
+            vendorData['pendingNewCategories'] ?? [],
+          );
+
+      List<Map<String, dynamic>> pendingNewSubs =
+          List<Map<String, dynamic>>.from(
+            vendorData['pendingNewSubCategories'] ?? [],
+          );
+
+      // Naye categories Firestore mein add karo
+      for (var cat in pendingNewCats) {
+        String catName = (cat['name'] ?? '').toString().trim();
+        if (catName.isEmpty) continue;
+
+        // Pehle check karo ke exist toh nahi karta
+        var existing = await _db
+            .collection('categories')
+            .where('name', isEqualTo: catName)
+            .limit(1)
+            .get();
+
+        if (existing.docs.isEmpty) {
+          await _db.collection('categories').add({
+            'name': catName,
+            'subCategories': [],
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+          debugPrint('✅ New category added: $catName');
+        }
+      }
+
+      // Naye sub-categories existing category docs mein add karo
+      for (var sub in pendingNewSubs) {
+        String catName = (sub['categoryName'] ?? '').toString().trim();
+        String subName = (sub['subName'] ?? '').toString().trim();
+        if (catName.isEmpty || subName.isEmpty) continue;
+
+        var catQuery = await _db
+            .collection('categories')
+            .where('name', isEqualTo: catName)
+            .limit(1)
+            .get();
+
+        if (catQuery.docs.isNotEmpty) {
+          await _db.collection('categories').doc(catQuery.docs.first.id).update(
+            {
+              'subCategories': FieldValue.arrayUnion([subName]),
+            },
+          );
+          debugPrint('✅ Sub-category added: $subName under $catName');
+        }
+      }
+
+      Get.back();
+      Get.snackbar(
+        "Success ✅",
+        "Vendor Account Approved!",
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      Get.back();
+      Get.snackbar(
+        "Error",
+        "Failed: $e",
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
+  }
+
+  Future<void> rejectVendorAccount(String vendorUid, String reason) async {
+    try {
+      Get.dialog(
+        const Center(child: CircularProgressIndicator(color: Colors.red)),
+        barrierDismissible: false,
+      );
+      await _db.collection('vendors').doc(vendorUid).update({
+        'status': 'rejected',
+        'rejectionReason': reason,
+        'rejectedAt': FieldValue.serverTimestamp(),
+      });
+      Get.back();
+      Get.snackbar(
+        "Rejected",
+        "Vendor Account Rejected!",
+        backgroundColor: Colors.orange,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      Get.back();
+      Get.snackbar(
+        "Error",
+        "Failed: $e",
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
     }
   }
 

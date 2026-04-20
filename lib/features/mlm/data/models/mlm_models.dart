@@ -38,9 +38,12 @@ class MLMNode {
   final String rank; // bronze, silver, gold, diamond
   final double totalCommissionEarned;
   final List<MLMNode> children;
-  final int totalMembers; // Total people under this node (all levels)
+  final int totalMembers; // Total active people under this node (all levels)
   final int paidMembers; // How many paid fees (all levels)
   final int remainingSlots; // For level display (7 - current children)
+  final bool isOverflow; // Placed under different parent than referrer
+  final bool
+  isDirectReferral; // Joined using root user's referral code directly
 
   MLMNode({
     required this.uid,
@@ -56,6 +59,8 @@ class MLMNode {
     this.totalMembers = 0,
     this.paidMembers = 0,
     this.remainingSlots = 0,
+    this.isOverflow = false,
+    this.isDirectReferral = false,
   });
 
   String get initials {
@@ -84,6 +89,8 @@ class MLMNode {
       totalMembers: json['totalMembers'] ?? 0,
       paidMembers: json['paidMembers'] ?? 0,
       remainingSlots: json['remainingSlots'] ?? 0,
+      isOverflow: json['isOverflow'] ?? false,
+      isDirectReferral: json['isDirectReferral'] ?? false,
     );
   }
 
@@ -102,6 +109,45 @@ class MLMNode {
       'totalMembers': totalMembers,
       'paidMembers': paidMembers,
       'remainingSlots': remainingSlots,
+      'isOverflow': isOverflow,
+      'isDirectReferral': isDirectReferral,
     };
+  }
+
+  MLMNode copyWith({
+    String? uid,
+    String? name,
+    String? image,
+    String? myReferralCode,
+    int? level,
+    bool? isMLMActive,
+    bool? hasPaidFee,
+    String? rank,
+    double? totalCommissionEarned,
+    List<MLMNode>? children,
+    int? totalMembers,
+    int? paidMembers,
+    int? remainingSlots,
+    bool? isOverflow,
+    bool? isDirectReferral,
+  }) {
+    return MLMNode(
+      uid: uid ?? this.uid,
+      name: name ?? this.name,
+      image: image ?? this.image,
+      myReferralCode: myReferralCode ?? this.myReferralCode,
+      level: level ?? this.level,
+      isMLMActive: isMLMActive ?? this.isMLMActive,
+      hasPaidFee: hasPaidFee ?? this.hasPaidFee,
+      rank: rank ?? this.rank,
+      totalCommissionEarned:
+          totalCommissionEarned ?? this.totalCommissionEarned,
+      children: children ?? this.children,
+      totalMembers: totalMembers ?? this.totalMembers,
+      paidMembers: paidMembers ?? this.paidMembers,
+      remainingSlots: remainingSlots ?? this.remainingSlots,
+      isOverflow: isOverflow ?? this.isOverflow,
+      isDirectReferral: isDirectReferral ?? this.isDirectReferral,
+    );
   }
 }

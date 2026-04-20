@@ -14,6 +14,7 @@ class ProductModel {
   int stockQuantity;
   int stockOut;
   String vendorId;
+  String vendorName; // ✅ ADDED: Vendor Name
   List<String> images;
   String? video;
   DateTime dateAdded;
@@ -34,6 +35,7 @@ class ProductModel {
   bool showDecimalPoints;
   String? ram;
   String? storage;
+  String status; // ✅ ADDED: Status (pending, approved, rejected)
 
   ProductModel({
     this.id,
@@ -49,6 +51,7 @@ class ProductModel {
     required this.stockQuantity,
     this.stockOut = 0,
     required this.vendorId,
+    this.vendorName = 'Admin', // ✅ Default for older admin products
     required this.images,
     this.video,
     required this.dateAdded,
@@ -65,6 +68,7 @@ class ProductModel {
     this.showDecimalPoints = true,
     this.ram,
     this.storage,
+    this.status = 'approved', // ✅ Default for older admin products
   });
 
   Map<String, dynamic> toMap() {
@@ -82,6 +86,7 @@ class ProductModel {
       'stockQuantity': stockQuantity,
       'stockOut': stockOut,
       'vendorId': vendorId,
+      'vendorName': vendorName, // ✅ ADDED
       'images': images,
       'video': video,
       'dateAdded': Timestamp.fromDate(dateAdded),
@@ -98,6 +103,7 @@ class ProductModel {
       'showDecimalPoints': showDecimalPoints,
       'ram': ram,
       'storage': storage,
+      'status': status, // ✅ ADDED
     };
   }
 
@@ -116,6 +122,7 @@ class ProductModel {
       stockQuantity: map['stockQuantity'] ?? 0,
       stockOut: map['stockOut'] ?? 0,
       vendorId: map['vendorId'] ?? '',
+      vendorName: map['vendorName'] ?? 'Admin', // ✅ ADDED Fallback
       images: List<String>.from(map['images'] ?? []),
       video: map['video'],
       dateAdded: (map['dateAdded'] as Timestamp).toDate(),
@@ -132,6 +139,7 @@ class ProductModel {
       showDecimalPoints: map['showDecimalPoints'] ?? true,
       ram: map['ram'],
       storage: map['storage'],
+      status: map['status'] ?? 'approved', // ✅ ADDED Fallback
     );
   }
 }

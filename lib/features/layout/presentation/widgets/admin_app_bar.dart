@@ -11,12 +11,14 @@ import 'package:marvellous_admin/features/profile/presentation/controllers/profi
 import '../../../../core/theme/pallete.dart';
 
 // Controllers Imports
-import '../../../orders/presentation/controllers/orders_controller.dart'; // Orders Controller
+import '../../../orders/presentation/controllers/orders_controller.dart';
+import '../../../products/controller/products_controller.dart'; // ✅ PRODUCTS CONTROLLER IMPORT
 
 // Screens Imports
 import '../../../finance/presentation/screens/earnings_dashboard_screen.dart';
 import '../../../orders/presentation/screens/orders_dashboard_screen.dart';
 import '../../../profile/presentation/screens/admin_profile_screen.dart';
+import '../../../products/presentation/screens/pending_requests_screen.dart'; // ✅ PENDING SCREEN IMPORT
 
 class AdminAppBar extends StatelessWidget {
   final VoidCallback onMenuPressed;
@@ -30,9 +32,6 @@ class AdminAppBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // --- Controllers Injection ---
-    // Get.put ki jagah Get.find use kar rahe hen agar pehle se loaded ho to fast hoga
-    // Agar nahi to create karega.
     final profileController = Get.isRegistered<ProfileController>()
         ? Get.find<ProfileController>()
         : Get.put(ProfileController());
@@ -40,6 +39,11 @@ class AdminAppBar extends StatelessWidget {
     final ordersController = Get.isRegistered<OrdersController>()
         ? Get.find<OrdersController>()
         : Get.put(OrdersController());
+
+    // ✅ Initialize Products Controller for pending badge
+    final productsController = Get.isRegistered<ProductsController>()
+        ? Get.find<ProductsController>()
+        : Get.put(ProductsController());
 
     return SafeArea(
       bottom: false,
@@ -61,7 +65,6 @@ class AdminAppBar extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // 1. Menu Icon (Mobile Only)
             if (isMobile) ...[
               IconButton(
                 onPressed: onMenuPressed,
@@ -72,11 +75,8 @@ class AdminAppBar extends StatelessWidget {
               const SizedBox(width: 10),
             ],
 
-            // 2. Dynamic Page Title (User Name)
             Expanded(
               child: Center(
-                // FIX: Obx ab 'isLoading' ko sun raha hai.
-                // Is se Red Screen nahi ayegi aur data aate hi update hoga.
                 child: Obx(() {
                   if (profileController.isLoading.value) {
                     return const SizedBox(
@@ -88,14 +88,13 @@ class AdminAppBar extends StatelessWidget {
                       ),
                     );
                   }
-
                   return Text(
                     profileController.nameController.text.isEmpty
                         ? "Admin Panel"
                         : profileController.nameController.text,
                     style: GoogleFonts.comicNeue(
                       color: Colors.white,
-                      fontSize: isMobile ? 24 : 32, // Responsive Font
+                      fontSize: isMobile ? 24 : 32,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 1.2,
                     ),
@@ -105,7 +104,32 @@ class AdminAppBar extends StatelessWidget {
               ),
             ),
 
-            // 3. Right Side Icons
+            // --- PENDING PRODUCT REQUESTS BADGE (NEW) ---
+            Obx(() {
+              int productReqs = productsController.pendingRequestsList.length;
+              return badges.Badge(
+                showBadge: productReqs > 0,
+                badgeContent: Text(
+                  '$productReqs',
+                  style: const TextStyle(color: Colors.white, fontSize: 10),
+                ),
+                badgeStyle: const badges.BadgeStyle(
+                  badgeColor: Colors.orange,
+                  elevation: 0,
+                ),
+                position: badges.BadgePosition.topEnd(top: -5, end: -2),
+                child: _AppBarIcon(
+                  icon: Icons.inventory_outlined,
+                  tooltip: "Pending Product Requests",
+                  onTap: () {
+                    // Navigate to pending requests directly
+                    Get.to(() => const PendingRequestsScreen());
+                  },
+                ),
+              );
+            }),
+
+            const SizedBox(width: 15),
 
             // --- Wallet Icon (Earnings) ---
             _AppBarIcon(
@@ -118,7 +142,7 @@ class AdminAppBar extends StatelessWidget {
 
             const SizedBox(width: 15),
 
-            // --- Requests Icon (Orders) with Badge ---
+            // --- Orders Icon with Badge ---
             Obx(() {
               int pendingCount =
                   ordersController.pendingOrders.length +
@@ -148,9 +172,8 @@ class AdminAppBar extends StatelessWidget {
             const SizedBox(width: 20),
 
             // --- Profile Image ---
-            // FIX: GestureDetector ko sabse bahar rakha hai taake click miss na ho
             GestureDetector(
-              behavior: HitTestBehavior.opaque, // Ensures click detection
+              behavior: HitTestBehavior.opaque,
               onTap: () {
                 Get.to(() => const AdminProfileScreen());
               },
@@ -192,10 +215,7 @@ class AdminAppBar extends StatelessWidget {
             ),
 
             const SizedBox(width: 15),
-
-            // --- Divider ---
             Container(height: 30, width: 1, color: Colors.white24),
-
             const SizedBox(width: 10),
 
             // --- Logout Icon ---
@@ -204,15 +224,8 @@ class AdminAppBar extends StatelessWidget {
               tooltip: "Logout",
               isLogout: true,
               onTap: () async {
-                // async lagaya kyunke logout future function hai
-
-                // 1. Firebase se session khatam karo
                 await FirebaseAuth.instance.signOut();
-
-                // 2. Navigation Stack clear karo aur Login pe bhejo
                 Get.offAll(() => const LoginScreen());
-
-                // 3. Optional: User ko batao
                 Get.snackbar(
                   "Logged Out",
                   "See you soon!",

@@ -37,6 +37,18 @@ class _ProductsHomeScreenState extends ConsumerState<ProductsHomeScreen> {
     super.dispose();
   }
 
+  // ✅ NEW: Edit Product Function
+  void _editProduct(ProductModel product) {
+    ref
+        .read(navigationProvider)
+        .navigateTo(
+          mainItem: "Products",
+          subItem: "Edit Product",
+          screen: AddProductScreen(productToEdit: product),
+          title: "Edit Product",
+        );
+  }
+
   void _deleteProduct(ProductModel product) {
     Get.defaultDialog(
       title: "Delete Product?",
@@ -186,6 +198,8 @@ class _ProductsHomeScreenState extends ConsumerState<ProductsHomeScreen> {
                           isMobile: isMobile,
                           constraints: constraints,
                           onDelete: _deleteProduct,
+                          onEdit:
+                              _editProduct, // ✅ FIX: Edit function pass kar diya
                         ),
                         const SizedBox(height: 80),
                       ],

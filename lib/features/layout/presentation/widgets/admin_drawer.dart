@@ -15,14 +15,21 @@ import 'package:marvellous_admin/features/settings/presentation/screens/variable
 import 'package:marvellous_admin/features/vendors/screens/vendors_list_screen.dart';
 
 import '../../../../core/theme/pallete.dart';
-import '../../controller/layout_controller.dart';
+import '../../../customers/presentation/screens/customers_screen.dart';
+import '../../../vendor_purchase_product/presentation/screens/vendor_manage_bills_screen.dart';
+import '../../../vendor_purchase_product/presentation/screens/vendor_purchase_screen.dart';
 
+// ✅ IMPORT FOR YOUR NEW PAYMENT SCREEN (Make sure the file name is correct)
+import '../../../vendor_purchase_product/presentation/screens/vendor_dues_history_screen.dart';
+import '../../../vendor_purchase_product/presentation/screens/vendor_payment_dashboard.dart';
+import '../../controller/layout_controller.dart';
+import '../../../customers/presentation/screens/login_list_screen.dart';
 // --- PRODUCTS IMPORTS ---
 import '../../../products/presentation/screens/products_home_screen.dart';
 import '../../../products/presentation/screens/add_product_screen.dart';
+import '../../../products/presentation/screens/pending_requests_screen.dart';
 
-// --- PACKAGES IMPORTS (New) ---
-// Make sure paths are correct based on your folder structure
+// --- PACKAGES IMPORTS ---
 import '../../../packages/presentation/screens/packages_home_screen.dart'
     hide ProductsHomeScreen;
 import '../../../packages/presentation/screens/add_package_screen.dart';
@@ -55,26 +62,35 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
     AdminMenuItem(title: "Dashboard", icon: Icons.dashboard_outlined),
     AdminMenuItem(title: "Point Variable", icon: Icons.settings_outlined),
 
-    // PRODUCTS
     AdminMenuItem(
       title: "Products",
       icon: Icons.inventory_2_outlined,
       hasSubmenu: true,
-      subItems: ["All Products", "Add Product", "Categories", "Vendors"],
+      subItems: [
+        "All Products",
+        "Add Product",
+        "Pending Requests",
+        "Categories",
+        "Vendors",
+      ],
     ),
 
-    // PACKAGES (New Item)
     AdminMenuItem(
       title: "Packages",
-      icon: Icons.all_inbox_outlined, // Good icon for bundles/packages
+      icon: Icons.all_inbox_outlined,
       hasSubmenu: true,
       subItems: ["Packages Home Screen", "Add Package"],
     ),
 
-    AdminMenuItem(title: "Customers", icon: Icons.people_outline),
+    // ✅ FIXED: Customers with two subitems
+    AdminMenuItem(
+      title: "Customers",
+      icon: Icons.people_outline,
+      hasSubmenu: true,
+      subItems: ["Customers Details", "Login List"],
+    ),
     AdminMenuItem(title: "Orders", icon: Icons.shopping_bag_outlined),
 
-    // MLM
     AdminMenuItem(
       title: "MLM Network",
       icon: Icons.hub_outlined,
@@ -84,12 +100,18 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
 
     AdminMenuItem(title: "Staff", icon: Icons.badge_outlined),
 
-    // Finance
+    AdminMenuItem(
+      title: "Payments",
+      icon: Icons.payments_outlined,
+      hasSubmenu: true,
+      subItems: ["Vendor Payment", "Manage Vendor Bills"],
+    ),
+
     AdminMenuItem(
       title: "Finance",
       icon: Icons.monetization_on_outlined,
       hasSubmenu: true,
-      subItems: ["Earnings", "Payouts"],
+      subItems: ["Earnings", "Payouts", "Purchase Products", "Vendor Dues"],
     ),
 
     AdminMenuItem(title: "Reports", icon: Icons.bar_chart_outlined),
@@ -169,7 +191,7 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
                             item.isExpanded = !item.isExpanded;
                           });
                         } else {
-                          // DIRECT NAVIGATION
+                          // DIRECT NAVIGATION (no submenu)
                           Widget screen = Center(
                             child: Text(
                               "${item.title} Screen",
@@ -178,14 +200,19 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
                           );
 
                           if (item.title == "Dashboard") {
-                            screen = DashboardScreen();
+                            screen = const DashboardScreen();
                           } else if (item.title == "Orders") {
                             screen = const OrdersDashboardScreen();
                           } else if (item.title == "Profile") {
                             screen = const AdminProfileScreen();
                           } else if (item.title == "Point Variable") {
-                            // Placeholder screen for Point Variable
                             screen = const VariablesScreen();
+                          }
+                          // ✅ "Customers" is now hasSubmenu = true, so this block is never reached.
+                          // But if we later change it, we handle it safely.
+                          else if (item.title == "Customers") {
+                            // Default to Customer Details if clicked directly
+                            screen = const CustomersScreen();
                           }
 
                           nav.navigateTo(
@@ -234,12 +261,13 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
                         final bool isSubActive = activeSub == subItem;
                         return InkWell(
                           onTap: () {
+                            // Close drawer first
                             if (Scaffold.of(context).hasDrawer &&
                                 Scaffold.of(context).isDrawerOpen) {
                               Navigator.pop(context);
                             }
 
-                            // --- SWITCHING LOGIC ---
+                            // Determine target screen based on parent and subItem
                             Widget targetScreen = Center(
                               child: Text(
                                 "$subItem Screen",
@@ -247,19 +275,21 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
                               ),
                             );
 
-                            // 1. PRODUCTS
+                            // ─── PRODUCTS ───────────────────────────────
                             if (item.title == "Products") {
                               if (subItem == "All Products") {
-                                targetScreen = ProductsHomeScreen();
+                                targetScreen = const ProductsHomeScreen();
                               } else if (subItem == "Add Product") {
                                 targetScreen = const AddProductScreen();
+                              } else if (subItem == "Pending Requests") {
+                                targetScreen = const PendingRequestsScreen();
                               } else if (subItem == "Categories") {
                                 targetScreen = CategoriesScreen();
                               } else if (subItem == "Vendors") {
                                 targetScreen = VendorsListScreen();
                               }
                             }
-                            // 2. PACKAGES (New Logic)
+                            // ─── PACKAGES ──────────────────────────────
                             else if (item.title == "Packages") {
                               if (subItem == "Packages Home Screen") {
                                 targetScreen = const PackagesHomeScreen();
@@ -267,23 +297,49 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
                                 targetScreen = const AddPackageScreen();
                               }
                             }
-                            // 3. OTHERS
-                            else if (item.title == "Orders") {
-                              targetScreen = const OrdersDashboardScreen();
-                            } else if (item.title == "MLM Network") {
+                            // ─── CUSTOMERS (FIXED) ─────────────────────
+                            else if (item.title == "Customers") {
+                              if (subItem == "Customers Details") {
+                                targetScreen = const CustomersScreen();
+                              } else if (subItem == "Login List") {
+                                // ✅ Dummy placeholder for Login List
+                                targetScreen = const LoginListScreen();
+                              }
+                            }
+                            // ─── MLM NETWORK ───────────────────────────
+                            else if (item.title == "MLM Network") {
                               if (subItem == "Tree View") {
                                 targetScreen = const MLMTreeViewScreen();
                               } else if (subItem == "Commissions") {
                                 targetScreen = const CommissionSetupScreen();
                               }
-                            } else if (item.title == "Finance") {
+                            }
+                            // ─── PAYMENTS ──────────────────────────────
+                            else if (item.title == "Payments") {
+                              if (subItem == "Vendor Payment") {
+                                targetScreen = const VendorPaymentDashboard();
+                              } else if (subItem == "Manage Vendor Bills") {
+                                targetScreen = const VendorManageBillsScreen();
+                              }
+                            }
+                            // ─── FINANCE ───────────────────────────────
+                            else if (item.title == "Finance") {
                               if (subItem == "Earnings") {
                                 targetScreen = const EarningsDashboardScreen();
                               } else if (subItem == "Payouts") {
                                 targetScreen = const PayoutsScreen();
+                              } else if (subItem == "Purchase Products") {
+                                targetScreen = const VendorPurchaseScreen();
+                              } else if (subItem == "Vendor Dues") {
+                                targetScreen = const VendorPaymentsScreen();
                               }
                             }
+                            // ─── ORDERS (if it had subitems later) ─────
+                            else if (item.title == "Orders") {
+                              targetScreen = const OrdersDashboardScreen();
+                            }
 
+                            // Navigate using provider
                             nav.navigateTo(
                               mainItem: item.title,
                               subItem: subItem,

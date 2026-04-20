@@ -14,6 +14,9 @@ class ProductInventoryTable extends ConsumerStatefulWidget {
   final ProductsController controller;
   final bool isMobile;
   final BoxConstraints constraints;
+
+  // ✅ FIX: Added onEdit parameter and updated onDelete type
+  final Function(ProductModel) onEdit;
   final Function(ProductModel) onDelete;
 
   const ProductInventoryTable({
@@ -22,6 +25,7 @@ class ProductInventoryTable extends ConsumerStatefulWidget {
     required this.controller,
     required this.isMobile,
     required this.constraints,
+    required this.onEdit, // ✅ FIX: Added to constructor
     required this.onDelete,
   }) : super(key: key);
 
@@ -471,7 +475,7 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                                   headingRowHeight: _rowHeight,
                                   columnSpacing: _colSpacing,
                                   horizontalMargin: 10,
-                                  showCheckboxColumn: false, // CRITICAL FIX
+                                  showCheckboxColumn: false,
                                   columns: [
                                     // --- SELECT ALL CHECKBOX ---
                                     DataColumn(
@@ -750,23 +754,15 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                                                   );
                                                 },
                                               ),
+                                              // ✅ FIX: _actionIcon for EDIT
                                               _actionIcon(
                                                 Icons.edit,
                                                 Colors.orangeAccent,
                                                 _iconSize,
                                                 () {
-                                                  ref
-                                                      .read(navigationProvider)
-                                                      .navigateTo(
-                                                        mainItem: "Products",
-                                                        subItem: "Add Product",
-                                                        screen:
-                                                            AddProductScreen(
-                                                              productToEdit:
-                                                                  product,
-                                                            ),
-                                                        title: "Edit Product",
-                                                      );
+                                                  widget.onEdit(
+                                                    product,
+                                                  ); // Edit call here
                                                 },
                                               ),
                                               _actionIcon(
@@ -867,17 +863,25 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
     );
   }
 
+  // ✅ Replaced with IconButton inside Container for reliable clicks
   Widget _actionIcon(
     IconData icon,
     Color color,
     double size,
     VoidCallback onTap,
   ) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-        child: Icon(icon, color: color, size: size),
+    return Container(
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        shape: BoxShape.circle,
+      ),
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+      child: IconButton(
+        icon: Icon(icon, color: color, size: size),
+        onPressed: onTap,
+        splashRadius: 20,
+        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+        padding: EdgeInsets.zero,
       ),
     );
   }
