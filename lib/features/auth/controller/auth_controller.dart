@@ -42,9 +42,12 @@ class AuthController {
       );
 
       if (user != null) {
-        Get.snackbar("Success", "Account Created Successfully!");
-        // Navigate to Dashboard
+        // ✅ Pehle Navigate karo
         Get.offAllNamed(AppRoutes.home);
+        // ✅ Phir delay ke sath Snackbar dikhao
+        Future.delayed(const Duration(milliseconds: 400), () {
+          Get.snackbar("Success", "Account Created Successfully!");
+        });
       }
     } catch (e) {
       Get.snackbar(
@@ -69,8 +72,12 @@ class AuthController {
       );
 
       if (user != null) {
-        Get.snackbar("Welcome Back", "Login Successful!");
+        // ✅ Pehle Navigate karo
         Get.offAllNamed(AppRoutes.home);
+        // ✅ Phir delay ke sath Snackbar dikhao
+        Future.delayed(const Duration(milliseconds: 400), () {
+          Get.snackbar("Welcome Back", "Login Successful!");
+        });
       }
     } catch (e) {
       Get.snackbar(
