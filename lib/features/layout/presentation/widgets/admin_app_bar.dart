@@ -1,4 +1,5 @@
 import 'dart:convert'; // Image decode k liye
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -11,12 +12,84 @@ import 'package:marvellous_admin/features/profile/presentation/controllers/profi
 import '../../../../core/theme/pallete.dart';
 
 // Controllers Imports
-import '../../../orders/presentation/controllers/orders_controller.dart'; // Orders Controller
+import '../../../orders/presentation/controllers/orders_controller.dart';
+import '../../../products/controller/products_controller.dart';
 
 // Screens Imports
 import '../../../finance/presentation/screens/earnings_dashboard_screen.dart';
 import '../../../orders/presentation/screens/orders_dashboard_screen.dart';
 import '../../../profile/presentation/screens/admin_profile_screen.dart';
+import '../../../products/presentation/screens/pending_requests_screen.dart';
+
+// ✅ NAYA CONTROLLER: Jo login hone wale user ki permissions check karega
+class CurrentUserController extends GetxController {
+  var isAdmin = false.obs;
+  var permissions = <String, List<String>>{}.obs;
+  var isLoading = true.obs;
+
+  @override
+  void onInit() {
+    super.onInit();
+    _loadPermissions();
+  }
+
+  Future<void> _loadPermissions() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+      if (userDoc.exists && userDoc.data()?['role'] == 'admin') {
+        isAdmin.value = true;
+        isLoading.value = false;
+        return;
+      }
+
+      final staffQuery = await FirebaseFirestore.instance
+          .collection('staff')
+          .where('email', isEqualTo: user.email)
+          .limit(1)
+          .get();
+      if (staffQuery.docs.isEmpty) {
+        isLoading.value = false;
+        return;
+      }
+
+      final staffId = staffQuery.docs.first.id;
+      final permDoc = await FirebaseFirestore.instance
+          .collection('user_permissions')
+          .doc(staffId)
+          .get();
+
+      if (permDoc.exists && permDoc.data() != null) {
+        final data = permDoc.data()!;
+        if (data['permissions'] != null) {
+          Map<String, List<String>> temp = {};
+          (data['permissions'] as Map<String, dynamic>).forEach((k, v) {
+            temp[k] = List<String>.from(v);
+          });
+          permissions.value = temp;
+        }
+      }
+    } catch (e) {
+      debugPrint(e.toString());
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  bool hasPermission(String module, [String? subItem]) {
+    if (isAdmin.value) return true;
+    if (subItem != null) {
+      return permissions.containsKey('$module|$subItem') &&
+          permissions['$module|$subItem']!.isNotEmpty;
+    }
+    return permissions.containsKey(module) && permissions[module]!.isNotEmpty;
+  }
+}
 
 class AdminAppBar extends StatelessWidget {
   final VoidCallback onMenuPressed;
@@ -30,16 +103,19 @@ class AdminAppBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // --- Controllers Injection ---
-    // Get.put ki jagah Get.find use kar rahe hen agar pehle se loaded ho to fast hoga
-    // Agar nahi to create karega.
+    // Inject controllers
     final profileController = Get.isRegistered<ProfileController>()
         ? Get.find<ProfileController>()
         : Get.put(ProfileController());
-
     final ordersController = Get.isRegistered<OrdersController>()
         ? Get.find<OrdersController>()
         : Get.put(OrdersController());
+    final productsController = Get.isRegistered<ProductsController>()
+        ? Get.find<ProductsController>()
+        : Get.put(ProductsController());
+
+    // ✅ Inject our new CurrentUserController
+    final currentUserCtrl = Get.put(CurrentUserController());
 
     return SafeArea(
       bottom: false,
@@ -61,7 +137,6 @@ class AdminAppBar extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // 1. Menu Icon (Mobile Only)
             if (isMobile) ...[
               IconButton(
                 onPressed: onMenuPressed,
@@ -72,11 +147,8 @@ class AdminAppBar extends StatelessWidget {
               const SizedBox(width: 10),
             ],
 
-            // 2. Dynamic Page Title (User Name)
             Expanded(
               child: Center(
-                // FIX: Obx ab 'isLoading' ko sun raha hai.
-                // Is se Red Screen nahi ayegi aur data aate hi update hoga.
                 child: Obx(() {
                   if (profileController.isLoading.value) {
                     return const SizedBox(
@@ -88,14 +160,13 @@ class AdminAppBar extends StatelessWidget {
                       ),
                     );
                   }
-
                   return Text(
                     profileController.nameController.text.isEmpty
                         ? "Admin Panel"
                         : profileController.nameController.text,
                     style: GoogleFonts.comicNeue(
                       color: Colors.white,
-                      fontSize: isMobile ? 24 : 32, // Responsive Font
+                      fontSize: isMobile ? 24 : 32,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 1.2,
                     ),
@@ -105,120 +176,185 @@ class AdminAppBar extends StatelessWidget {
               ),
             ),
 
-            // 3. Right Side Icons
+            // --- PENDING PRODUCT REQUESTS BADGE ---
+            Obx(() {
+              // Hide if user does NOT have permission to Pending Requests
+              if (!currentUserCtrl.hasPermission(
+                'Products',
+                'Pending Requests',
+              )) {
+                return const SizedBox.shrink();
+              }
+
+              int productReqs = productsController.pendingRequestsList.length;
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  badges.Badge(
+                    showBadge: productReqs > 0,
+                    badgeContent: Text(
+                      '$productReqs',
+                      style: const TextStyle(color: Colors.white, fontSize: 10),
+                    ),
+                    badgeStyle: const badges.BadgeStyle(
+                      badgeColor: Colors.orange,
+                      elevation: 0,
+                    ),
+                    position: badges.BadgePosition.topEnd(top: -5, end: -2),
+                    child: _AppBarIcon(
+                      icon: Icons.inventory_outlined,
+                      tooltip: "Pending Product Requests",
+                      onTap: () {
+                        Get.to(() => const PendingRequestsScreen());
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 15),
+                ],
+              );
+            }),
 
             // --- Wallet Icon (Earnings) ---
-            _AppBarIcon(
-              icon: Icons.account_balance_wallet_outlined,
-              tooltip: "Earnings",
-              onTap: () {
-                Get.to(() => const EarningsDashboardScreen());
-              },
-            ),
-
-            const SizedBox(width: 15),
-
-            // --- Requests Icon (Orders) with Badge ---
             Obx(() {
+              // Hide if user does NOT have permission to Earnings
+              if (!currentUserCtrl.hasPermission('Finance', 'Earnings')) {
+                return const SizedBox.shrink();
+              }
+
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _AppBarIcon(
+                    icon: Icons.account_balance_wallet_outlined,
+                    tooltip: "Earnings",
+                    onTap: () {
+                      Get.to(() => const EarningsDashboardScreen());
+                    },
+                  ),
+                  const SizedBox(width: 15),
+                ],
+              );
+            }),
+
+            // --- Orders Icon with Badge ---
+            Obx(() {
+              // Hide if user does NOT have permission to Orders
+              if (!currentUserCtrl.hasPermission('Orders')) {
+                return const SizedBox.shrink();
+              }
+
               int pendingCount =
                   ordersController.pendingOrders.length +
                   ordersController.pendingRequests.length;
 
-              return badges.Badge(
-                showBadge: pendingCount > 0,
-                badgeContent: Text(
-                  '$pendingCount',
-                  style: const TextStyle(color: Colors.white, fontSize: 10),
-                ),
-                badgeStyle: const badges.BadgeStyle(
-                  badgeColor: Colors.redAccent,
-                  elevation: 0,
-                ),
-                position: badges.BadgePosition.topEnd(top: -5, end: -2),
-                child: _AppBarIcon(
-                  icon: Icons.assignment_late_outlined,
-                  tooltip: "Pending Orders & Requests",
-                  onTap: () {
-                    Get.to(() => const OrdersDashboardScreen());
-                  },
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  badges.Badge(
+                    showBadge: pendingCount > 0,
+                    badgeContent: Text(
+                      '$pendingCount',
+                      style: const TextStyle(color: Colors.white, fontSize: 10),
+                    ),
+                    badgeStyle: const badges.BadgeStyle(
+                      badgeColor: Colors.redAccent,
+                      elevation: 0,
+                    ),
+                    position: badges.BadgePosition.topEnd(top: -5, end: -2),
+                    child: _AppBarIcon(
+                      icon: Icons.assignment_late_outlined,
+                      tooltip: "Pending Orders & Requests",
+                      onTap: () {
+                        Get.to(() => const OrdersDashboardScreen());
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 20),
+                ],
+              );
+            }),
+
+            // --- Profile Image ---
+            Obx(() {
+              // Hide if user does NOT have permission to Profile
+              if (!currentUserCtrl.hasPermission('Profile')) {
+                return const SizedBox.shrink();
+              }
+
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  Get.to(() => const AdminProfileScreen());
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.cyanAccent),
+                  ),
+                  child: Obx(() {
+                    bool hasImage =
+                        profileController.profileImageBase64.value.isNotEmpty;
+
+                    return CircleAvatar(
+                      radius: 18,
+                      backgroundColor: Colors.grey[800],
+                      backgroundImage: hasImage
+                          ? MemoryImage(
+                              base64Decode(
+                                profileController.profileImageBase64.value,
+                              ),
+                            )
+                          : null,
+                      child: !hasImage
+                          ? Text(
+                              profileController.nameController.text.isNotEmpty
+                                  ? profileController.nameController.text[0]
+                                        .toUpperCase()
+                                  : "A",
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            )
+                          : null,
+                    );
+                  }),
                 ),
               );
             }),
 
-            const SizedBox(width: 20),
+            Obx(() {
+              if (!currentUserCtrl.hasPermission('Profile'))
+                return const SizedBox.shrink();
+              return Row(
+                children: [
+                  const SizedBox(width: 15),
+                  Container(height: 30, width: 1, color: Colors.white24),
+                  const SizedBox(width: 10),
+                ],
+              );
+            }),
 
-            // --- Profile Image ---
-            // FIX: GestureDetector ko sabse bahar rakha hai taake click miss na ho
-            GestureDetector(
-              behavior: HitTestBehavior.opaque, // Ensures click detection
-              onTap: () {
-                Get.to(() => const AdminProfileScreen());
-              },
-              child: Container(
-                padding: const EdgeInsets.all(2),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.cyanAccent),
-                ),
-                child: Obx(() {
-                  bool hasImage =
-                      profileController.profileImageBase64.value.isNotEmpty;
-
-                  return CircleAvatar(
-                    radius: 18,
-                    backgroundColor: Colors.grey[800],
-                    backgroundImage: hasImage
-                        ? MemoryImage(
-                            base64Decode(
-                              profileController.profileImageBase64.value,
-                            ),
-                          )
-                        : null,
-                    child: !hasImage
-                        ? Text(
-                            profileController.nameController.text.isNotEmpty
-                                ? profileController.nameController.text[0]
-                                      .toUpperCase()
-                                : "A",
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          )
-                        : null,
-                  );
-                }),
-              ),
-            ),
-
-            const SizedBox(width: 15),
-
-            // --- Divider ---
-            Container(height: 30, width: 1, color: Colors.white24),
-
-            const SizedBox(width: 10),
-
-            // --- Logout Icon ---
+            // --- Logout Icon (Hamesha visible rahega taake staff logout kar sake) ---
             _AppBarIcon(
               icon: Icons.logout_outlined,
               tooltip: "Logout",
               isLogout: true,
               onTap: () async {
-                // async lagaya kyunke logout future function hai
-
-                // 1. Firebase se session khatam karo
                 await FirebaseAuth.instance.signOut();
-
-                // 2. Navigation Stack clear karo aur Login pe bhejo
+                // 1. Pehle screen change karo
                 Get.offAll(() => const LoginScreen());
 
-                // 3. Optional: User ko batao
-                Get.snackbar(
-                  "Logged Out",
-                  "See you soon!",
-                  backgroundColor: Colors.green,
-                  colorText: Colors.white,
-                );
+                // 2. Thora sa wait karwa ke Snackbar show karo
+                Future.delayed(const Duration(milliseconds: 400), () {
+                  Get.snackbar(
+                    "Logged Out",
+                    "See you soon!",
+                    backgroundColor: Colors.green,
+                    colorText: Colors.white,
+                  );
+                });
               },
             ),
           ],

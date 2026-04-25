@@ -1,3 +1,5 @@
+// lib/controller/products_controller.dart
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -13,6 +15,8 @@ class ProductsController extends GetxController {
 
   // --- MASTER LIST ---
   var productList = <ProductModel>[].obs;
+  // ✅ NEW: Pending Requests List
+  var pendingRequestsList = <ProductModel>[].obs;
 
   // --- SEARCH & HISTORY ---
   var searchQuery = ''.obs;
@@ -41,6 +45,34 @@ class ProductsController extends GetxController {
     fetchProducts();
     fetchHistory();
     fetchGlobalSettings();
+    _fetchPendingRequests(); // ✅ NEW: Fetch pending requests on init
+  }
+
+  // ✅ NEW: Listen to Pending Requests Stream
+  void _fetchPendingRequests() {
+    _repository.getPendingRequestsStream().listen((requests) {
+      pendingRequestsList.assignAll(requests);
+    });
+  }
+
+  // ✅ NEW: Reject Request Function
+  Future<void> rejectRequest(String requestId) async {
+    try {
+      await _repository.rejectRequest(requestId);
+      Get.snackbar(
+        "Rejected",
+        "Product request rejected successfully.",
+        backgroundColor: Colors.orange,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      Get.snackbar(
+        "Error",
+        "Failed to reject request: $e",
+        backgroundColor: Colors.redAccent,
+        colorText: Colors.white,
+      );
+    }
   }
 
   // --- ✨ MIGRATION FUNCTION: Add averageRating & totalReviews to old products ---
@@ -280,26 +312,51 @@ class ProductsController extends GetxController {
       // Apply latest decimal settings during update
       product.showDecimalPoints = showDecimals.value;
 
-      await _repository.updateProduct(product);
-      int index = productList.indexWhere((p) => p.id == product.id);
-      if (index != -1) {
-        productList[index] = product;
-        productList.refresh();
+      // ✅ SMART APPROVE LOGIC FOR PENDING VENDOR REQUESTS
+      if (product.status == 'pending') {
+        product.status = 'approved';
+        String requestId = product.id!;
+
+        // 1. Save to original 'products' collection (Repo handles new ID generation)
+        product.id = null;
+        await _repository.addProduct(product);
+
+        // 2. Mark the request doc as 'approved' so vendor sees status change
+        await _db.collection('product_requests').doc(requestId).update({
+          'status': 'approved',
+        });
+
+        // 3. Add to local UI list
+        productList.insert(0, product);
+
+        Get.snackbar(
+          "Approved!",
+          "Vendor product approved and added successfully.",
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+        );
+      } else {
+        // Normal Update Flow for existing products
+        await _repository.updateProduct(product);
+        int index = productList.indexWhere((p) => p.id == product.id);
+        if (index != -1) {
+          productList[index] = product;
+          productList.refresh();
+        }
+        Get.snackbar(
+          "Success",
+          "Updated Successfully",
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+        );
       }
 
+      // Refresh history suggestions
       addToHistory(product.name);
       addToHistory(product.brand);
-
-      // --- Update Specific Lists ---
       addToSpecificHistory(product.name, 'product');
       addToSpecificHistory(product.brand, 'brand');
 
-      Get.snackbar(
-        "Success",
-        "Updated Successfully",
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-      );
       return true;
     } catch (e) {
       Get.snackbar(

@@ -5,7 +5,8 @@ import '../../models/product_model.dart';
 class ProductTable extends StatelessWidget {
   final List<ProductModel> products;
   final Function(ProductModel) onEdit;
-  final Function(String) onDelete;
+  final Function(ProductModel)
+  onDelete; // ✅ FIX: String se ProductModel kar diya
   final Function(ProductModel) onView;
 
   const ProductTable({
@@ -31,7 +32,7 @@ class ProductTable extends StatelessWidget {
           headingRowColor: MaterialStateProperty.all(
             Colors.white.withOpacity(0.05),
           ),
-          dataRowHeight: 70, // Thora height badhaya images k liye
+          dataRowHeight: 70,
           horizontalMargin: 20,
           columnSpacing: 20,
           columns: [
@@ -59,7 +60,7 @@ class ProductTable extends StatelessWidget {
                               ? DecorationImage(
                                   image: AssetImage(
                                     product.images.first,
-                                  ), // NetworkImage agar URL ho
+                                  ), // NetworkImage if URL
                                   fit: BoxFit.cover,
                                 )
                               : null,
@@ -159,7 +160,9 @@ class ProductTable extends StatelessWidget {
                       _actionBtn(
                         Icons.delete,
                         Colors.redAccent,
-                        () => onDelete(product.id!),
+                        () => onDelete(
+                          product,
+                        ), // ✅ FIX: Passes full ProductModel
                       ),
                     ],
                   ),
@@ -183,17 +186,19 @@ class ProductTable extends StatelessWidget {
     );
   }
 
+  // ✅ FIX: Replaced InkWell with guaranteed clickable IconButton
   Widget _actionBtn(IconData icon, Color color, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(50),
-      child: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          shape: BoxShape.circle,
-        ),
-        child: Icon(icon, color: color, size: 18),
+    return Container(
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        shape: BoxShape.circle,
+      ),
+      child: IconButton(
+        icon: Icon(icon, color: color, size: 18),
+        onPressed: onTap,
+        splashRadius: 20,
+        constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+        padding: EdgeInsets.zero,
       ),
     );
   }

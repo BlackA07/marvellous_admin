@@ -1,6 +1,9 @@
+// Path: lib/features/orders/presentation/screens/orders_dashboard_screen.dart
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'vendor_account_detail_screen.dart'; // Nayi detail screen ka import
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -19,7 +22,7 @@ class OrdersDashboardScreen extends StatelessWidget {
     final controller = Get.put(OrdersController(), permanent: true);
 
     return DefaultTabController(
-      length: 6,
+      length: 7,
       child: Scaffold(
         backgroundColor: const Color(0xFF0F0F0F),
         appBar: AppBar(
@@ -55,6 +58,11 @@ class OrdersDashboardScreen extends StatelessWidget {
                 Icons.payment,
               ),
               _buildTabWithBadge(
+                "New Vendors",
+                controller.pendingVendorAccounts,
+                Icons.person_add,
+              ),
+              _buildTabWithBadge(
                 "Vendor",
                 controller.pendingRequests,
                 Icons.store,
@@ -81,6 +89,7 @@ class OrdersDashboardScreen extends StatelessWidget {
           children: [
             _buildOrdersTab(controller),
             _buildOrderPaymentsTab(controller),
+            _buildVendorAccountsTab(controller),
             _buildVendorTab(controller),
             _buildWithdrawalsTab(controller),
             _buildDepositsTab(controller),
@@ -91,9 +100,65 @@ class OrdersDashboardScreen extends StatelessWidget {
     );
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  //  CONFIRMATION DIALOG
-  // ══════════════════════════════════════════════════════════════════════════
+  Widget _buildVendorAccountsTab(OrdersController controller) {
+    return Obx(() {
+      if (controller.isLoading.value) {
+        return const Center(
+          child: CircularProgressIndicator(color: Colors.redAccent),
+        );
+      }
+      if (controller.pendingVendorAccounts.isEmpty) {
+        return _buildEmptyState(
+          "No New Vendor Requests",
+          Icons.person_add_disabled,
+        );
+      }
+      return ListView.builder(
+        padding: const EdgeInsets.all(12),
+        itemCount: controller.pendingVendorAccounts.length,
+        itemBuilder: (context, index) {
+          final vendor = controller.pendingVendorAccounts[index];
+          return Card(
+            color: const Color(0xFF1A1A1A),
+            margin: const EdgeInsets.only(bottom: 12),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(15),
+              side: BorderSide(color: Colors.blueAccent.withOpacity(0.3)),
+            ),
+            child: ListTile(
+              contentPadding: const EdgeInsets.all(12),
+              leading: CircleAvatar(
+                radius: 25,
+                backgroundColor: Colors.blueAccent.withOpacity(0.2),
+                child: const Icon(Icons.storefront, color: Colors.blueAccent),
+              ),
+              title: Text(
+                vendor['storeName'] ?? 'No Store Name',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              subtitle: Text(
+                "Owner: ${vendor['ownerName'] ?? 'N/A'}\nStatus: PENDING",
+                style: const TextStyle(color: Colors.white60),
+              ),
+              trailing: const Icon(
+                Icons.arrow_forward_ios,
+                color: Colors.white38,
+                size: 16,
+              ),
+              onTap: () {
+                Get.to(() => VendorAccountDetailScreen(vendorData: vendor));
+              },
+            ),
+          );
+        },
+      );
+    });
+  }
+
   void _showConfirmationDialog({
     required String title,
     required String content,
@@ -146,9 +211,6 @@ class OrdersDashboardScreen extends StatelessWidget {
     );
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  //  DEBUG INFO
-  // ══════════════════════════════════════════════════════════════════════════
   void _showDebugInfo(OrdersController controller) {
     Get.dialog(
       AlertDialog(
@@ -254,19 +316,14 @@ class OrdersDashboardScreen extends StatelessWidget {
     );
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  //  TAB 1: COD ORDERS
-  // ══════════════════════════════════════════════════════════════════════════
   Widget _buildOrdersTab(OrdersController controller) {
     return Obx(() {
-      if (controller.isLoading.value) {
+      if (controller.isLoading.value)
         return const Center(
           child: CircularProgressIndicator(color: Colors.redAccent),
         );
-      }
-      if (controller.pendingOrders.isEmpty) {
+      if (controller.pendingOrders.isEmpty)
         return _buildEmptyState("No COD Orders", Icons.shopping_bag_outlined);
-      }
       return ListView.builder(
         padding: const EdgeInsets.all(12),
         itemCount: controller.pendingOrders.length,
@@ -355,7 +412,7 @@ class OrdersDashboardScreen extends StatelessWidget {
 
   void _handleUpdate(String id, String status) {
     Get.find<OrdersController>().updateOrderStage(id, status);
-    Get.back();
+    if (Get.isDialogOpen ?? false) Get.back();
   }
 
   Widget _dialogBtn(String text, Color color, VoidCallback onTap) {
@@ -384,28 +441,25 @@ class OrdersDashboardScreen extends StatelessWidget {
     );
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  //  TAB 2: ONLINE PAYMENTS
-  // ══════════════════════════════════════════════════════════════════════════
   Widget _buildOrderPaymentsTab(OrdersController controller) {
     return Obx(() {
-      if (controller.isLoading.value) {
+      if (controller.isLoading.value)
         return const Center(
           child: CircularProgressIndicator(color: Colors.redAccent),
         );
-      }
-      if (controller.orderPaymentRequests.isEmpty) {
+      if (controller.orderPaymentRequests.isEmpty)
         return _buildEmptyState(
           "No Online Payment Requests",
           Icons.payment_outlined,
         );
-      }
       return ListView.builder(
         padding: const EdgeInsets.all(12),
         itemCount: controller.orderPaymentRequests.length,
         itemBuilder: (context, index) {
-          final req = controller.orderPaymentRequests[index];
-          return _buildOrderPaymentCard(req, controller);
+          return _buildOrderPaymentCard(
+            controller.orderPaymentRequests[index],
+            controller,
+          );
         },
       );
     });
@@ -426,14 +480,9 @@ class OrdersDashboardScreen extends StatelessWidget {
     double totalAmount = (req['totalAmount'] ?? 0.0).toDouble();
     var items = req['items'] as List? ?? [];
     var timestamp = req['timestamp'];
-    String formattedDate = 'N/A';
-    if (timestamp != null) {
-      try {
-        formattedDate = DateFormat(
-          'dd MMM, hh:mm a',
-        ).format(timestamp.toDate());
-      } catch (e) {}
-    }
+    String formattedDate = timestamp != null
+        ? DateFormat('dd MMM, hh:mm a').format(timestamp.toDate())
+        : 'N/A';
 
     return Card(
       color: const Color(0xFF1A1A1A),
@@ -506,18 +555,20 @@ class OrdersDashboardScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 8),
-                ...items.map((item) {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 5),
-                    child: Text(
-                      "• ${item['name'] ?? 'Unknown'} x${item['quantity'] ?? 1} - Rs.${(item['salePrice'] ?? 0) * (item['quantity'] ?? 1)}",
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 12,
+                ...items
+                    .map(
+                      (item) => Padding(
+                        padding: const EdgeInsets.only(bottom: 5),
+                        child: Text(
+                          "• ${item['name'] ?? 'Unknown'} x${item['quantity'] ?? 1} - Rs.${(item['salePrice'] ?? 0) * (item['quantity'] ?? 1)}",
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                        ),
                       ),
-                    ),
-                  );
-                }).toList(),
+                    )
+                    .toList(),
                 const Divider(color: Colors.white24, height: 20),
                 if (req['screenshotBase64'] != null &&
                     req['screenshotBase64'].toString().isNotEmpty)
@@ -597,61 +648,51 @@ class OrdersDashboardScreen extends StatelessWidget {
     );
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  //  TAB 3: WITHDRAWALS
-  // ══════════════════════════════════════════════════════════════════════════
   Widget _buildWithdrawalsTab(OrdersController controller) {
     return Obx(() {
-      if (controller.isLoading.value) {
+      if (controller.isLoading.value)
         return const Center(
           child: CircularProgressIndicator(color: Colors.redAccent),
         );
-      }
-      if (controller.withdrawalRequests.isEmpty) {
+      if (controller.withdrawalRequests.isEmpty)
         return _buildEmptyState(
           "No Withdrawal Requests",
           Icons.account_balance_wallet_outlined,
         );
-      }
       return ListView.builder(
         padding: const EdgeInsets.all(12),
         itemCount: controller.withdrawalRequests.length,
-        itemBuilder: (context, index) {
-          final req = controller.withdrawalRequests[index];
-          return _buildFinanceCard(context, req, 'withdrawal', controller);
-        },
+        itemBuilder: (context, index) => _buildFinanceCard(
+          context,
+          controller.withdrawalRequests[index],
+          'withdrawal',
+          controller,
+        ),
       );
     });
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  //  TAB 4: DEPOSITS
-  // ══════════════════════════════════════════════════════════════════════════
   Widget _buildDepositsTab(OrdersController controller) {
     return Obx(() {
-      if (controller.isLoading.value) {
+      if (controller.isLoading.value)
         return const Center(
           child: CircularProgressIndicator(color: Colors.redAccent),
         );
-      }
-      if (controller.depositRequests.isEmpty) {
+      if (controller.depositRequests.isEmpty)
         return _buildEmptyState("No Deposit Requests", Icons.payments_outlined);
-      }
       return ListView.builder(
         padding: const EdgeInsets.all(12),
         itemCount: controller.depositRequests.length,
-        itemBuilder: (context, index) {
-          final req = controller.depositRequests[index];
-          return _buildFinanceCard(context, req, 'deposit', controller);
-        },
+        itemBuilder: (context, index) => _buildFinanceCard(
+          context,
+          controller.depositRequests[index],
+          'deposit',
+          controller,
+        ),
       );
     });
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  //  FINANCE CARD (Withdrawal + Deposit)
-  //  CHANGE: Withdrawal approve button ab screenshot dialog kholega
-  // ══════════════════════════════════════════════════════════════════════════
   Widget _buildFinanceCard(
     BuildContext context,
     Map<String, dynamic> req,
@@ -664,14 +705,9 @@ class OrdersDashboardScreen extends StatelessWidget {
     String userEmail = req['userEmail'] ?? 'No Email';
     String method = req['method'] ?? 'N/A';
     var timestamp = req['timestamp'];
-    String formattedDate = 'N/A';
-    if (timestamp != null) {
-      try {
-        formattedDate = DateFormat(
-          'dd MMM, hh:mm a',
-        ).format(timestamp.toDate());
-      } catch (e) {}
-    }
+    String formattedDate = timestamp != null
+        ? DateFormat('dd MMM, hh:mm a').format(timestamp.toDate())
+        : 'N/A';
 
     return Card(
       color: const Color(0xFF1A1A1A),
@@ -734,7 +770,6 @@ class OrdersDashboardScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (type == 'withdrawal') ...[
-                  // ─── Withdrawal Details ───────────────────────────────────
                   if ((req['accountName'] ?? '').toString().isNotEmpty)
                     _detailRow("Account Name", req['accountName']),
                   if ((req['mobileNumber'] ?? '').toString().isNotEmpty)
@@ -765,7 +800,6 @@ class OrdersDashboardScreen extends StatelessWidget {
                         ? '❌ Unpaid'
                         : '✅ Paid Member',
                   ),
-                  // User screenshot (if provided)
                   if ((req['screenshotBase64'] ?? '').toString().isNotEmpty)
                     GestureDetector(
                       onTap: () => _showBase64ImageDialog(
@@ -796,7 +830,6 @@ class OrdersDashboardScreen extends StatelessWidget {
                       ),
                     ),
                 ] else ...[
-                  // ─── Deposit Details ──────────────────────────────────────
                   if (req['trxId'] != null) _detailRow("TRX ID", req['trxId']),
                   if ((req['screenshotBase64'] ?? '').toString().isNotEmpty)
                     GestureDetector(
@@ -839,8 +872,6 @@ class OrdersDashboardScreen extends StatelessWidget {
                           backgroundColor: Colors.green,
                           padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
-
-                        // In _buildFinanceCard function, onPressed for Approve button:
                         onPressed: () {
                           if (userId.isEmpty) {
                             Get.snackbar(
@@ -850,18 +881,14 @@ class OrdersDashboardScreen extends StatelessWidget {
                             );
                             return;
                           }
-
                           if (type == 'withdrawal') {
-                            // ✅ Direct approve karo - screenshot wala dialog mat dikhao
-                            // Agar screenshot wala dialog chahiye to comment out karo
-                            controller.approveWithdrawal(
-                              req['id'],
+                            _showWithdrawalApproveDialog(
+                              context,
+                              req,
                               userId,
                               amount,
+                              controller,
                             );
-
-                            // Agar screenshot dialog chahiye to ye use karo:
-                            // _showWithdrawalApproveDialog(context, req, userId, amount, controller);
                           } else {
                             controller.approveDeposit(req['id'], userId);
                           }
@@ -895,9 +922,6 @@ class OrdersDashboardScreen extends StatelessWidget {
     );
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  //  ✅ NEW: Withdrawal Approve Dialog with Screenshot Upload
-  // ══════════════════════════════════════════════════════════════════════════
   void _showWithdrawalApproveDialog(
     BuildContext context,
     Map<String, dynamic> req,
@@ -905,7 +929,7 @@ class OrdersDashboardScreen extends StatelessWidget {
     double amount,
     OrdersController controller,
   ) {
-    File? pickedFile;
+    Uint8List? pickedBytes;
     String? base64Img;
     String? imgExt;
     bool isLoading = false;
@@ -922,22 +946,17 @@ class OrdersDashboardScreen extends StatelessWidget {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: Padding(
+              child: SingleChildScrollView(
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Header
                     Row(
-                      children: [
-                        const Icon(
-                          Icons.check_circle,
-                          color: Colors.green,
-                          size: 22,
-                        ),
-                        const SizedBox(width: 8),
-                        const Text(
+                      children: const [
+                        Icon(Icons.check_circle, color: Colors.green, size: 22),
+                        SizedBox(width: 8),
+                        Text(
                           'Approve Withdrawal',
                           style: TextStyle(
                             color: Colors.white,
@@ -956,99 +975,178 @@ class OrdersDashboardScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 16),
-
-                    // Screenshot Upload Area
                     GestureDetector(
                       onTap: isLoading
                           ? null
                           : () async {
-                              final picker = ImagePicker();
-                              final picked = await picker.pickImage(
-                                source: ImageSource.gallery,
-                                imageQuality: 70,
-                                maxWidth: 1000,
-                              );
-                              if (picked == null) return;
-                              final file = File(picked.path);
-                              final bytes = await file.readAsBytes();
-                              if (bytes.lengthInBytes > 1024 * 1024) {
-                                setState(
-                                  () => error =
-                                      'Image too large (max 1MB). Please compress.',
+                              try {
+                                final picker = ImagePicker();
+                                final picked = await picker.pickImage(
+                                  source: ImageSource.gallery,
+                                  imageQuality: 70,
+                                  maxWidth: 1000,
                                 );
-                                return;
-                              }
-                              setState(() {
-                                pickedFile = file;
-                                base64Img = base64Encode(bytes);
-                                imgExt = picked.path
+                                if (picked == null) return;
+                                final bytes = await picked.readAsBytes();
+                                if (bytes.lengthInBytes > 2 * 1024 * 1024) {
+                                  setState(
+                                    () => error =
+                                        'Image too large (max 2MB). Please compress.',
+                                  );
+                                  return;
+                                }
+                                final ext = picked.path
                                     .split('.')
                                     .last
                                     .toLowerCase();
-                                error = null;
-                              });
+                                setState(() {
+                                  pickedBytes = bytes;
+                                  base64Img = base64Encode(bytes);
+                                  imgExt = ext;
+                                  error = null;
+                                });
+                              } catch (e) {
+                                setState(
+                                  () => error = 'Error picking image: $e',
+                                );
+                              }
                             },
                       child: Container(
                         width: double.infinity,
-                        height: 130,
+                        height: 180,
                         decoration: BoxDecoration(
                           color: Colors.black26,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: pickedFile != null
-                                ? Colors.green.withOpacity(0.5)
+                            color: pickedBytes != null
+                                ? Colors.green.withOpacity(0.7)
+                                : error != null
+                                ? Colors.red.withOpacity(0.7)
                                 : Colors.white24,
+                            width: 1.5,
                           ),
                         ),
-                        child: pickedFile != null
+                        child: pickedBytes != null
                             ? ClipRRect(
                                 borderRadius: BorderRadius.circular(11),
-                                child: Image.file(
-                                  pickedFile!,
+                                child: Image.memory(
+                                  pickedBytes!,
                                   fit: BoxFit.cover,
+                                  width: double.infinity,
+                                  height: 180,
+                                  errorBuilder: (c, e, s) => const Center(
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.broken_image,
+                                          color: Colors.red,
+                                          size: 40,
+                                        ),
+                                        SizedBox(height: 8),
+                                        Text(
+                                          'Image load error\nTap to re-select',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            color: Colors.red,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 ),
                               )
-                            : const Column(
+                            : Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Icon(
                                     Icons.cloud_upload_outlined,
-                                    color: Colors.white38,
-                                    size: 32,
+                                    color: error != null
+                                        ? Colors.red.shade300
+                                        : Colors.white38,
+                                    size: 42,
                                   ),
-                                  SizedBox(height: 8),
+                                  const SizedBox(height: 10),
                                   Text(
-                                    'Tap to upload payment proof',
+                                    'Tap to Upload Payment Proof',
                                     style: TextStyle(
-                                      color: Colors.white38,
-                                      fontSize: 12,
+                                      color: error != null
+                                          ? Colors.red.shade300
+                                          : Colors.white54,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
-                                  Text(
-                                    '(optional — user ko dikhega)',
+                                  const SizedBox(height: 4),
+                                  const Text(
+                                    'COMPULSORY — User will see this',
                                     style: TextStyle(
                                       color: Colors.white24,
-                                      fontSize: 10,
+                                      fontSize: 11,
                                     ),
                                   ),
                                 ],
                               ),
                       ),
                     ),
-
+                    if (pickedBytes != null) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.check_circle,
+                            color: Colors.green,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 6),
+                          const Text(
+                            'Screenshot selected ✓',
+                            style: TextStyle(color: Colors.green, fontSize: 12),
+                          ),
+                          const Spacer(),
+                          GestureDetector(
+                            onTap: isLoading
+                                ? null
+                                : () => setState(() {
+                                    pickedBytes = null;
+                                    base64Img = null;
+                                    imgExt = null;
+                                  }),
+                            child: const Text(
+                              '🗑️ Remove',
+                              style: TextStyle(
+                                color: Colors.redAccent,
+                                fontSize: 12,
+                                decoration: TextDecoration.underline,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     if (error != null) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        error!,
-                        style: const TextStyle(
-                          color: Colors.redAccent,
-                          fontSize: 11,
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Colors.red.withOpacity(0.3),
+                          ),
+                        ),
+                        child: Text(
+                          error!,
+                          style: const TextStyle(
+                            color: Colors.redAccent,
+                            fontSize: 12,
+                          ),
                         ),
                       ),
                     ],
-
-                    const SizedBox(height: 16),
-
+                    const SizedBox(height: 20),
                     if (isLoading)
                       const Center(
                         child: CircularProgressIndicator(color: Colors.green),
@@ -1056,117 +1154,43 @@ class OrdersDashboardScreen extends StatelessWidget {
                     else
                       Row(
                         children: [
-                          // ─── Approve WITHOUT screenshot ───────────────────
                           Expanded(
                             child: OutlinedButton(
-                              onPressed: () {
-                                Navigator.of(ctx).pop();
-                                controller.approveWithdrawal(
-                                  req['id'],
-                                  userId,
-                                  amount,
-                                );
-                              },
+                              onPressed: () => Navigator.of(ctx).pop(),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: Colors.white54,
                                 side: const BorderSide(color: Colors.white24),
                                 padding: const EdgeInsets.symmetric(
-                                  vertical: 10,
+                                  vertical: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
                                 ),
                               ),
-                              child: const Text(
-                                'Approve\n(No SS)',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(fontSize: 11),
-                              ),
+                              child: const Text('Cancel'),
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          // ─── Approve WITH screenshot ──────────────────────
+                          const SizedBox(width: 10),
                           Expanded(
                             flex: 2,
                             child: ElevatedButton.icon(
-                              // "Approve + Screenshot" button ke onPressed mein:
-                              onPressed: pickedFile == null
+                              onPressed: pickedBytes == null
                                   ? null
                                   : () async {
-                                      setState(() => isLoading = true);
+                                      setState(() {
+                                        isLoading = true;
+                                        error = null;
+                                      });
                                       try {
-                                        double requestedAmount =
-                                            (req['requestedAmount'] ?? amount)
-                                                .toDouble();
-                                        bool isUnpaid =
-                                            req['isUnpaidMember'] ?? false;
-                                        double feeDeducted = isUnpaid
-                                            ? requestedAmount * 0.50
-                                            : 0.0;
-                                        double amountToReceive =
-                                            requestedAmount - feeDeducted;
-
-                                        // 1. Update finances doc
-                                        await FirebaseFirestore.instance
-                                            .collection('finances')
-                                            .doc(req['id'])
-                                            .update({
-                                              'status': 'approved',
-                                              'adminScreenshotBase64':
-                                                  base64Img,
-                                              'adminImageExtension': imgExt,
-                                              'feeDeducted': feeDeducted,
-                                              'amountToReceive':
-                                                  amountToReceive,
-                                              'processedAt':
-                                                  FieldValue.serverTimestamp(),
-                                            });
-
-                                        // 2. Apply fee if unpaid
-                                        if (isUnpaid && feeDeducted > 0) {
-                                          var userDoc = await FirebaseFirestore
-                                              .instance
-                                              .collection('users')
-                                              .doc(userId)
-                                              .get();
-                                          var userData = userDoc.data() ?? {};
-                                          double currentPaid =
-                                              (userData['paidFees'] ?? 0.0)
-                                                  .toDouble();
-
-                                          await FirebaseFirestore.instance
-                                              .collection('users')
-                                              .doc(userId)
-                                              .update({
-                                                'paidFees':
-                                                    currentPaid + feeDeducted,
-                                              });
-                                        }
-
-                                        // 3. Add history - NO WALLET DEDUCTION
-                                        await FirebaseFirestore.instance
-                                            .collection('users')
-                                            .doc(userId)
-                                            .collection('wallet_history')
-                                            .add({
-                                              'amount': amountToReceive,
-                                              'type': 'withdrawal_approved',
-                                              'description':
-                                                  '✅ Withdrawal Approved',
-                                              'requestedAmount':
-                                                  requestedAmount,
-                                              'feeDeducted': feeDeducted,
-                                              'amountToReceive':
-                                                  amountToReceive,
-                                              'timestamp':
-                                                  FieldValue.serverTimestamp(),
-                                            });
-
+                                        await controller.approveWithdrawal(
+                                          requestId: req['id'],
+                                          userId: userId,
+                                          amount: amount,
+                                          base64Image: base64Img!,
+                                          imageExtension: imgExt!,
+                                        );
                                         if (ctx.mounted)
                                           Navigator.of(ctx).pop();
-                                        Get.snackbar(
-                                          'Approved ✅',
-                                          'Withdrawal approved with screenshot',
-                                          backgroundColor: Colors.green,
-                                          colorText: Colors.white,
-                                        );
                                       } catch (e) {
                                         setState(() {
                                           isLoading = false;
@@ -1174,34 +1198,24 @@ class OrdersDashboardScreen extends StatelessWidget {
                                         });
                                       }
                                     },
-                              icon: const Icon(Icons.check, size: 16),
-                              label: const Text('Approve + Screenshot'),
+                              icon: const Icon(Icons.check, size: 18),
+                              label: const Text('Approve with Screenshot'),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.green,
                                 foregroundColor: Colors.white,
                                 disabledBackgroundColor: Colors.green
                                     .withOpacity(0.3),
                                 padding: const EdgeInsets.symmetric(
-                                  vertical: 10,
+                                  vertical: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
                                 ),
                               ),
                             ),
                           ),
                         ],
                       ),
-
-                    const SizedBox(height: 4),
-                    Center(
-                      child: TextButton(
-                        onPressed: isLoading
-                            ? null
-                            : () => Navigator.of(ctx).pop(),
-                        child: const Text(
-                          'Cancel',
-                          style: TextStyle(color: Colors.white38),
-                        ),
-                      ),
-                    ),
                   ],
                 ),
               ),
@@ -1212,56 +1226,95 @@ class OrdersDashboardScreen extends StatelessWidget {
     );
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  //  IMAGE VIEWER DIALOG
-  // ══════════════════════════════════════════════════════════════════════════
   void _showBase64ImageDialog(String base64Data, String extension) {
     try {
+      if (base64Data.isEmpty) {
+        Get.snackbar(
+          "Error",
+          "Image data is empty",
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
+        return;
+      }
+      Uint8List bytes = base64Decode(base64Data);
       Get.dialog(
         Dialog(
-          backgroundColor: Colors.black,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                color: Colors.black87,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      "Screenshot (.$extension)",
-                      style: const TextStyle(color: Colors.white),
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.all(20),
+          child: Container(
+            width: double.infinity,
+            height: MediaQuery.of(Get.context!).size.height * 0.7,
+            decoration: BoxDecoration(
+              color: Colors.black,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  decoration: const BoxDecoration(
+                    color: Colors.black87,
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(16),
+                      topRight: Radius.circular(16),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white),
-                      onPressed: () => Get.back(),
-                    ),
-                  ],
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        "Screenshot (.$extension)",
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white),
+                        onPressed: () => Get.back(),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              Flexible(
-                child: InteractiveViewer(
-                  child: Image.memory(
-                    base64Decode(base64Data),
-                    fit: BoxFit.contain,
-                    errorBuilder: (context, error, stack) => const Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.error, color: Colors.red, size: 50),
-                          SizedBox(height: 10),
-                          Text(
-                            "Failed to load image",
-                            style: TextStyle(color: Colors.white),
+                Expanded(
+                  child: InteractiveViewer(
+                    minScale: 0.5,
+                    maxScale: 4.0,
+                    child: Center(
+                      child: Image.memory(
+                        bytes,
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          padding: const EdgeInsets.all(20),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.broken_image,
+                                color: Colors.red,
+                                size: 60,
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                "Failed to load image: $error",
+                                style: const TextStyle(color: Colors.white),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       );
@@ -1275,9 +1328,6 @@ class OrdersDashboardScreen extends StatelessWidget {
     }
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  //  REJECT DIALOG
-  // ══════════════════════════════════════════════════════════════════════════
   void _showRejectDialog(
     String reqId,
     String userId,
@@ -1366,22 +1416,17 @@ class OrdersDashboardScreen extends StatelessWidget {
     );
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  //  TAB 5: OLD FEE REQUESTS
-  // ══════════════════════════════════════════════════════════════════════════
   Widget _buildFeeTab(OrdersController controller) {
     return Obx(() {
-      if (controller.isLoading.value) {
+      if (controller.isLoading.value)
         return const Center(
           child: CircularProgressIndicator(color: Colors.redAccent),
         );
-      }
-      if (controller.feeRequests.isEmpty) {
+      if (controller.feeRequests.isEmpty)
         return _buildEmptyState(
           "No Old Fee Requests",
           Icons.verified_user_outlined,
         );
-      }
       return ListView.builder(
         padding: const EdgeInsets.all(12),
         itemCount: controller.feeRequests.length,
@@ -1453,19 +1498,14 @@ class OrdersDashboardScreen extends StatelessWidget {
     });
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  //  TAB 6: VENDOR REQUESTS
-  // ══════════════════════════════════════════════════════════════════════════
   Widget _buildVendorTab(OrdersController controller) {
     return Obx(() {
-      if (controller.isLoading.value) {
+      if (controller.isLoading.value)
         return const Center(
           child: CircularProgressIndicator(color: Colors.redAccent),
         );
-      }
-      if (controller.pendingRequests.isEmpty) {
+      if (controller.pendingRequests.isEmpty)
         return _buildEmptyState("No Vendor Requests", Icons.store_outlined);
-      }
       return ListView.builder(
         padding: const EdgeInsets.all(12),
         itemCount: controller.pendingRequests.length,

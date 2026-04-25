@@ -8,6 +8,8 @@ class ProductsRepository {
   CollectionReference get _packages => _firestore.collection('packages');
   CollectionReference get _searchHistory =>
       _firestore.collection('admin_search_history');
+  CollectionReference get _productRequests =>
+      _firestore.collection('product_requests'); // ✅ NEW
 
   DocumentReference get _counterDoc =>
       _firestore.collection('admin_settings').doc('product_counter');
@@ -47,6 +49,23 @@ class ProductsRepository {
     }
   }
 
+  // ✅ NEW: Fetch Pending Requests
+  Stream<List<ProductModel>> getPendingRequestsStream() {
+    return _productRequests
+        .where('status', isEqualTo: 'pending')
+        .snapshots()
+        .map((snapshot) {
+          return snapshot.docs
+              .map(
+                (doc) => ProductModel.fromMap(
+                  doc.data() as Map<String, dynamic>,
+                  doc.id,
+                ),
+              )
+              .toList();
+        });
+  }
+
   Future<void> addProduct(ProductModel product) async {
     try {
       if (!product.isPackage) {
@@ -71,14 +90,11 @@ class ProductsRepository {
 
         product.id = newId;
         await _products.doc(product.id).set(product.toMap());
-        print("✅ Product added successfully with ID: ${product.id}");
       } else {
         DocumentReference docRef = await _packages.add(product.toMap());
         product.id = docRef.id;
-        print("✅ Package added successfully with ID: ${product.id}");
       }
     } catch (e) {
-      print("❌ Error adding product: $e");
       throw Exception("Failed to add: $e");
     }
   }
@@ -110,6 +126,11 @@ class ProductsRepository {
     }
   }
 
+  // ✅ NEW: Reject Request Logic
+  Future<void> rejectRequest(String requestId) async {
+    await _productRequests.doc(requestId).update({'status': 'rejected'});
+  }
+
   Future<List<String>> fetchSearchHistory() async {
     try {
       QuerySnapshot snapshot = await _searchHistory.orderBy('term').get();
@@ -126,17 +147,13 @@ class ProductsRepository {
         'term': term,
         'createdAt': FieldValue.serverTimestamp(),
       });
-    } catch (e) {
-      print("Error adding history: $e");
-    }
+    } catch (e) {}
   }
 
   Future<void> deleteSearchTerm(String term) async {
     try {
       await _searchHistory.doc(term.toLowerCase()).delete();
-    } catch (e) {
-      throw Exception("Failed to delete term");
-    }
+    } catch (e) {}
   }
 
   Future<void> clearAllHistory() async {
@@ -145,8 +162,6 @@ class ProductsRepository {
       for (var doc in snapshot.docs) {
         await doc.reference.delete();
       }
-    } catch (e) {
-      throw Exception("Failed to clear history");
-    }
+    } catch (e) {}
   }
 }

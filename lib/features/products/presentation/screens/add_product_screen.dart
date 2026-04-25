@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -43,6 +44,11 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
   String _currentName = "";
 
+  // ✅ Vendor Info
+  String _vendorId = "Admin";
+  String _vendorName = "Admin";
+  String _productStatus = "approved";
+
   // Controllers
   final TextEditingController nameCtrl = TextEditingController();
   final TextEditingController modelCtrl = TextEditingController();
@@ -65,7 +71,11 @@ class _AddProductScreenState extends State<AddProductScreen> {
   bool _isSuccess = false;
   bool _isMobile = false;
 
-  // New Logistics State (Sync with your updated UI and Model)
+  // Warranty Checkboxes State
+  bool hasCompanyWarranty = false;
+  bool hasShopWarranty = false;
+
+  // Logistics State
   Map<String, double> deliveryFeesMap = {
     "Karachi": 0,
     "Pakistan": 0,
@@ -128,6 +138,25 @@ class _AddProductScreenState extends State<AddProductScreen> {
     });
   }
 
+  Future<void> _fetchStoreName(String vid) async {
+    try {
+      var doc = await FirebaseFirestore.instance
+          .collection('vendors')
+          .doc(vid)
+          .get();
+      if (doc.exists && mounted) {
+        setState(() {
+          _vendorName =
+              doc.data()?['storeName'] ??
+              doc.data()?['ownerName'] ??
+              _vendorName;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching store name: $e");
+    }
+  }
+
   void _loadProductData(ProductModel product) {
     nameCtrl.text = product.name;
     _currentName = product.name;
@@ -140,19 +169,56 @@ class _AddProductScreenState extends State<AddProductScreen> {
     originalCtrl.text = product.originalPrice == 0.0
         ? ""
         : product.originalPrice.toString();
-    warrantyCtrl.text = product.warranty;
+
+    // Handle Vendor Info & Status
+    _vendorId = product.vendorId;
+    _vendorName = product.vendorName;
+    _productStatus = product.status;
+
+    if (_vendorId != "Admin" && _vendorId != "") {
+      _fetchStoreName(_vendorId);
+    }
+
+    // Warranty Logic
+    String w = product.warranty;
+    hasCompanyWarranty = w.contains("Company");
+    hasShopWarranty = w.contains("Shop");
+    warrantyCtrl.text = w
+        .replaceAll(RegExp(r'\s*\(.*?Warranty\)\s*'), '')
+        .trim();
+    if (warrantyCtrl.text == "") warrantyCtrl.text = "No Warranty";
+
     ramCtrl.text = product.ram ?? "";
     storageCtrl.text = product.storage ?? "";
     selectedCategory = product.category;
-    selectedSubCategory = product.subCategory;
-    selectedLocation = product.deliveryLocation;
+
+    if (product.subCategory == "General" || product.subCategory == "") {
+      selectedSubCategory = null;
+    } else {
+      selectedSubCategory = product.subCategory;
+    }
+
+    List<String> validLocations = ["Karachi Only", "Pakistan", "Worldwide"];
+    if (validLocations.contains(product.deliveryLocation)) {
+      selectedLocation = product.deliveryLocation;
+    } else {
+      selectedLocation = "Pakistan";
+    }
+
     selectedImagesBase64 = List.from(product.images);
     selectedDate = product.dateAdded;
     calculatedPoints = product.productPoints;
 
-    // Load Logistics Maps
-    deliveryFeesMap = Map<String, double>.from(product.deliveryFeesMap);
-    deliveryTimeMap = Map<String, String>.from(product.deliveryTimeMap);
+    deliveryFeesMap = {
+      "Karachi": product.deliveryFeesMap["Karachi"] ?? 0.0,
+      "Pakistan": product.deliveryFeesMap["Pakistan"] ?? 0.0,
+      "Worldwide": product.deliveryFeesMap["Worldwide"] ?? 0.0,
+    };
+    deliveryTimeMap = {
+      "Karachi": product.deliveryTimeMap["Karachi"] ?? "1-2 Days",
+      "Pakistan": product.deliveryTimeMap["Pakistan"] ?? "3-5 Days",
+      "Worldwide": product.deliveryTimeMap["Worldwide"] ?? "7-15 Days",
+    };
     codFee = product.codFee;
   }
 
@@ -174,77 +240,82 @@ class _AddProductScreenState extends State<AddProductScreen> {
       showModalBottomSheet(
         context: context,
         backgroundColor: Colors.white,
-        builder: (ctx) => Wrap(
-          children: [
-            ListTile(
-              leading: const Icon(Icons.camera_alt, color: Colors.deepPurple),
-              title: const Text(
-                "Camera",
-                style: TextStyle(color: Colors.black),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (ctx) => SafeArea(
+          child: Wrap(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.camera_alt, color: Colors.deepPurple),
+                title: const Text(
+                  "Camera",
+                  style: TextStyle(
+                    color: Colors.black,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickImages(ImageSource.camera);
+                },
               ),
-              onTap: () {
-                Navigator.pop(ctx);
-                _pickImages(ImageSource.camera);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.image, color: Colors.deepPurple),
-              title: const Text(
-                "Gallery",
-                style: TextStyle(color: Colors.black),
+              ListTile(
+                leading: const Icon(Icons.image, color: Colors.deepPurple),
+                title: const Text(
+                  "Gallery",
+                  style: TextStyle(
+                    color: Colors.black,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickImages(ImageSource.gallery);
+                },
               ),
-              onTap: () {
-                Navigator.pop(ctx);
-                _pickImages(ImageSource.gallery);
-              },
-            ),
-          ],
+            ],
+          ),
         ),
       );
     }
   }
 
+  // ✅ FIX: Using pickImage (single pick) to directly open the Cropper, identical to Vendor App
   Future<void> _pickImages(ImageSource source) async {
     try {
-      final List<XFile> pickedFiles;
-      if (source == ImageSource.gallery) {
-        pickedFiles = await _picker.pickMultiImage();
-      } else {
-        final XFile? img = await _picker.pickImage(source: source);
-        pickedFiles = img != null ? [img] : [];
+      if (selectedImagesBase64.length >= 3) return;
+
+      final XFile? file = await _picker.pickImage(source: source);
+      if (file == null) return;
+
+      if (kIsWeb) {
+        final bytes = await file.readAsBytes();
+        setState(() => selectedImagesBase64.add(base64Encode(bytes)));
+        return;
       }
 
-      if (pickedFiles.isEmpty) return;
+      // Automatically crop immediately after selecting image
+      CroppedFile? croppedFile = await ImageCropper().cropImage(
+        sourcePath: file.path,
+        aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1), // Square crop
+        uiSettings: [
+          AndroidUiSettings(
+            toolbarTitle: 'Crop Image',
+            toolbarColor: accentColor,
+            toolbarWidgetColor: Colors.white,
+            initAspectRatio: CropAspectRatioPreset.square,
+            lockAspectRatio: false,
+          ),
+          IOSUiSettings(title: 'Crop Image'),
+        ],
+      );
 
-      for (var file in pickedFiles) {
-        if (selectedImagesBase64.length >= 3) break;
-
-        if (kIsWeb) {
-          final bytes = await file.readAsBytes();
-          setState(() => selectedImagesBase64.add(base64Encode(bytes)));
-          continue;
-        }
-
-        CroppedFile? croppedFile = await ImageCropper().cropImage(
-          sourcePath: file.path,
-          uiSettings: [
-            AndroidUiSettings(
-              toolbarTitle: 'Crop Image',
-              toolbarColor: accentColor,
-              toolbarWidgetColor: Colors.white,
-              initAspectRatio: CropAspectRatioPreset.square,
-              lockAspectRatio: false,
-            ),
-            IOSUiSettings(title: 'Crop Image'),
-          ],
-        );
-
-        if (croppedFile != null) {
-          final bytes = await croppedFile.readAsBytes();
-          setState(() {
-            selectedImagesBase64.add(base64Encode(bytes));
-          });
-        }
+      if (croppedFile != null) {
+        final bytes = await File(croppedFile.path).readAsBytes();
+        setState(() {
+          selectedImagesBase64.add(base64Encode(bytes));
+        });
       }
     } catch (e) {
       Get.snackbar(
@@ -272,6 +343,11 @@ class _AddProductScreenState extends State<AddProductScreen> {
       selectedSubCategory = null;
       calculatedPoints = 0.0;
       _isMobile = false;
+      hasCompanyWarranty = false;
+      hasShopWarranty = false;
+      _vendorId = "Admin";
+      _vendorName = "Admin";
+      _productStatus = "approved";
       deliveryFeesMap = {"Karachi": 0, "Pakistan": 0, "Worldwide": 0};
       deliveryTimeMap = {
         "Karachi": "1-2 Days",
@@ -280,6 +356,18 @@ class _AddProductScreenState extends State<AddProductScreen> {
       };
       codFee = 0.0;
     });
+  }
+
+  String _getCombinedWarranty() {
+    String duration = warrantyCtrl.text.trim();
+    if (duration == "") duration = "No Warranty"; // ✅ FIX
+
+    List<String> types = [];
+    if (hasCompanyWarranty) types.add("Company");
+    if (hasShopWarranty) types.add("Shop");
+
+    if (types.isEmpty) return duration;
+    return "$duration (${types.join(' & ')} Warranty)";
   }
 
   void _saveProduct() async {
@@ -303,21 +391,22 @@ class _AddProductScreenState extends State<AddProductScreen> {
         description: descCtrl.text,
         category: selectedCategory!,
         subCategory: selectedSubCategory ?? "General",
-        brand: brandCtrl.text.isEmpty ? "Generic" : brandCtrl.text,
+        brand: brandCtrl.text == "" ? "Generic" : brandCtrl.text, // ✅ FIX
         purchasePrice: double.tryParse(purchaseCtrl.text) ?? 0,
         salePrice: double.tryParse(saleCtrl.text) ?? 0,
         originalPrice: double.tryParse(originalCtrl.text) ?? 0,
         stockQuantity: widget.productToEdit?.stockQuantity ?? 0,
-        vendorId: "Admin",
+        vendorId: _vendorId,
+        vendorName: _vendorName,
+        status: _productStatus,
         images: selectedImagesBase64,
         dateAdded: selectedDate,
         deliveryLocation: selectedLocation,
-        warranty: warrantyCtrl.text.isEmpty ? "No Warranty" : warrantyCtrl.text,
+        warranty: _getCombinedWarranty(),
         productPoints: calculatedPoints,
         showDecimalPoints: true,
         ram: _isMobile ? ramCtrl.text : null,
         storage: _isMobile ? storageCtrl.text : null,
-        // NEW LOGISTICS FIELDS SYNCED HERE
         deliveryFeesMap: deliveryFeesMap,
         deliveryTimeMap: deliveryTimeMap,
         codFee: codFee,
@@ -381,6 +470,47 @@ class _AddProductScreenState extends State<AddProductScreen> {
                     key: _formKey,
                     child: Column(
                       children: [
+                        // ✅ FIX: Web-safe check using != ""
+                        if (_vendorId != "Admin" && _vendorId != "")
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 20),
+                            padding: const EdgeInsets.all(15),
+                            width: double.infinity,
+                            decoration: BoxDecoration(
+                              color: Colors.blueAccent.withOpacity(0.1),
+                              border: Border.all(
+                                color: Colors.blueAccent.withOpacity(0.5),
+                              ),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.storefront,
+                                  color: Colors.blueAccent,
+                                ),
+                                const SizedBox(width: 10),
+                                Text(
+                                  "Store Name: ",
+                                  style: GoogleFonts.comicNeue(
+                                    fontSize: 16,
+                                    color: Colors.black54,
+                                  ),
+                                ),
+                                Text(
+                                  _vendorName == "Admin"
+                                      ? "Loading..."
+                                      : _vendorName,
+                                  style: GoogleFonts.comicNeue(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
                         AddProductMedia(
                           images: selectedImagesBase64,
                           onPickImages: _handleImagePicker,
@@ -426,6 +556,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
                           selectedLocation: selectedLocation,
                           cardColor: cardColor,
                           textColor: textColor,
+                          initialDeliveryFees: deliveryFeesMap,
+                          initialDeliveryTimes: deliveryTimeMap,
+                          initialCodFee: codFee,
                           onCategoryChanged: (val) {
                             setState(() {
                               selectedCategory = val;
@@ -436,7 +569,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
                               setState(() => selectedSubCategory = val),
                           onLocationChanged: (val) =>
                               setState(() => selectedLocation = val),
-                          // FIX: Added the missing onDetailsChanged callback
                           onDetailsChanged: (fees, times, cod) {
                             setState(() {
                               deliveryFeesMap = fees;
@@ -456,6 +588,55 @@ class _AddProductScreenState extends State<AddProductScreen> {
                           textColor: textColor,
                           accentColor: accentColor,
                         ),
+
+                        Container(
+                          margin: const EdgeInsets.only(top: 10),
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: cardColor,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.grey.shade300),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Warranty Type (Optional)",
+                                style: GoogleFonts.comicNeue(
+                                  color: textColor,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              CheckboxListTile(
+                                title: const Text("Company Warranty"),
+                                value:
+                                    hasCompanyWarranty ==
+                                    true, // ✅ Null-safe check
+                                activeColor: accentColor,
+                                controlAffinity:
+                                    ListTileControlAffinity.leading,
+                                contentPadding: EdgeInsets.zero,
+                                onChanged: (val) => setState(
+                                  () => hasCompanyWarranty = val ?? false,
+                                ),
+                              ),
+                              CheckboxListTile(
+                                title: const Text("Shop Warranty"),
+                                value:
+                                    hasShopWarranty ==
+                                    true, // ✅ Null-safe check
+                                activeColor: accentColor,
+                                controlAffinity:
+                                    ListTileControlAffinity.leading,
+                                contentPadding: EdgeInsets.zero,
+                                onChanged: (val) => setState(
+                                  () => hasShopWarranty = val ?? false,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
                         const SizedBox(height: 40),
 
                         // SAVE BUTTON

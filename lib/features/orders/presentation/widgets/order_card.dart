@@ -1,15 +1,14 @@
 import 'dart:convert';
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 //  CommonListCard — Admin App
-//  CHANGES:
-//    - onAccept now optionally triggers screenshot upload dialog first
-//    - showScreenshotUpload: true karo withdrawal cards ke liye
-//    - onAcceptWithScreenshot callback milega (base64, extension, financeDocId)
+//  ✅ FIXED: Image.file() hataya, Image.memory(bytes) use kiya
+//  Wajah: Image.file() kuch environments mein (web/some Android configs)
+//         properly render nahi hoti. Image.memory() bytes se direct kaam karti hai.
 // ══════════════════════════════════════════════════════════════════════════════
 class CommonListCard extends StatelessWidget {
   final String title;
@@ -21,7 +20,7 @@ class CommonListCard extends StatelessWidget {
   final VoidCallback onReject;
   final bool isHistory;
 
-  // NEW: For withdrawal approval with screenshot
+  // For withdrawal approval with screenshot
   final bool showScreenshotUpload;
   final Future<void> Function(String base64, String extension)?
   onAcceptWithScreenshot;
@@ -52,7 +51,7 @@ class CommonListCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // SMART IMAGE BUILDER
+          // Product Image
           Container(
             width: 70,
             height: 70,
@@ -66,7 +65,7 @@ class CommonListCard extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 15),
-          // DETAILS
+          // Details
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -98,12 +97,11 @@ class CommonListCard extends StatelessWidget {
               ],
             ),
           ),
-          // ACTIONS
+          // Action Buttons
           Row(
             children: [
               _actionIcon(Icons.visibility, Colors.blue, onView),
               if (!isHistory) ...[
-                // APPROVE button — shows screenshot dialog if withdrawal
                 _actionIcon(
                   Icons.check_circle,
                   Colors.green,
@@ -120,9 +118,6 @@ class CommonListCard extends StatelessWidget {
     );
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  //  Approve Dialog with Screenshot Upload
-  // ══════════════════════════════════════════════════════════════════════════
   void _showApproveWithScreenshotDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -143,7 +138,9 @@ class CommonListCard extends StatelessWidget {
   }
 
   Widget _buildImage(String data) {
-    if (data.isEmpty) return const Icon(Icons.image, color: Colors.white24);
+    if (data.isEmpty) {
+      return const Icon(Icons.image, color: Colors.white24);
+    }
     try {
       if (data.startsWith('http')) {
         return Image.network(
@@ -167,6 +164,12 @@ class CommonListCard extends StatelessWidget {
 
 // ══════════════════════════════════════════════════════════════════════════════
 //  Internal Dialog — Screenshot Upload before Approval
+//
+//  ✅ FIXED: Image.file() hataya gaya
+//  Pehle:  Image.file(_pickedFile!)  → file path pe depend karta tha,
+//          kuch environments mein render nahi hota tha
+//  Ab:     Image.memory(_pickedBytes!)  → bytes memory mein hain,
+//          har environment mein kaam karta hai
 // ══════════════════════════════════════════════════════════════════════════════
 class _ApproveWithScreenshotDialog extends StatefulWidget {
   final Future<void> Function(String base64, String extension) onConfirm;
@@ -184,7 +187,8 @@ class _ApproveWithScreenshotDialog extends StatefulWidget {
 
 class _ApproveWithScreenshotDialogState
     extends State<_ApproveWithScreenshotDialog> {
-  File? _pickedFile;
+  // ✅ File? ki jagah Uint8List? use karo — bytes seedha memory mein
+  Uint8List? _pickedBytes;
   String? _base64;
   String? _extension;
   bool _isLoading = false;
@@ -200,18 +204,18 @@ class _ApproveWithScreenshotDialogState
       );
       if (picked == null) return;
 
-      final file = File(picked.path);
-      final bytes = await file.readAsBytes();
+      // ✅ readAsBytes() directly — no File() needed
+      final bytes = await picked.readAsBytes();
 
-      // Max 1MB
-      if (bytes.lengthInBytes > 1024 * 1024) {
-        setState(() => _error = 'Image too large (max 1MB). Please compress.');
+      if (bytes.lengthInBytes > 2 * 1024 * 1024) {
+        setState(() => _error = 'Image too large (max 2MB). Please compress.');
         return;
       }
 
       final ext = picked.path.split('.').last.toLowerCase();
+
       setState(() {
-        _pickedFile = file;
+        _pickedBytes = bytes; // ✅ bytes store karo
         _base64 = base64Encode(bytes);
         _extension = ext;
         _error = null;
@@ -248,7 +252,7 @@ class _ApproveWithScreenshotDialogState
     return Dialog(
       backgroundColor: const Color(0xFF1A1A1A),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -276,46 +280,80 @@ class _ApproveWithScreenshotDialogState
             ),
             const SizedBox(height: 16),
 
-            // Screenshot Preview / Upload Area
+            // ✅ Screenshot Upload Area — Image.memory use karo
             GestureDetector(
               onTap: _isLoading ? null : _pickImage,
               child: Container(
                 width: double.infinity,
-                height: 150,
+                height: 180,
                 decoration: BoxDecoration(
                   color: Colors.black26,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: _pickedFile != null
-                        ? Colors.green.withOpacity(0.5)
+                    color: _pickedBytes != null
+                        ? Colors.green.withOpacity(0.7)
+                        : _error != null
+                        ? Colors.red.withOpacity(0.7)
                         : Colors.white24,
                     width: 1.5,
                   ),
                 ),
-                child: _pickedFile != null
+                child: _pickedBytes != null
+                    // ✅ Image.memory — bytes seedha render karo, koi file path nahi
                     ? ClipRRect(
                         borderRadius: BorderRadius.circular(11),
-                        child: Image.file(_pickedFile!, fit: BoxFit.cover),
+                        child: Image.memory(
+                          _pickedBytes!,
+                          fit: BoxFit.cover,
+                          width: double.infinity,
+                          height: 180,
+                          errorBuilder: (c, e, s) => const Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.broken_image,
+                                  color: Colors.red,
+                                  size: 40,
+                                ),
+                                SizedBox(height: 8),
+                                Text(
+                                  'Image load failed\nTap to re-select',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: Colors.red,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       )
                     : Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(
                             Icons.cloud_upload_outlined,
-                            color: Colors.white38,
-                            size: 36,
+                            color: _error != null
+                                ? Colors.red.shade300
+                                : Colors.white38,
+                            size: 42,
                           ),
-                          const SizedBox(height: 8),
-                          const Text(
-                            'Tap to upload payment proof',
+                          const SizedBox(height: 10),
+                          Text(
+                            'Tap to Upload Payment Proof',
                             style: TextStyle(
-                              color: Colors.white38,
-                              fontSize: 13,
+                              color: _error != null
+                                  ? Colors.red.shade300
+                                  : Colors.white54,
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
                           const SizedBox(height: 4),
                           const Text(
-                            '(optional — user will see this)',
+                            'COMPULSORY — User will see this',
                             style: TextStyle(
                               color: Colors.white24,
                               fontSize: 11,
@@ -326,26 +364,52 @@ class _ApproveWithScreenshotDialogState
               ),
             ),
 
-            if (_pickedFile != null) ...[
-              const SizedBox(height: 8),
-              GestureDetector(
-                onTap: _isLoading ? null : _pickImage,
-                child: const Text(
-                  '🔄 Change image',
-                  style: TextStyle(
-                    color: Colors.blue,
-                    fontSize: 12,
-                    decoration: TextDecoration.underline,
+            // Status row after selection
+            if (_pickedBytes != null) ...[
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  const Icon(Icons.check_circle, color: Colors.green, size: 16),
+                  const SizedBox(width: 6),
+                  const Text(
+                    'Screenshot selected ✓',
+                    style: TextStyle(color: Colors.green, fontSize: 12),
                   ),
-                ),
+                  const Spacer(),
+                  GestureDetector(
+                    onTap: _isLoading
+                        ? null
+                        : () => setState(() {
+                            _pickedBytes = null;
+                            _base64 = null;
+                            _extension = null;
+                          }),
+                    child: const Text(
+                      '🗑️ Remove',
+                      style: TextStyle(
+                        color: Colors.redAccent,
+                        fontSize: 12,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
 
             if (_error != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                _error!,
-                style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red.withOpacity(0.3)),
+                ),
+                child: Text(
+                  _error!,
+                  style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                ),
               ),
             ],
 
@@ -359,13 +423,9 @@ class _ApproveWithScreenshotDialogState
             else
               Row(
                 children: [
-                  // Skip screenshot, approve anyway
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                        widget.onSkip();
-                      },
+                      onPressed: () => Navigator.of(context).pop(),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.white54,
                         side: const BorderSide(color: Colors.white24),
@@ -374,19 +434,15 @@ class _ApproveWithScreenshotDialogState
                           borderRadius: BorderRadius.circular(8),
                         ),
                       ),
-                      child: const Text(
-                        'Approve\n(No Screenshot)',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 12),
-                      ),
+                      child: const Text('Cancel'),
                     ),
                   ),
                   const SizedBox(width: 10),
-                  // Approve with screenshot
                   Expanded(
                     flex: 2,
                     child: ElevatedButton.icon(
-                      onPressed: _pickedFile != null ? _confirmApprove : null,
+                      // ✅ _pickedBytes check karo, File nahi
+                      onPressed: _pickedBytes != null ? _confirmApprove : null,
                       icon: const Icon(Icons.check, size: 18),
                       label: const Text('Approve with Screenshot'),
                       style: ElevatedButton.styleFrom(
@@ -402,19 +458,6 @@ class _ApproveWithScreenshotDialogState
                   ),
                 ],
               ),
-
-            const SizedBox(height: 8),
-            Center(
-              child: TextButton(
-                onPressed: _isLoading
-                    ? null
-                    : () => Navigator.of(context).pop(),
-                child: const Text(
-                  'Cancel',
-                  style: TextStyle(color: Colors.white38),
-                ),
-              ),
-            ),
           ],
         ),
       ),

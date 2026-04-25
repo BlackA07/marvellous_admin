@@ -10,10 +10,14 @@ class AddProductLogistics extends StatefulWidget {
   final String? selectedSubCategory;
   final String selectedLocation;
   final Color cardColor, textColor;
+
+  final Map<String, double>? initialDeliveryFees;
+  final Map<String, String>? initialDeliveryTimes;
+  final double? initialCodFee;
+
   final Function(String?) onCategoryChanged;
   final Function(String?) onSubCategoryChanged;
   final Function(String) onLocationChanged;
-  // Callback for multi-region data
   final Function(Map<String, double>, Map<String, String>, double)
   onDetailsChanged;
 
@@ -25,6 +29,9 @@ class AddProductLogistics extends StatefulWidget {
     required this.selectedLocation,
     required this.cardColor,
     required this.textColor,
+    this.initialDeliveryFees,
+    this.initialDeliveryTimes,
+    this.initialCodFee,
     required this.onCategoryChanged,
     required this.onSubCategoryChanged,
     required this.onLocationChanged,
@@ -36,64 +43,98 @@ class AddProductLogistics extends StatefulWidget {
 }
 
 class _AddProductLogisticsState extends State<AddProductLogistics> {
-  // Local state for flexible logistics
-  Map<String, double> deliveryFees = {
-    "Karachi": 0,
-    "Pakistan": 0,
-    "Worldwide": 0,
-  };
-  Map<String, String> deliveryTimes = {
-    "Karachi": "1-2 Days",
-    "Pakistan": "3-5 Days",
-    "Worldwide": "7-15 Days",
-  };
+  Map<String, double> deliveryFees = {};
+  Map<String, String> deliveryTimes = {};
   double codFee = 0.0;
 
-  void _updateParent() {
-    widget.onDetailsChanged(deliveryFees, deliveryTimes, codFee);
+  Map<String, TextEditingController> feeControllers = {};
+  Map<String, TextEditingController> timeControllers = {};
+  TextEditingController codController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _initValuesAndControllers();
   }
 
-  void _showAddDialog(BuildContext context, bool isSub) {
-    TextEditingController ctrl = TextEditingController();
-    if (isSub && widget.selectedCategory != null) {
-      var catModel = widget.categoryController.categories.firstWhere(
-        (c) => c.name == widget.selectedCategory,
-        orElse: () => CategoryModel(name: '', subCategories: []),
+  // ✅ FIX: Jab parent widget update ho (jese edit button pe click) to values refresh hon
+  @override
+  void didUpdateWidget(covariant AddProductLogistics oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialDeliveryFees != oldWidget.initialDeliveryFees ||
+        widget.initialCodFee != oldWidget.initialCodFee ||
+        widget.selectedLocation != oldWidget.selectedLocation) {
+      _syncControllersWithProps();
+    }
+  }
+
+  void _initValuesAndControllers() {
+    List<String> keys = ["Karachi", "Pakistan", "Worldwide"];
+    for (var k in keys) {
+      double fee = widget.initialDeliveryFees?[k] ?? 0.0;
+      String time =
+          widget.initialDeliveryTimes?[k] ??
+          (k == "Karachi"
+              ? "1-2 Days"
+              : k == "Pakistan"
+              ? "3-5 Days"
+              : "7-15 Days");
+
+      deliveryFees[k] = fee;
+      deliveryTimes[k] = time;
+
+      feeControllers[k] = TextEditingController(
+        text: fee == 0 ? "" : fee.toString(),
       );
-      if (catModel.id != null)
-        widget.categoryController.selectCategory(catModel);
+      timeControllers[k] = TextEditingController(text: time);
+    }
+    codFee = widget.initialCodFee ?? 0.0;
+    codController.text = codFee == 0 ? "" : codFee.toString();
+  }
+
+  void _syncControllersWithProps() {
+    List<String> keys = ["Karachi", "Pakistan", "Worldwide"];
+    for (var k in keys) {
+      double fee = widget.initialDeliveryFees?[k] ?? 0.0;
+      String time = widget.initialDeliveryTimes?[k] ?? deliveryTimes[k] ?? "";
+
+      deliveryFees[k] = fee;
+      deliveryTimes[k] = time;
+
+      if (feeControllers.containsKey(k)) {
+        feeControllers[k]!.text = fee == 0 ? "" : fee.toString();
+        timeControllers[k]!.text = time;
+      }
+    }
+    codFee = widget.initialCodFee ?? 0.0;
+    codController.text = codFee == 0 ? "" : codFee.toString();
+  }
+
+  @override
+  void dispose() {
+    for (var ctrl in feeControllers.values) {
+      ctrl.dispose();
+    }
+    for (var ctrl in timeControllers.values) {
+      ctrl.dispose();
+    }
+    codController.dispose();
+    super.dispose();
+  }
+
+  void _updateParent() {
+    // Karachi Only logic taake map saaf rahe
+    Map<String, double> finalFees = Map.from(deliveryFees);
+    Map<String, String> finalTimes = Map.from(deliveryTimes);
+
+    if (widget.selectedLocation == "Karachi Only") {
+      finalFees["Pakistan"] = 0;
+      finalFees["Worldwide"] = 0;
+    } else if (widget.selectedLocation == "Pakistan") {
+      finalFees["Worldwide"] = 0;
     }
 
-    Get.defaultDialog(
-      title: isSub ? "Add Sub-Category" : "Add Category",
-      titleStyle: const TextStyle(
-        color: Colors.black,
-        fontWeight: FontWeight.bold,
-      ),
-      backgroundColor: Colors.white,
-      content: TextField(
-        controller: ctrl,
-        style: const TextStyle(color: Colors.black),
-        decoration: const InputDecoration(
-          hintText: "Enter Name",
-          border: OutlineInputBorder(),
-        ),
-      ),
-      textConfirm: "Add",
-      textCancel: "Cancel",
-      onConfirm: () async {
-        if (ctrl.text.isNotEmpty) {
-          if (isSub) {
-            await widget.categoryController.addSubCategory(ctrl.text);
-            widget.onSubCategoryChanged(ctrl.text);
-          } else {
-            await widget.categoryController.addCategory(ctrl.text);
-            widget.onCategoryChanged(ctrl.text);
-          }
-          Get.back();
-        }
-      },
-    );
+    widget.onDetailsChanged(finalFees, finalTimes, codFee);
   }
 
   @override
@@ -155,22 +196,27 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
         ),
         const SizedBox(height: 30),
         _buildHeader("Shipping Logistics"),
+
+        // Main Scope Dropdown
         _buildDropdown(
           "Main Shipping Scope",
           widget.selectedLocation,
           ["Karachi Only", "Pakistan", "Worldwide"],
-          (val) => widget.onLocationChanged(val!),
+          (val) {
+            widget.onLocationChanged(val!);
+            _updateParent();
+          },
         ),
         const SizedBox(height: 15),
 
-        // KARACHI SECTION (Always visible)
+        // KARACHI SECTION
         _buildRegionInputs(
           "Karachi",
           "Karachi Shipping Fee",
           "Karachi Delivery Time",
         ),
 
-        // PAKISTAN SECTION (Visible for Pakistan and Worldwide)
+        // PAKISTAN SECTION
         if (widget.selectedLocation != "Karachi Only")
           _buildRegionInputs(
             "Pakistan",
@@ -178,7 +224,7 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
             "Pakistan Delivery Time",
           ),
 
-        // WORLDWIDE SECTION (Only for Worldwide)
+        // WORLDWIDE SECTION
         if (widget.selectedLocation == "Worldwide")
           _buildRegionInputs(
             "Worldwide",
@@ -187,10 +233,12 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
           ),
 
         const SizedBox(height: 15),
-        _buildSimpleInput("Cash on Delivery (COD) Fee", (val) {
+
+        // COD Fee Field
+        _buildSimpleInput("Cash on Delivery (COD) Fee", codController, (val) {
           codFee = double.tryParse(val) ?? 0.0;
           _updateParent();
-        }),
+        }, isNumber: true),
       ],
     );
   }
@@ -201,14 +249,14 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
       child: Row(
         children: [
           Expanded(
-            child: _buildSimpleInput(feeLabel, (val) {
+            child: _buildSimpleInput(feeLabel, feeControllers[key]!, (val) {
               deliveryFees[key] = double.tryParse(val) ?? 0.0;
               _updateParent();
             }, isNumber: true),
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: _buildSimpleInput(timeLabel, (val) {
+            child: _buildSimpleInput(timeLabel, timeControllers[key]!, (val) {
               deliveryTimes[key] = val;
               _updateParent();
             }),
@@ -220,6 +268,7 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
 
   Widget _buildSimpleInput(
     String label,
+    TextEditingController ctrl,
     Function(String) onChange, {
     bool isNumber = false,
   }) {
@@ -236,6 +285,7 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
         ),
         const SizedBox(height: 5),
         TextField(
+          controller: ctrl,
           onChanged: onChange,
           keyboardType: isNumber ? TextInputType.number : TextInputType.text,
           style: const TextStyle(color: Colors.black, fontSize: 13),
@@ -243,6 +293,10 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
             filled: true,
             fillColor: widget.cardColor,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 8,
+            ),
           ),
         ),
       ],
@@ -256,6 +310,11 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
     Function(String?) onChanged, {
     bool isOptional = false,
   }) {
+    // Safety check for dropdown values
+    String? safeValue = items.contains(value)
+        ? value
+        : (items.isNotEmpty ? items.first : null);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -268,10 +327,11 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
         ),
         const SizedBox(height: 5),
         DropdownButtonFormField<String>(
-          value: value,
+          value: items.contains(value) ? value : null,
           style: const TextStyle(color: Colors.black, fontSize: 14),
           dropdownColor: Colors.white,
           items: items
+              .toSet()
               .map(
                 (e) => DropdownMenuItem(
                   value: e,
@@ -289,6 +349,41 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
               isOptional ? null : (val == null ? "Required" : null),
         ),
       ],
+    );
+  }
+
+  void _showAddDialog(BuildContext context, bool isSub) {
+    TextEditingController ctrl = TextEditingController();
+    Get.defaultDialog(
+      title: isSub ? "Add Sub-Category" : "Add Category",
+      titleStyle: const TextStyle(
+        color: Colors.black,
+        fontWeight: FontWeight.bold,
+      ),
+      backgroundColor: Colors.white,
+      content: TextField(
+        controller: ctrl,
+        autofocus: true,
+        style: const TextStyle(color: Colors.black),
+        decoration: const InputDecoration(
+          hintText: "Enter Name",
+          border: OutlineInputBorder(),
+        ),
+      ),
+      textConfirm: "Add",
+      textCancel: "Cancel",
+      onConfirm: () async {
+        if (ctrl.text.isNotEmpty) {
+          if (isSub) {
+            await widget.categoryController.addSubCategory(ctrl.text);
+            widget.onSubCategoryChanged(ctrl.text);
+          } else {
+            await widget.categoryController.addCategory(ctrl.text);
+            widget.onCategoryChanged(ctrl.text);
+          }
+          Get.back();
+        }
+      },
     );
   }
 

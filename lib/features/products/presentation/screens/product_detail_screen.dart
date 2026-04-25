@@ -1,13 +1,28 @@
 import 'dart:convert';
-import 'package:cloud_firestore/cloud_firestore.dart'; // Settings fetch karne k liye
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // For Keyboard Input
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../models/product_model.dart';
 import '../../controller/products_controller.dart';
 import 'add_product_screen.dart';
+
+// ✅ HELPER: Strictly truncates decimals without rounding up
+String formatTruncated(double value, bool keepDecimals) {
+  if (value <= 0) return "0";
+  if (!keepDecimals) {
+    return value.truncate().toString(); // e.g. 9.99 -> "9"
+  } else {
+    String str = value.toString();
+    int dotIndex = str.indexOf('.');
+    if (dotIndex != -1 && str.length > dotIndex + 4) {
+      return str.substring(0, dotIndex + 4); // e.g. 14.70588 -> "14.705"
+    }
+    return str;
+  }
+}
 
 class ProductDetailScreen extends StatefulWidget {
   final ProductModel product;
@@ -26,12 +41,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   // Magnifier Variables
   Offset? _dragPosition;
   bool _showMagnifier = false;
-  final FocusNode _focusNode = FocusNode(); // Focus node for keyboard events
+  final FocusNode _focusNode = FocusNode();
 
   @override
   void initState() {
     super.initState();
-    // Request focus so keyboard events work immediately on the main screen
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) FocusScope.of(context).requestFocus(_focusNode);
     });
@@ -43,7 +57,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     super.dispose();
   }
 
-  // --- Keyboard Navigation Logic (Main Screen) ---
   void _handleKeyEvent(RawKeyEvent event) {
     if (event is RawKeyDownEvent) {
       if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
@@ -58,7 +71,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     setState(() {
       _currentImageIndex++;
       if (_currentImageIndex >= widget.product.images.length) {
-        _currentImageIndex = 0; // Infinite Scroll Loop
+        _currentImageIndex = 0;
       }
     });
   }
@@ -67,18 +80,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     setState(() {
       _currentImageIndex--;
       if (_currentImageIndex < 0) {
-        _currentImageIndex =
-            widget.product.images.length - 1; // Infinite Scroll Loop
+        _currentImageIndex = widget.product.images.length - 1;
       }
     });
   }
 
-  // --- Show Full Screen Image Dialog ---
   void _showFullScreenImage(BuildContext context, int initialIndex) {
     showDialog(
       context: context,
       builder: (context) {
-        // Using a separate StatefulWidget ensures FocusNode and Controllers are disposed correctly
         return FullScreenImageViewer(
           images: widget.product.images,
           initialIndex: initialIndex,
@@ -91,7 +101,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   Widget build(BuildContext context) {
     return RawKeyboardListener(
       focusNode: _focusNode,
-      autofocus: true, // Auto focus specifically for this screen
+      autofocus: true,
       onKey: _handleKeyEvent,
       child: Scaffold(
         backgroundColor: const Color(0xFF1E1E2C),
@@ -153,22 +163,31 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             bool isDesktop = constraints.maxWidth > 900;
             return SingleChildScrollView(
               padding: const EdgeInsets.all(20),
-              child: isDesktop
-                  ? Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(flex: 4, child: _buildImageGallery()),
-                        const SizedBox(width: 30),
-                        Expanded(flex: 6, child: _buildProductDetails()),
-                      ],
-                    )
-                  : Column(
-                      children: [
-                        _buildImageGallery(),
-                        const SizedBox(height: 20),
-                        _buildProductDetails(),
-                      ],
-                    ),
+              child: Column(
+                children: [
+                  isDesktop
+                      ? Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(flex: 4, child: _buildImageGallery()),
+                            const SizedBox(width: 30),
+                            Expanded(flex: 6, child: _buildProductDetails()),
+                          ],
+                        )
+                      : Column(
+                          children: [
+                            _buildImageGallery(),
+                            const SizedBox(height: 20),
+                            _buildProductDetails(),
+                          ],
+                        ),
+
+                  const SizedBox(height: 40),
+                  // ✅ NEW: COMMISSION DISTRIBUTION CHART INJECTED HERE
+                  _CommissionDistributionChart(product: widget.product),
+                  const SizedBox(height: 40),
+                ],
+              ),
             );
           },
         ),
@@ -199,8 +218,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               : GestureDetector(
                   onTap: () =>
                       _showFullScreenImage(context, _currentImageIndex),
-                  // --- MAGNIFIER LOGIC START ---
-                  // Triggered on Long Press or Drag
                   onLongPressStart: (details) {
                     setState(() {
                       _showMagnifier = true;
@@ -218,10 +235,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       _dragPosition = null;
                     });
                   },
-                  // --- MAGNIFIER LOGIC END ---
                   child: Stack(
                     children: [
-                      // Base Image
                       Positioned.fill(
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(16),
@@ -229,16 +244,13 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                             base64Decode(
                               widget.product.images[_currentImageIndex],
                             ),
-                            fit: BoxFit
-                                .contain, // Show FULL image without cropping
+                            fit: BoxFit.contain,
                           ),
                         ),
                       ),
-
-                      // The Magnifying Glass Lens
                       if (_showMagnifier && _dragPosition != null)
                         Positioned(
-                          left: _dragPosition!.dx - 60, // Centering lens
+                          left: _dragPosition!.dx - 60,
                           top: _dragPosition!.dy - 60,
                           child: RawMagnifier(
                             decoration: const MagnifierDecoration(
@@ -250,8 +262,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                               ),
                               opacity: 1.0,
                             ),
-                            size: const Size(120, 120), // Bigger Lens
-                            magnificationScale: 2.0, // 2x Zoom
+                            size: const Size(120, 120),
+                            magnificationScale: 2.0,
                             focalPointOffset: Offset(
                               _dragPosition!.dx - 60,
                               _dragPosition!.dy - 60,
@@ -262,8 +274,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   ),
                 ),
         ),
-
-        // Image Counter
         if (hasImages)
           Positioned(
             bottom: 15,
@@ -283,8 +293,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               ),
             ),
           ),
-
-        // Navigation Arrows
         if (hasImages && widget.product.images.length > 1) ...[
           Positioned(
             left: 10,
@@ -336,37 +344,42 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   }
 
   Widget _buildProductDetails() {
-    // --- POINTS CALCULATION LOGIC ---
-    // Fetching from Firestore to get 'profitPerPoint'
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance
           .collection('admin_settings')
           .doc('global_config')
           .snapshots(),
       builder: (context, snapshot) {
-        double profitPerPoint = 100.0; // Default
+        // Safe defaults
+        double profitPerPoint = 100.0;
         bool showDecimals = true;
 
         if (snapshot.hasData && snapshot.data!.exists) {
           final data = snapshot.data!.data() as Map<String, dynamic>;
-          profitPerPoint = (data['profitPerPoint'] ?? 100.0).toDouble();
-          showDecimals = data['showDecimals'] ?? true;
+          // ✅ FIX: Safe parsing using tryParse in case value was saved as string
+          profitPerPoint =
+              double.tryParse(data['profitPerPoint']?.toString() ?? '100.0') ??
+              100.0;
+          showDecimals =
+              data['showDecimals']?.toString().toLowerCase() == 'true' ||
+              data['showDecimals'] == true;
         }
 
-        // Formula: (Sale Price - Purchase Price) / ProfitPerPoint
         double grossProfit =
             widget.product.salePrice - widget.product.purchasePrice;
-        double calculatedPoints = 0;
+        if (grossProfit < 0) grossProfit = 0;
 
+        double calculatedPoints = 0;
         if (profitPerPoint > 0) {
           calculatedPoints = grossProfit / profitPerPoint;
         }
-        if (calculatedPoints < 0) calculatedPoints = 0; // No negative points
+
+        // ✅ EXACT TRUNCATION applied here
+        String displayPoints = formatTruncated(calculatedPoints, showDecimals);
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Brand
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
@@ -383,8 +396,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               ),
             ),
             const SizedBox(height: 15),
-
-            // Name & Model
             Text(
               widget.product.name,
               style: GoogleFonts.orbitron(
@@ -398,8 +409,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               style: GoogleFonts.comicNeue(color: Colors.white54, fontSize: 16),
             ),
             const SizedBox(height: 30),
-
-            // PRICE & STOCK
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -457,15 +466,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     ],
                   ),
                   const SizedBox(height: 10),
-
-                  // Calculated Points Display
                   Row(
                     children: [
                       const Icon(Icons.star, color: Colors.amber, size: 20),
                       const SizedBox(width: 8),
                       Text(
-                        // Displaying Calculated Points
-                        "Earned Points: ${showDecimals ? calculatedPoints.toStringAsFixed(1) : calculatedPoints.toInt()}",
+                        "Earned Points: $displayPoints", // ✅ FIX Applied
                         style: const TextStyle(
                           color: Colors.amber,
                           fontWeight: FontWeight.bold,
@@ -477,10 +483,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 ],
               ),
             ),
-
             const SizedBox(height: 20),
-
-            // --- DESCRIPTION RESTORED ---
             Text(
               "Description",
               style: GoogleFonts.orbitron(
@@ -508,12 +511,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               ),
             ),
             const SizedBox(height: 20),
-
             _buildInfoRow("Category", widget.product.category),
             _buildInfoRow("Sub-Category", widget.product.subCategory),
             _buildInfoRow("Location", widget.product.deliveryLocation),
             _buildInfoRow("Warranty", widget.product.warranty),
-
             const SizedBox(height: 20),
             Text(
               "Vendor Information",
@@ -524,20 +525,50 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               ),
             ),
             const SizedBox(height: 10),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const CircleAvatar(
-                backgroundColor: Colors.white10,
-                child: Icon(Icons.store, color: Colors.white),
-              ),
-              title: Text(
-                widget.product.vendorId,
-                style: const TextStyle(color: Colors.white),
-              ),
-              subtitle: const Text(
-                "Verified Vendor",
-                style: TextStyle(color: Colors.white54),
-              ),
+
+            // ✅ FIX: Vendor Real Name & Store Name fetched safely
+            FutureBuilder<DocumentSnapshot>(
+              future: FirebaseFirestore.instance
+                  .collection('vendors')
+                  .doc(widget.product.vendorId)
+                  .get(),
+              builder: (context, vSnap) {
+                String storeName = "null";
+                String ownerName = "null";
+
+                if (vSnap.hasData && vSnap.data!.exists) {
+                  var vData = vSnap.data!.data() as Map<String, dynamic>;
+                  storeName = vData['storeName']?.toString() ?? "null";
+                  ownerName = vData['ownerName']?.toString() ?? "null";
+                }
+
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const CircleAvatar(
+                    backgroundColor: Colors.white10,
+                    child: Icon(Icons.store, color: Colors.white),
+                  ),
+                  title: Text(
+                    "ID: ${widget.product.vendorId}",
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  subtitle: Padding(
+                    padding: const EdgeInsets.only(top: 5),
+                    child: Text(
+                      "Store: $storeName\nOwner: $ownerName",
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        height: 1.4,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
           ],
         );
@@ -555,17 +586,401 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             style: const TextStyle(
               color: Colors.white54,
               fontWeight: FontWeight.bold,
+              fontSize: 16,
             ),
           ),
-          Text(value, style: const TextStyle(color: Colors.white)),
+          Text(
+            value,
+            style: const TextStyle(color: Colors.white, fontSize: 16),
+          ),
         ],
       ),
     );
   }
 }
 
-// --- NEW WIDGET: FIX FOR ADDLISTENER ERROR ---
-// Extracting Dialog to a StatefulWidget ensures dispose() is called correctly
+// ════════════════════════════════════════════════════════════════════════════
+// ✅ NEW WIDGET: COMMISSION DISTRIBUTION CHART
+// ════════════════════════════════════════════════════════════════════════════
+
+class _CommissionDistributionChart extends StatefulWidget {
+  final ProductModel product;
+
+  const _CommissionDistributionChart({required this.product});
+
+  @override
+  State<_CommissionDistributionChart> createState() =>
+      _CommissionDistributionChartState();
+}
+
+class _CommissionDistributionChartState
+    extends State<_CommissionDistributionChart> {
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
+
+  bool isLoading = true;
+  double mlmDistributionPercent = 56.95;
+  double cashbackPercent = 14.705;
+  double diamondShoppingWalletPercent = 25.0;
+  int totalLevels = 13;
+  Map<int, double> levelPercentages = {};
+
+  double profitPerPoint = 100.0;
+  bool showDecimals = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchSettings();
+  }
+
+  Future<void> _fetchSettings() async {
+    try {
+      DocumentSnapshot varDoc = await _db
+          .collection('admin_settings')
+          .doc('mlm_variables')
+          .get();
+      DocumentSnapshot configDoc = await _db
+          .collection('admin_settings')
+          .doc('global_config')
+          .get();
+
+      if (varDoc.exists) {
+        var data = varDoc.data() as Map<String, dynamic>;
+        mlmDistributionPercent =
+            double.tryParse(
+              data['mlmDistributionPercent']?.toString() ?? '56.95',
+            ) ??
+            56.95;
+        cashbackPercent =
+            double.tryParse(data['cashbackPercent']?.toString() ?? '14.705') ??
+            14.705;
+        diamondShoppingWalletPercent =
+            double.tryParse(
+              data['diamondShoppingWalletPercent']?.toString() ?? '25.0',
+            ) ??
+            25.0;
+        totalLevels =
+            int.tryParse(data['totalLevels']?.toString() ?? '13') ?? 13;
+      }
+
+      if (configDoc.exists) {
+        var cData = configDoc.data() as Map<String, dynamic>;
+        profitPerPoint =
+            double.tryParse(cData['profitPerPoint']?.toString() ?? '100.0') ??
+            100.0;
+        showDecimals =
+            cData['showDecimals']?.toString().toLowerCase() == 'true' ||
+            cData['showDecimals'] == true;
+      }
+
+      QuerySnapshot levelsSnap = await _db
+          .collection('mlm_settings')
+          .doc('config')
+          .collection('commissions')
+          .get();
+      if (levelsSnap.docs.isNotEmpty) {
+        for (var doc in levelsSnap.docs) {
+          if (doc.id.startsWith('level_')) {
+            int levelNum = int.tryParse(doc.id.split('_').last) ?? 0;
+            double pct =
+                double.tryParse(
+                  (doc.data() as Map<String, dynamic>)['percentage']
+                          ?.toString() ??
+                      '0.0',
+                ) ??
+                0.0;
+            levelPercentages[levelNum] = pct;
+          }
+        }
+      } else {
+        for (int i = 1; i <= totalLevels; i++) {
+          levelPercentages[i] = i == 1 ? 14.705 : (i == 2 ? 13.235 : 10.0);
+        }
+      }
+
+      if (mounted) setState(() => isLoading = false);
+    } catch (e) {
+      debugPrint("Commission Chart Error: $e");
+      if (mounted) setState(() => isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: Colors.cyanAccent),
+      );
+    }
+
+    double grossProfit =
+        widget.product.salePrice - widget.product.purchasePrice;
+    if (grossProfit < 0) grossProfit = 0;
+
+    double totalCommissionFund = grossProfit * (mlmDistributionPercent / 100);
+
+    double calculatedPoints = profitPerPoint > 0
+        ? grossProfit / profitPerPoint
+        : 0;
+    String displayPoints = formatTruncated(calculatedPoints, showDecimals);
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: const Color(0xFF2A2D3E),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header Info
+          Padding(
+            padding: const EdgeInsets.all(25),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Commission Distribution",
+                  style: GoogleFonts.orbitron(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _infoText(
+                      "Purchase Price:",
+                      widget.product.purchasePrice.truncate().toString(),
+                    ),
+                    _infoText(
+                      "Sale Price:",
+                      widget.product.salePrice.truncate().toString(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _infoText(
+                      "Gross Profit:",
+                      grossProfit.truncate().toString(),
+                      color: Colors.greenAccent,
+                    ),
+                    _infoText("Points:", displayPoints, color: Colors.amber),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _infoText(
+                      "Commission %:",
+                      formatTruncated(mlmDistributionPercent, true) + "%",
+                    ), // Exact Percent Truncated
+                    _infoText(
+                      "Total Commission Fund:",
+                      "PKR ${formatTruncated(totalCommissionFund, true)}",
+                      color: Colors.amberAccent,
+                      size: 16,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // ✅ NEW FULL WIDTH TABLE
+          Table(
+            border: TableBorder.all(color: Colors.white12, width: 1.5),
+            columnWidths: const {
+              0: FlexColumnWidth(1.4),
+              1: FlexColumnWidth(1.6),
+              2: FlexColumnWidth(2.5),
+              3: FlexColumnWidth(2.5),
+              4: FlexColumnWidth(2.5),
+              5: FlexColumnWidth(2.5),
+            },
+            children: [
+              TableRow(
+                decoration: const BoxDecoration(color: Colors.black38),
+                children: [
+                  _tableHeader("Lvl"),
+                  _tableHeader("%"),
+                  _tableHeader("Bronze", color: Colors.brown.shade300),
+                  _tableHeader("Silver", color: Colors.grey.shade400),
+                  _tableHeader("Gold", color: Colors.amber),
+                  _tableHeader("Diamond", color: Colors.cyanAccent),
+                ],
+              ),
+              _buildTableRow("Cash Back", cashbackPercent, totalCommissionFund),
+              for (int i = 1; i <= totalLevels; i++)
+                _buildTableRow(
+                  i == 1 ? "Direct" : "$i",
+                  levelPercentages[i] ?? 0.0,
+                  totalCommissionFund,
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  TableRow _buildTableRow(String lvlLabel, double percent, double totalFund) {
+    double baseAmount = totalFund * (percent / 100);
+
+    return TableRow(
+      children: [
+        _cell(lvlLabel, isBold: true),
+        _cell(formatTruncated(percent, true)), // Show exact truncated percent
+        _rankTableCell(baseAmount, 25.0),
+        _rankTableCell(baseAmount, 50.0),
+        _rankTableCell(baseAmount, 75.0),
+        _rankTableCell(baseAmount, 100.0),
+      ],
+    );
+  }
+
+  Widget _cell(String text, {bool isBold = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 4),
+      child: Center(
+        child: Text(
+          text,
+          style: GoogleFonts.comicNeue(
+            color: isBold ? Colors.white : Colors.white70,
+            fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
+            fontSize: 16,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ),
+    );
+  }
+
+  Widget _tableHeader(String text, {Color color = Colors.white}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 4),
+      child: Center(
+        child: Text(
+          text,
+          style: GoogleFonts.comicNeue(
+            color: color,
+            fontWeight: FontWeight.w900,
+            fontSize: 18,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ),
+    );
+  }
+
+  Widget _rankTableCell(double baseAmount, double rankPercentage) {
+    double totalForRank = baseAmount * (rankPercentage / 100);
+    double shoppingWallet = totalForRank * (diamondShoppingWalletPercent / 100);
+    double mainWallet = totalForRank - shoppingWallet;
+
+    if (totalForRank <= 0) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Center(
+          child: Text(
+            "0",
+            style: TextStyle(
+              color: Colors.redAccent,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Truncate Money completely (No decimals inside boxes)
+          Text(
+            totalForRank.truncate().toString(),
+            style: const TextStyle(
+              color: Colors.redAccent,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Container(
+            height: 1.5,
+            width: double.infinity,
+            color: Colors.white24,
+            margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              Text(
+                mainWallet.truncate().toString(),
+                style: const TextStyle(
+                  color: Colors.blueAccent,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Container(height: 16, width: 1.5, color: Colors.white24),
+              Text(
+                shoppingWallet.truncate().toString(),
+                style: const TextStyle(
+                  color: Colors.greenAccent,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _infoText(
+    String label,
+    String value, {
+    Color color = Colors.white,
+    double size = 16,
+  }) {
+    return Row(
+      children: [
+        Text(
+          "$label ",
+          style: TextStyle(
+            color: Colors.white54,
+            fontSize: size,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            color: color,
+            fontSize: size,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// FULL SCREEN IMAGE VIEWER
+// ════════════════════════════════════════════════════════════════════════════
+
 class FullScreenImageViewer extends StatefulWidget {
   final List<String> images;
   final int initialIndex;
@@ -590,7 +1005,6 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer> {
     super.initState();
     _currentIndex = widget.initialIndex;
     _pageController = PageController(initialPage: widget.initialIndex);
-    // Safe focus request
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _dialogFocusNode.requestFocus();
     });
@@ -599,7 +1013,7 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer> {
   @override
   void dispose() {
     _pageController.dispose();
-    _dialogFocusNode.dispose(); // This fixes the 'addListener' error
+    _dialogFocusNode.dispose();
     super.dispose();
   }
 
@@ -635,12 +1049,11 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer> {
         }
       },
       child: Dialog(
-        backgroundColor: Colors.black, // Full black background
-        insetPadding: EdgeInsets.zero, // Full screen logic
+        backgroundColor: Colors.black,
+        insetPadding: EdgeInsets.zero,
         child: Stack(
           alignment: Alignment.center,
           children: [
-            // Image Viewer
             PageView.builder(
               controller: _pageController,
               itemCount: widget.images.length,
@@ -651,21 +1064,15 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer> {
               },
               itemBuilder: (context, index) {
                 final imageBytes = base64Decode(widget.images[index]);
-                // InteractiveViewer for Zooming with fingers in Dialog
                 return InteractiveViewer(
                   minScale: 0.1,
                   maxScale: 5.0,
                   child: Center(
-                    child: Image.memory(
-                      imageBytes,
-                      fit: BoxFit.contain, // Show FULL image
-                    ),
+                    child: Image.memory(imageBytes, fit: BoxFit.contain),
                   ),
                 );
               },
             ),
-
-            // Close Button
             Positioned(
               top: 40,
               right: 20,
@@ -674,8 +1081,6 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer> {
                 onPressed: () => Navigator.pop(context),
               ),
             ),
-
-            // Counter
             Positioned(
               bottom: 40,
               child: Container(
@@ -696,8 +1101,6 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer> {
                 ),
               ),
             ),
-
-            // Dialog Navigation Arrows (Visual)
             if (widget.images.length > 1) ...[
               Positioned(
                 left: 10,
