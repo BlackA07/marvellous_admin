@@ -1,7 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // ✅ Imported
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import '../models/category_model.dart';
+import '../models/category_model.dart'; // Yahan aapka original model import ho raha hai
 
 class CategoryController extends GetxController {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -14,7 +15,10 @@ class CategoryController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    fetchCategories();
+    // ✅ FIX: Only fetch if user is logged in
+    if (FirebaseAuth.instance.currentUser != null) {
+      fetchCategories();
+    }
   }
 
   // Fetch Categories Real-time
@@ -65,25 +69,37 @@ class CategoryController extends GetxController {
     }
   }
 
-  // Add Sub Category to Selected Category
-  Future<void> addSubCategory(String subCatName) async {
-    if (selectedCategory.value == null || selectedCategory.value!.id == null)
-      return;
-
+  // ✅ FIX: Now takes parentCategoryName so it knows exactly where to save it
+  Future<void> addSubCategory(
+    String parentCategoryName,
+    String subCatName,
+  ) async {
     try {
-      String docId = selectedCategory.value!.id!;
+      var query = await _firestore
+          .collection('categories')
+          .where('name', isEqualTo: parentCategoryName)
+          .get();
 
-      await _firestore.collection('categories').doc(docId).update({
-        'subCategories': FieldValue.arrayUnion([subCatName]),
-      });
+      if (query.docs.isNotEmpty) {
+        String docId = query.docs.first.id;
 
-      Get.back(); // Close dialog
-      Get.snackbar(
-        "Success",
-        "Sub-Category Added",
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-      );
+        await _firestore.collection('categories').doc(docId).update({
+          'subCategories': FieldValue.arrayUnion([subCatName]),
+        });
+
+        Get.snackbar(
+          "Success",
+          "Sub-Category Added",
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+        );
+      } else {
+        Get.snackbar(
+          "Error",
+          "Parent category not found.",
+          backgroundColor: Colors.red,
+        );
+      }
     } catch (e) {
       Get.snackbar("Error", e.toString(), backgroundColor: Colors.red);
     }

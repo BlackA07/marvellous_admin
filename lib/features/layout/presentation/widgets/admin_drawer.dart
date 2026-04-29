@@ -7,8 +7,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 // --- EXISTING IMPORTS ---
 import 'package:marvellous_admin/features/categories/screens/categories_screen.dart';
 import 'package:marvellous_admin/features/dashboard/presentation/screens/dashboard_screen.dart';
-import 'package:marvellous_admin/features/finance/presentation/screens/earnings_dashboard_screen.dart';
-import 'package:marvellous_admin/features/finance/presentation/screens/payouts_screen.dart';
 import 'package:marvellous_admin/features/mlm/presentation/screens/commission_setup_screen.dart';
 import 'package:marvellous_admin/features/mlm/presentation/screens/mlm_tree_view.dart';
 import 'package:marvellous_admin/features/orders/presentation/screens/orders_dashboard_screen.dart';
@@ -18,6 +16,9 @@ import 'package:marvellous_admin/features/vendors/screens/vendors_list_screen.da
 
 import '../../../../core/theme/pallete.dart';
 import '../../../customers/presentation/screens/customers_screen.dart';
+import '../../../finance/screens/banks_screen.dart';
+import '../../../finance/screens/expenses_screen.dart';
+import '../../../finance/screens/taxes_screen.dart';
 import '../../../staff/presentation/add_staff_screen.dart';
 import '../../../staff/presentation/staff_list/staff_list_screen.dart';
 import '../../../user_settings/views/user_settings_screen.dart';
@@ -121,7 +122,13 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
       title: "Finance",
       icon: Icons.monetization_on_outlined,
       hasSubmenu: true,
-      subItems: ["Earnings", "Payouts", "Purchase Products", "Vendor Dues"],
+      subItems: [
+        "Purchase Products",
+        "Vendor Dues",
+        "Banks",
+        "Expenses",
+        "Taxes",
+      ],
     ),
     AdminMenuItem(title: "Reports", icon: Icons.bar_chart_outlined),
     AdminMenuItem(title: "Profile", icon: Icons.person_outlined),
@@ -472,17 +479,18 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
                                   }
                                   // ─── FINANCE ───────────────────────────────
                                   else if (item.title == "Finance") {
-                                    if (subItem == "Earnings") {
-                                      targetScreen =
-                                          const EarningsDashboardScreen();
-                                    } else if (subItem == "Payouts") {
-                                      targetScreen = const PayoutsScreen();
-                                    } else if (subItem == "Purchase Products") {
+                                    if (subItem == "Purchase Products") {
                                       targetScreen =
                                           const VendorPurchaseScreen();
                                     } else if (subItem == "Vendor Dues") {
                                       targetScreen =
                                           const VendorPaymentsScreen();
+                                    } else if (subItem == "Banks") {
+                                      targetScreen = BanksScreen();
+                                    } else if (subItem == "Expenses") {
+                                      targetScreen = ExpensesScreen();
+                                    } else if (subItem == "Taxes") {
+                                      targetScreen = TaxesScreen();
                                     }
                                   }
                                   // ─── ORDERS ───────────────────────────────

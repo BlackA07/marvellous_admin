@@ -57,7 +57,6 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
     _initValuesAndControllers();
   }
 
-  // ✅ FIX: Jab parent widget update ho (jese edit button pe click) to values refresh hon
   @override
   void didUpdateWidget(covariant AddProductLogistics oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -84,12 +83,12 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
       deliveryTimes[k] = time;
 
       feeControllers[k] = TextEditingController(
-        text: fee == 0 ? "" : fee.toString(),
+        text: fee == 0 ? "" : fee.toInt().toString(),
       );
       timeControllers[k] = TextEditingController(text: time);
     }
     codFee = widget.initialCodFee ?? 0.0;
-    codController.text = codFee == 0 ? "" : codFee.toString();
+    codController.text = codFee == 0 ? "" : codFee.toInt().toString();
   }
 
   void _syncControllersWithProps() {
@@ -102,12 +101,21 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
       deliveryTimes[k] = time;
 
       if (feeControllers.containsKey(k)) {
-        feeControllers[k]!.text = fee == 0 ? "" : fee.toString();
-        timeControllers[k]!.text = time;
+        double currentFeeVal = double.tryParse(feeControllers[k]!.text) ?? 0.0;
+        if (currentFeeVal != fee) {
+          feeControllers[k]!.text = fee == 0 ? "" : fee.toString();
+        }
+
+        if (timeControllers[k]!.text != time) {
+          timeControllers[k]!.text = time;
+        }
       }
     }
     codFee = widget.initialCodFee ?? 0.0;
-    codController.text = codFee == 0 ? "" : codFee.toString();
+    double currentCodVal = double.tryParse(codController.text) ?? 0.0;
+    if (currentCodVal != codFee) {
+      codController.text = codFee == 0 ? "" : codFee.toString();
+    }
   }
 
   @override
@@ -123,7 +131,6 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
   }
 
   void _updateParent() {
-    // Karachi Only logic taake map saaf rahe
     Map<String, double> finalFees = Map.from(deliveryFees);
     Map<String, String> finalTimes = Map.from(deliveryTimes);
 
@@ -197,7 +204,6 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
         const SizedBox(height: 30),
         _buildHeader("Shipping Logistics"),
 
-        // Main Scope Dropdown
         _buildDropdown(
           "Main Shipping Scope",
           widget.selectedLocation,
@@ -209,14 +215,12 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
         ),
         const SizedBox(height: 15),
 
-        // KARACHI SECTION
         _buildRegionInputs(
           "Karachi",
           "Karachi Shipping Fee",
           "Karachi Delivery Time",
         ),
 
-        // PAKISTAN SECTION
         if (widget.selectedLocation != "Karachi Only")
           _buildRegionInputs(
             "Pakistan",
@@ -224,7 +228,6 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
             "Pakistan Delivery Time",
           ),
 
-        // WORLDWIDE SECTION
         if (widget.selectedLocation == "Worldwide")
           _buildRegionInputs(
             "Worldwide",
@@ -234,7 +237,6 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
 
         const SizedBox(height: 15),
 
-        // COD Fee Field
         _buildSimpleInput("Cash on Delivery (COD) Fee", codController, (val) {
           codFee = double.tryParse(val) ?? 0.0;
           _updateParent();
@@ -310,10 +312,15 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
     Function(String?) onChanged, {
     bool isOptional = false,
   }) {
-    // Safety check for dropdown values
-    String? safeValue = items.contains(value)
+    // ✅ AUTO SELECT LOGIC: Safely inserts the newly added item instantly
+    List<String> safeItems = List.from(items);
+    if (value != null && value.isNotEmpty && !safeItems.contains(value)) {
+      safeItems.add(value);
+    }
+
+    String? safeValue = safeItems.contains(value)
         ? value
-        : (items.isNotEmpty ? items.first : null);
+        : (safeItems.isNotEmpty ? safeItems.first : null);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -327,10 +334,10 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
         ),
         const SizedBox(height: 5),
         DropdownButtonFormField<String>(
-          value: items.contains(value) ? value : null,
+          value: safeValue,
           style: const TextStyle(color: Colors.black, fontSize: 14),
           dropdownColor: Colors.white,
-          items: items
+          items: safeItems
               .toSet()
               .map(
                 (e) => DropdownMenuItem(
@@ -353,36 +360,24 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
   }
 
   void _showAddDialog(BuildContext context, bool isSub) {
-    TextEditingController ctrl = TextEditingController();
-    Get.defaultDialog(
-      title: isSub ? "Add Sub-Category" : "Add Category",
-      titleStyle: const TextStyle(
-        color: Colors.black,
-        fontWeight: FontWeight.bold,
-      ),
-      backgroundColor: Colors.white,
-      content: TextField(
-        controller: ctrl,
-        autofocus: true,
-        style: const TextStyle(color: Colors.black),
-        decoration: const InputDecoration(
-          hintText: "Enter Name",
-          border: OutlineInputBorder(),
-        ),
-      ),
-      textConfirm: "Add",
-      textCancel: "Cancel",
-      onConfirm: () async {
-        if (ctrl.text.isNotEmpty) {
-          if (isSub) {
-            await widget.categoryController.addSubCategory(ctrl.text);
-            widget.onSubCategoryChanged(ctrl.text);
-          } else {
-            await widget.categoryController.addCategory(ctrl.text);
-            widget.onCategoryChanged(ctrl.text);
-          }
-          Get.back();
-        }
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AddCategoryDialog(
+          title: isSub ? "Sub-Category" : "Category",
+          onSave: (val) async {
+            if (isSub) {
+              await widget.categoryController.addSubCategory(
+                widget.selectedCategory!,
+                val,
+              );
+              widget.onSubCategoryChanged(val);
+            } else {
+              await widget.categoryController.addCategory(val);
+              widget.onCategoryChanged(val);
+            }
+          },
+        );
       },
     );
   }
@@ -411,6 +406,96 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
         const Divider(),
         const SizedBox(height: 10),
       ],
+    );
+  }
+}
+
+// ✅ Aapka Design Kiya Hua Dialog
+class AddCategoryDialog extends StatelessWidget {
+  final String title;
+  final Function(String) onSave;
+
+  AddCategoryDialog({Key? key, required this.title, required this.onSave})
+    : super(key: key);
+
+  final TextEditingController _controller = TextEditingController();
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: const Color(0xFF2A2D3E),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Add New $title",
+              style: GoogleFonts.orbitron(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 20),
+            TextField(
+              controller: _controller,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: "Enter Name",
+                hintStyle: const TextStyle(color: Colors.white24),
+                filled: true,
+                fillColor: Colors.black12,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: Colors.cyanAccent),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Get.back(),
+                  child: const Text(
+                    "Cancel",
+                    style: TextStyle(color: Colors.white54),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                ElevatedButton(
+                  onPressed: () {
+                    if (_controller.text.isNotEmpty) {
+                      onSave(_controller.text);
+                      Get.back();
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.cyanAccent,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text(
+                    "Add",
+                    style: TextStyle(
+                      color: Colors.black,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

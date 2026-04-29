@@ -425,7 +425,14 @@ class CategoriesScreen extends StatelessWidget {
                   controller.addCategory(value);
                   Get.back();
                 } else {
-                  controller.addSubCategory(value);
+                  // ✅ FIX: Passed parent category name as first argument
+                  if (controller.selectedCategory.value != null) {
+                    controller.addSubCategory(
+                      controller.selectedCategory.value!.name,
+                      value,
+                    );
+                    Get.back();
+                  }
                 }
               }
             },
@@ -447,7 +454,14 @@ class CategoriesScreen extends StatelessWidget {
                     controller.addCategory(_nameController.text);
                     Get.back();
                   } else {
-                    controller.addSubCategory(_nameController.text);
+                    // ✅ FIX: Passed parent category name as first argument
+                    if (controller.selectedCategory.value != null) {
+                      controller.addSubCategory(
+                        controller.selectedCategory.value!.name,
+                        _nameController.text,
+                      );
+                      Get.back();
+                    }
                   }
                 }
               },

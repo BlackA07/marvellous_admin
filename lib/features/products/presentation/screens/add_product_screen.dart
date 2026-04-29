@@ -44,10 +44,14 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
   String _currentName = "";
 
-  // ✅ Vendor Info
+  // ✅ Vendor Info & List
   String _vendorId = "Admin";
   String _vendorName = "Admin";
   String _productStatus = "approved";
+
+  List<Map<String, dynamic>> vendorsList = [
+    {'id': 'Admin', 'name': 'Admin'},
+  ];
 
   // Controllers
   final TextEditingController nameCtrl = TextEditingController();
@@ -70,6 +74,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
   double calculatedPoints = 0.0;
   bool _isSuccess = false;
   bool _isMobile = false;
+
+  // ✅ Key to reset Logistics controllers when form is cleared
+  Key logisticsKey = UniqueKey();
 
   // Warranty Checkboxes State
   bool hasCompanyWarranty = false;
@@ -97,6 +104,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
   @override
   void initState() {
     super.initState();
+    _fetchVendors(); // ✅ Fetch Vendors on init
     if (widget.productToEdit != null) {
       _loadProductData(widget.productToEdit!);
     }
@@ -125,6 +133,30 @@ class _AddProductScreenState extends State<AddProductScreen> {
     super.dispose();
   }
 
+  // ✅ Fetch all vendors for the dropdown
+  Future<void> _fetchVendors() async {
+    try {
+      var snap = await FirebaseFirestore.instance.collection('vendors').get();
+      List<Map<String, dynamic>> fetchedVendors = [];
+      for (var doc in snap.docs) {
+        fetchedVendors.add({
+          'id': doc.id,
+          'name':
+              doc.data()['storeName'] ??
+              doc.data()['ownerName'] ??
+              'Unknown Vendor',
+        });
+      }
+      if (mounted) {
+        setState(() {
+          vendorsList.addAll(fetchedVendors);
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching vendors: $e");
+    }
+  }
+
   void _checkIfMobile(String val) {
     bool isMob = val.toLowerCase().contains("mobile");
     if (isMob != _isMobile) setState(() => _isMobile = isMob);
@@ -136,25 +168,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
     setState(() {
       calculatedPoints = productController.calculatePoints(buy, sell);
     });
-  }
-
-  Future<void> _fetchStoreName(String vid) async {
-    try {
-      var doc = await FirebaseFirestore.instance
-          .collection('vendors')
-          .doc(vid)
-          .get();
-      if (doc.exists && mounted) {
-        setState(() {
-          _vendorName =
-              doc.data()?['storeName'] ??
-              doc.data()?['ownerName'] ??
-              _vendorName;
-        });
-      }
-    } catch (e) {
-      debugPrint("Error fetching store name: $e");
-    }
   }
 
   void _loadProductData(ProductModel product) {
@@ -174,10 +187,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
     _vendorId = product.vendorId;
     _vendorName = product.vendorName;
     _productStatus = product.status;
-
-    if (_vendorId != "Admin" && _vendorId != "") {
-      _fetchStoreName(_vendorId);
-    }
 
     // Warranty Logic
     String w = product.warranty;
@@ -222,7 +231,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
     codFee = product.codFee;
   }
 
-  // --- IMAGE PICKER ---
   Future<void> _handleImagePicker() async {
     if (selectedImagesBase64.length >= 3) {
       Get.snackbar("Limit Reached", "Max 3 images allowed.");
@@ -281,7 +289,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
     }
   }
 
-  // ✅ FIX: Using pickImage (single pick) to directly open the Cropper, identical to Vendor App
   Future<void> _pickImages(ImageSource source) async {
     try {
       if (selectedImagesBase64.length >= 3) return;
@@ -295,7 +302,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
         return;
       }
 
-      // Automatically crop immediately after selecting image
       CroppedFile? croppedFile = await ImageCropper().cropImage(
         sourcePath: file.path,
         aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1), // Square crop
@@ -348,6 +354,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
       _vendorId = "Admin";
       _vendorName = "Admin";
       _productStatus = "approved";
+
       deliveryFeesMap = {"Karachi": 0, "Pakistan": 0, "Worldwide": 0};
       deliveryTimeMap = {
         "Karachi": "1-2 Days",
@@ -355,12 +362,14 @@ class _AddProductScreenState extends State<AddProductScreen> {
         "Worldwide": "7-15 Days",
       };
       codFee = 0.0;
+      logisticsKey =
+          UniqueKey(); // ✅ Completely resets logistics controllers on clear
     });
   }
 
   String _getCombinedWarranty() {
     String duration = warrantyCtrl.text.trim();
-    if (duration == "") duration = "No Warranty"; // ✅ FIX
+    if (duration == "") duration = "No Warranty";
 
     List<String> types = [];
     if (hasCompanyWarranty) types.add("Company");
@@ -391,7 +400,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
         description: descCtrl.text,
         category: selectedCategory!,
         subCategory: selectedSubCategory ?? "General",
-        brand: brandCtrl.text == "" ? "Generic" : brandCtrl.text, // ✅ FIX
+        brand: brandCtrl.text == "" ? "Generic" : brandCtrl.text,
         purchasePrice: double.tryParse(purchaseCtrl.text) ?? 0,
         salePrice: double.tryParse(saleCtrl.text) ?? 0,
         originalPrice: double.tryParse(originalCtrl.text) ?? 0,
@@ -469,47 +478,63 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   child: Form(
                     key: _formKey,
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // ✅ FIX: Web-safe check using != ""
-                        if (_vendorId != "Admin" && _vendorId != "")
-                          Container(
-                            margin: const EdgeInsets.only(bottom: 20),
-                            padding: const EdgeInsets.all(15),
-                            width: double.infinity,
-                            decoration: BoxDecoration(
-                              color: Colors.blueAccent.withOpacity(0.1),
-                              border: Border.all(
-                                color: Colors.blueAccent.withOpacity(0.5),
+                        // ✅ NEW: Vendor Selection Dropdown
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Select Vendor",
+                                style: GoogleFonts.orbitron(
+                                  color: textColor,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
                               ),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.storefront,
-                                  color: Colors.blueAccent,
+                              const SizedBox(height: 10),
+                              DropdownButtonFormField<String>(
+                                value:
+                                    vendorsList.any((v) => v['id'] == _vendorId)
+                                    ? _vendorId
+                                    : null,
+                                style: const TextStyle(
+                                  color: Colors.black,
+                                  fontSize: 14,
                                 ),
-                                const SizedBox(width: 10),
-                                Text(
-                                  "Store Name: ",
-                                  style: GoogleFonts.comicNeue(
-                                    fontSize: 16,
-                                    color: Colors.black54,
+                                dropdownColor: Colors.white,
+                                decoration: InputDecoration(
+                                  filled: true,
+                                  fillColor: cardColor,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
                                   ),
                                 ),
-                                Text(
-                                  _vendorName == "Admin"
-                                      ? "Loading..."
-                                      : _vendorName,
-                                  style: GoogleFonts.comicNeue(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.black,
-                                  ),
-                                ),
-                              ],
-                            ),
+                                items: vendorsList.map((vendor) {
+                                  return DropdownMenuItem<String>(
+                                    value: vendor['id'],
+                                    child: Text(
+                                      vendor['name'],
+                                      style: const TextStyle(
+                                        color: Colors.black,
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
+                                onChanged: (val) {
+                                  setState(() {
+                                    _vendorId = val!;
+                                    _vendorName = vendorsList.firstWhere(
+                                      (v) => v['id'] == val,
+                                    )['name'];
+                                  });
+                                },
+                              ),
+                            ],
                           ),
+                        ),
 
                         AddProductMedia(
                           images: selectedImagesBase64,
@@ -550,6 +575,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
                         const SizedBox(height: 30),
 
                         AddProductLogistics(
+                          key:
+                              logisticsKey, // ✅ Key added to handle cursor resets gracefully
                           categoryController: categoryController,
                           selectedCategory: selectedCategory,
                           selectedSubCategory: selectedSubCategory,
@@ -609,9 +636,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                               ),
                               CheckboxListTile(
                                 title: const Text("Company Warranty"),
-                                value:
-                                    hasCompanyWarranty ==
-                                    true, // ✅ Null-safe check
+                                value: hasCompanyWarranty == true,
                                 activeColor: accentColor,
                                 controlAffinity:
                                     ListTileControlAffinity.leading,
@@ -622,9 +647,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                               ),
                               CheckboxListTile(
                                 title: const Text("Shop Warranty"),
-                                value:
-                                    hasShopWarranty ==
-                                    true, // ✅ Null-safe check
+                                value: hasShopWarranty == true,
                                 activeColor: accentColor,
                                 controlAffinity:
                                     ListTileControlAffinity.leading,
