@@ -6,6 +6,10 @@ import 'package:get/get.dart';
 import '../repository/auth_repository.dart';
 import '../../../../core/routes/app_router.dart';
 
+// ✅ Imports to call fetch logic after successful login
+import '../../categories/controllers/category_controller.dart';
+import '../../products/controller/products_controller.dart';
+
 // State Provider for Loading
 final authLoadingProvider = StateProvider<bool>((ref) => false);
 
@@ -42,6 +46,14 @@ class AuthController {
       );
 
       if (user != null) {
+        // ✅ Tell controllers to fetch data now that user is authenticated
+        if (Get.isRegistered<ProductsController>()) {
+          Get.find<ProductsController>().fetchAllData();
+        }
+        if (Get.isRegistered<CategoryController>()) {
+          Get.find<CategoryController>().fetchCategories();
+        }
+
         // ✅ Pehle Navigate karo
         Get.offAllNamed(AppRoutes.home);
         // ✅ Phir delay ke sath Snackbar dikhao
@@ -72,6 +84,14 @@ class AuthController {
       );
 
       if (user != null) {
+        // ✅ Tell controllers to fetch data now that user is authenticated
+        if (Get.isRegistered<ProductsController>()) {
+          Get.find<ProductsController>().fetchAllData();
+        }
+        if (Get.isRegistered<CategoryController>()) {
+          Get.find<CategoryController>().fetchCategories();
+        }
+
         // ✅ Pehle Navigate karo
         Get.offAllNamed(AppRoutes.home);
         // ✅ Phir delay ke sath Snackbar dikhao

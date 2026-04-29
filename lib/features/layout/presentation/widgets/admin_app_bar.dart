@@ -16,7 +16,6 @@ import '../../../orders/presentation/controllers/orders_controller.dart';
 import '../../../products/controller/products_controller.dart';
 
 // Screens Imports
-import '../../../finance/presentation/screens/earnings_dashboard_screen.dart';
 import '../../../orders/presentation/screens/orders_dashboard_screen.dart';
 import '../../../profile/presentation/screens/admin_profile_screen.dart';
 import '../../../products/presentation/screens/pending_requests_screen.dart';
@@ -221,17 +220,9 @@ class AdminAppBar extends StatelessWidget {
                 return const SizedBox.shrink();
               }
 
-              return Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _AppBarIcon(
-                    icon: Icons.account_balance_wallet_outlined,
-                    tooltip: "Earnings",
-                    onTap: () {
-                      Get.to(() => const EarningsDashboardScreen());
-                    },
-                  ),
-                  const SizedBox(width: 15),
+              return Row(mainAxisSize: MainAxisSize.min, children: [
+                  
+                  
                 ],
               );
             }),

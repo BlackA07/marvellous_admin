@@ -1,5 +1,6 @@
 // lib/controller/products_controller.dart
 
+import 'package:firebase_auth/firebase_auth.dart'; // ✅ Imported
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -42,10 +43,20 @@ class ProductsController extends GetxController {
   @override
   void onInit() {
     super.onInit();
+    // ✅ FIX: Only fetch if user is logged in
+    if (FirebaseAuth.instance.currentUser != null) {
+      fetchAllData();
+    } else {
+      isLoading(false);
+    }
+  }
+
+  // ✅ Extracted to a method so AuthController can call it after login
+  void fetchAllData() {
     fetchProducts();
     fetchHistory();
     fetchGlobalSettings();
-    _fetchPendingRequests(); // ✅ NEW: Fetch pending requests on init
+    _fetchPendingRequests();
   }
 
   // ✅ NEW: Listen to Pending Requests Stream
