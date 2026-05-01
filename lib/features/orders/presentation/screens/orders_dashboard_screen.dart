@@ -3,7 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'vendor_account_detail_screen.dart'; // Nayi detail screen ka import
+import 'all_orders_history_screen.dart';
+import 'vendor_account_detail_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -37,6 +38,13 @@ class OrdersDashboardScreen extends StatelessWidget {
             ),
           ),
           actions: [
+            // ✅ NAYA ICON YAHAN ADD KIYA HAI
+            IconButton(
+              icon: const Icon(Icons.history_edu, color: Colors.blueAccent),
+              tooltip: "All Orders History",
+              onPressed: () => Get.to(() => const AllOrdersHistoryScreen()),
+            ),
+            // Purana debug icon apni jagah par hai
             IconButton(
               icon: const Icon(Icons.bug_report, color: Colors.orange),
               onPressed: () => _showDebugInfo(controller),
@@ -157,6 +165,78 @@ class OrdersDashboardScreen extends StatelessWidget {
         },
       );
     });
+  }
+
+  // ✅ FIX: Reason field add kar diya gya hai COD order rejection ke liye
+  void _showRejectOrderDialog(String orderId, OrdersController controller) {
+    final reasonCtrl = TextEditingController();
+    Get.dialog(
+      AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: Colors.redAccent.withOpacity(0.5), width: 1),
+        ),
+        title: Text(
+          "Reject Order?",
+          style: GoogleFonts.orbitron(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: TextField(
+          controller: reasonCtrl,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            hintText: "Enter reason for rejection",
+            hintStyle: TextStyle(color: Colors.white38),
+            enabledBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: Colors.white24),
+            ),
+            focusedBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: Colors.redAccent),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(),
+            child: const Text(
+              "CANCEL",
+              style: TextStyle(color: Colors.white38),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            onPressed: () {
+              String reason = reasonCtrl.text.trim();
+              if (reason.isEmpty) {
+                Get.snackbar(
+                  "Error",
+                  "Please provide a reason",
+                  backgroundColor: Colors.orange,
+                );
+                return;
+              }
+              Get.back();
+              controller.rejectOrder(orderId, reason: reason);
+            },
+            child: const Text(
+              "REJECT ORDER",
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showConfirmationDialog({
@@ -337,12 +417,10 @@ class OrdersDashboardScreen extends StatelessWidget {
             price: "PKR ${order.price.toStringAsFixed(0)}",
             onView: () => Get.to(() => OrderDetailScreen(order: order)),
             onAccept: () => _showCenteredStatusDialog(context, order),
-            onReject: () => _showConfirmationDialog(
-              title: "Reject Order?",
-              content: "Are you sure you want to completely reject this order?",
-              onConfirm: () =>
-                  controller.updateOrderStage(order.id, 'rejected'),
-            ),
+            onReject: () => _showRejectOrderDialog(
+              order.id,
+              controller,
+            ), // REASON DIALOG USE HOGA YAHAN
           );
         },
       );

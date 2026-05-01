@@ -1,3 +1,4 @@
+// Path: lib/features/finances/models/finance_models.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class BankModel {
@@ -8,6 +9,15 @@ class BankModel {
   String accountNo;
   double balance;
   bool isSystem;
+
+  // ✅ NEW FIELDS FOR CUSTOMER APP CONTROL
+  String qrCodeBase64;
+  bool showInCustomerApp;
+  bool showTitle;
+  bool showIban;
+  bool showAccountNo;
+  bool showQr;
+
   BankModel({
     this.id,
     required this.name,
@@ -16,7 +26,14 @@ class BankModel {
     required this.accountNo,
     required this.balance,
     this.isSystem = false,
+    this.qrCodeBase64 = '',
+    this.showInCustomerApp = true,
+    this.showTitle = true,
+    this.showIban = true,
+    this.showAccountNo = true,
+    this.showQr = true,
   });
+
   Map<String, dynamic> toMap() => {
     'name': name,
     'accountTitle': accountTitle,
@@ -24,7 +41,14 @@ class BankModel {
     'accountNo': accountNo,
     'balance': balance,
     'isSystem': isSystem,
+    'qrCodeBase64': qrCodeBase64,
+    'showInCustomerApp': showInCustomerApp,
+    'showTitle': showTitle,
+    'showIban': showIban,
+    'showAccountNo': showAccountNo,
+    'showQr': showQr,
   };
+
   factory BankModel.fromMap(Map<String, dynamic> map, String id) => BankModel(
     id: id,
     name: map['name'] ?? '',
@@ -33,6 +57,12 @@ class BankModel {
     accountNo: map['accountNo'] ?? '',
     balance: (map['balance'] ?? 0).toDouble(),
     isSystem: map['isSystem'] ?? false,
+    qrCodeBase64: map['qrCodeBase64'] ?? '',
+    showInCustomerApp: map['showInCustomerApp'] ?? true,
+    showTitle: map['showTitle'] ?? true,
+    showIban: map['showIban'] ?? true,
+    showAccountNo: map['showAccountNo'] ?? true,
+    showQr: map['showQr'] ?? true,
   );
 }
 
