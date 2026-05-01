@@ -1,7 +1,10 @@
+// Path: lib/features/finances/presentation/screens/BanksScreen.dart
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 import '../controller/finance_controller.dart';
 import '../models/finance_models.dart';
 
@@ -17,7 +20,10 @@ class BanksScreen extends StatelessWidget {
         elevation: 0,
         title: Text(
           'Banks & Finances',
-          style: GoogleFonts.comicNeue(color: Colors.white),
+          style: GoogleFonts.comicNeue(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
         ),
       ),
       floatingActionButton: FloatingActionButton(
@@ -111,48 +117,50 @@ class BanksScreen extends StatelessWidget {
                     bank.accountTitle,
                     style: const TextStyle(color: Colors.white70),
                   ),
-                  Row(
-                    children: [
-                      Text(
-                        'IBAN: ${bank.iban}',
-                        style: const TextStyle(
-                          color: Colors.white54,
-                          fontSize: 12,
+                  if (bank.iban.isNotEmpty)
+                    Row(
+                      children: [
+                        Text(
+                          'IBAN: ${bank.iban}',
+                          style: const TextStyle(
+                            color: Colors.white54,
+                            fontSize: 12,
+                          ),
                         ),
-                      ),
-                      IconButton(
-                        icon: const Icon(
-                          Icons.copy,
-                          size: 14,
-                          color: Colors.cyanAccent,
+                        IconButton(
+                          icon: const Icon(
+                            Icons.copy,
+                            size: 14,
+                            color: Colors.cyanAccent,
+                          ),
+                          onPressed: () => _copy(bank.iban),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
                         ),
-                        onPressed: () => _copy(bank.iban),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                      ),
-                    ],
-                  ),
-                  Row(
-                    children: [
-                      Text(
-                        'A/C: ${bank.accountNo}',
-                        style: const TextStyle(
-                          color: Colors.white54,
-                          fontSize: 12,
+                      ],
+                    ),
+                  if (bank.accountNo.isNotEmpty)
+                    Row(
+                      children: [
+                        Text(
+                          'A/C: ${bank.accountNo}',
+                          style: const TextStyle(
+                            color: Colors.white54,
+                            fontSize: 12,
+                          ),
                         ),
-                      ),
-                      IconButton(
-                        icon: const Icon(
-                          Icons.copy,
-                          size: 14,
-                          color: Colors.cyanAccent,
+                        IconButton(
+                          icon: const Icon(
+                            Icons.copy,
+                            size: 14,
+                            color: Colors.cyanAccent,
+                          ),
+                          onPressed: () => _copy(bank.accountNo),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
                         ),
-                        onPressed: () => _copy(bank.accountNo),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
                 ],
               ),
         trailing: SizedBox(
@@ -225,48 +233,200 @@ class BanksScreen extends StatelessWidget {
     bool isInternal =
         isSystemAcc && (bank?.name.toLowerCase().contains('internal') ?? false);
 
+    // Settings
+    bool showInCustomerApp = bank?.showInCustomerApp ?? true;
+    bool showTitle = bank?.showTitle ?? true;
+    bool showIban = bank?.showIban ?? true;
+    bool showAccountNo = bank?.showAccountNo ?? true;
+    bool showQr = bank?.showQr ?? true;
+    String qrCodeBase64 = bank?.qrCodeBase64 ?? '';
+
     Get.defaultDialog(
       backgroundColor: const Color(0xFF2C2C2C),
       title: bank == null ? 'Add Bank / Cash' : 'Edit Account',
       titleStyle: const TextStyle(color: Colors.white),
       content: StatefulBuilder(
-        builder: (ctx, setState) => Column(
-          children: [
-            _input(nameCtrl, 'Bank/Account Name (e.g. Cash, Internal)'),
-            if (!isSystemAcc) ...[
-              _input(titleCtrl, 'Account Title'),
-              _input(ibanCtrl, 'IBAN'),
-              _input(acCtrl, 'Account No'),
-            ],
+        builder: (ctx, setState) => SizedBox(
+          width: Get.width * 0.9,
+          height: Get.height * 0.6,
+          child: SingleChildScrollView(
+            child: Column(
+              children: [
+                _input(nameCtrl, 'Bank/Account Name (e.g. Cash, Internal)'),
+                if (!isSystemAcc) ...[
+                  _input(titleCtrl, 'Account Title'),
+                  _input(ibanCtrl, 'IBAN'),
+                  _input(acCtrl, 'Account No'),
+                ],
 
-            if (!isInternal) _input(balCtrl, 'Balance', isNum: true),
+                if (!isInternal) _input(balCtrl, 'Balance', isNum: true),
 
-            if (isInternal)
-              const Padding(
-                padding: EdgeInsets.only(bottom: 8),
-                child: Text(
-                  'Balance is auto-synced from Total Company Balance.',
-                  style: TextStyle(color: Colors.cyanAccent, fontSize: 12),
-                  textAlign: TextAlign.center,
-                ),
-              ),
+                if (isInternal)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      'Balance is auto-synced from Total Company Balance.',
+                      style: TextStyle(color: Colors.cyanAccent, fontSize: 12),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
 
-            if (bank == null)
-              CheckboxListTile(
-                title: const Text(
-                  'Is System Account (Cash/Internal)',
-                  style: TextStyle(color: Colors.white, fontSize: 12),
-                ),
-                value: isSystemAcc,
-                activeColor: Colors.cyanAccent,
-                onChanged: (val) => setState(() {
-                  isSystemAcc = val ?? false;
-                  isInternal =
-                      isSystemAcc &&
-                      nameCtrl.text.toLowerCase().contains('internal');
-                }),
-              ),
-          ],
+                if (bank == null)
+                  CheckboxListTile(
+                    title: const Text(
+                      'Is System Account (Cash/Internal)',
+                      style: TextStyle(color: Colors.white, fontSize: 12),
+                    ),
+                    value: isSystemAcc,
+                    activeColor: Colors.cyanAccent,
+                    onChanged: (val) => setState(() {
+                      isSystemAcc = val ?? false;
+                      isInternal =
+                          isSystemAcc &&
+                          nameCtrl.text.toLowerCase().contains('internal');
+                    }),
+                  ),
+
+                const Divider(color: Colors.white24),
+
+                if (!isSystemAcc) ...[
+                  const Text(
+                    "CUSTOMER APP SETTINGS",
+                    style: TextStyle(
+                      color: Colors.cyanAccent,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  CheckboxListTile(
+                    title: const Text(
+                      'Show this Bank in Customer App',
+                      style: TextStyle(color: Colors.white, fontSize: 13),
+                    ),
+                    value: showInCustomerApp,
+                    activeColor: Colors.green,
+                    onChanged: (val) =>
+                        setState(() => showInCustomerApp = val ?? true),
+                  ),
+                  if (showInCustomerApp) ...[
+                    CheckboxListTile(
+                      title: const Text(
+                        'Show Account Title',
+                        style: TextStyle(color: Colors.white70, fontSize: 12),
+                      ),
+                      value: showTitle,
+                      dense: true,
+                      onChanged: (val) =>
+                          setState(() => showTitle = val ?? true),
+                    ),
+                    CheckboxListTile(
+                      title: const Text(
+                        'Show Account Number',
+                        style: TextStyle(color: Colors.white70, fontSize: 12),
+                      ),
+                      value: showAccountNo,
+                      dense: true,
+                      onChanged: (val) =>
+                          setState(() => showAccountNo = val ?? true),
+                    ),
+                    CheckboxListTile(
+                      title: const Text(
+                        'Show IBAN',
+                        style: TextStyle(color: Colors.white70, fontSize: 12),
+                      ),
+                      value: showIban,
+                      dense: true,
+                      onChanged: (val) =>
+                          setState(() => showIban = val ?? true),
+                    ),
+                    CheckboxListTile(
+                      title: const Text(
+                        'Show QR Code',
+                        style: TextStyle(color: Colors.white70, fontSize: 12),
+                      ),
+                      value: showQr,
+                      dense: true,
+                      onChanged: (val) => setState(() => showQr = val ?? true),
+                    ),
+                    const SizedBox(height: 10),
+
+                    // ✅ FIXED IMAGE PICKER LOGIC HERE
+                    GestureDetector(
+                      onTap: () async {
+                        try {
+                          final img = await ImagePicker().pickImage(
+                            source: ImageSource.gallery,
+                            imageQuality: 50, // Image compress ho jaye
+                          );
+                          if (img != null) {
+                            final bytes = await img.readAsBytes();
+
+                            // Check size: Firestore document limit is 1MB.
+                            // Base64 increases size by ~33%.
+                            // Raw bytes should be max ~700KB.
+                            if (bytes.lengthInBytes > 700 * 1024) {
+                              Get.snackbar(
+                                "Image Too Large ❌",
+                                "QR Code must be smaller than 700KB. Try taking a screenshot to compress it.",
+                                backgroundColor: Colors.orangeAccent,
+                                colorText: Colors.white,
+                                duration: const Duration(seconds: 4),
+                              );
+                              return;
+                            }
+
+                            setState(() => qrCodeBase64 = base64Encode(bytes));
+                          }
+                        } catch (e) {
+                          Get.snackbar(
+                            "Error",
+                            "Could not load image: $e",
+                            backgroundColor: Colors.redAccent,
+                            colorText: Colors.white,
+                          );
+                        }
+                      },
+                      child: Container(
+                        height: 100,
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: Colors.white12,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.cyanAccent),
+                        ),
+                        child: qrCodeBase64.isEmpty
+                            ? const Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.qr_code,
+                                    color: Colors.white54,
+                                    size: 30,
+                                  ),
+                                  Text(
+                                    "Upload QR Code",
+                                    style: TextStyle(color: Colors.white54),
+                                  ),
+                                ],
+                              )
+                            : Image.memory(
+                                base64Decode(qrCodeBase64),
+                                fit: BoxFit.contain,
+                              ),
+                      ),
+                    ),
+                    if (qrCodeBase64.isNotEmpty)
+                      TextButton(
+                        onPressed: () => setState(() => qrCodeBase64 = ''),
+                        child: const Text(
+                          "Remove QR",
+                          style: TextStyle(color: Colors.redAccent),
+                        ),
+                      ),
+                  ],
+                ],
+              ],
+            ),
+          ),
         ),
       ),
       confirm: ElevatedButton(
@@ -280,6 +440,12 @@ class BanksScreen extends StatelessWidget {
             accountNo: isSystemAcc ? '' : acCtrl.text,
             balance: double.tryParse(balCtrl.text) ?? 0,
             isSystem: isSystemAcc,
+            showInCustomerApp: showInCustomerApp,
+            showTitle: showTitle,
+            showIban: showIban,
+            showAccountNo: showAccountNo,
+            showQr: showQr,
+            qrCodeBase64: qrCodeBase64,
           );
           bank == null ? controller.addBank(b) : controller.updateBank(b);
           Get.back();
@@ -334,9 +500,6 @@ class BanksScreen extends StatelessWidget {
           controller: c,
           style: const TextStyle(color: Colors.white),
           keyboardType: isNum ? TextInputType.number : TextInputType.text,
-          onChanged: (val) {
-            // Internal name detect karne ke liye update if needed
-          },
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: const TextStyle(color: Colors.white54),

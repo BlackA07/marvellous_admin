@@ -49,9 +49,6 @@ class OrdersController extends GetxController {
       _listenToOldFeeRequests();
     }
   }
-  // ════════════════════════════════════════════════════════════════════════════
-  //  NEW: VENDOR ACCOUNT APPROVAL LOGIC
-  // ════════════════════════════════════════════════════════════════════════════
 
   void _listenToVendorAccounts() {
     _db
@@ -69,9 +66,6 @@ class OrdersController extends GetxController {
         });
   }
 
-  // orders_controller.dart mein SIRF approveVendorAccount function replace karo
-  // Koi extra import nahi chahiye - cloud_firestore already imported hai
-
   Future<void> approveVendorAccount(String vendorUid) async {
     try {
       Get.dialog(
@@ -79,7 +73,6 @@ class OrdersController extends GetxController {
         barrierDismissible: false,
       );
 
-      // 1. Vendor doc fetch karo
       DocumentSnapshot vendorDoc = await _db
           .collection('vendors')
           .doc(vendorUid)
@@ -99,14 +92,11 @@ class OrdersController extends GetxController {
       Map<String, dynamic> vendorData =
           vendorDoc.data() as Map<String, dynamic>;
 
-      // 2. Vendor status approve karo
       await _db.collection('vendors').doc(vendorUid).update({
         'status': 'approved',
         'approvedAt': FieldValue.serverTimestamp(),
       });
 
-      // 3. ✅ Pending new categories Firestore mein sync karo
-      // (Vendor ne signup ke waqt jo naye categories type kiye the)
       List<Map<String, dynamic>> pendingNewCats =
           List<Map<String, dynamic>>.from(
             vendorData['pendingNewCategories'] ?? [],
@@ -117,12 +107,10 @@ class OrdersController extends GetxController {
             vendorData['pendingNewSubCategories'] ?? [],
           );
 
-      // Naye categories Firestore mein add karo
       for (var cat in pendingNewCats) {
         String catName = (cat['name'] ?? '').toString().trim();
         if (catName.isEmpty) continue;
 
-        // Pehle check karo ke exist toh nahi karta
         var existing = await _db
             .collection('categories')
             .where('name', isEqualTo: catName)
@@ -135,11 +123,9 @@ class OrdersController extends GetxController {
             'subCategories': [],
             'createdAt': FieldValue.serverTimestamp(),
           });
-          debugPrint('✅ New category added: $catName');
         }
       }
 
-      // Naye sub-categories existing category docs mein add karo
       for (var sub in pendingNewSubs) {
         String catName = (sub['categoryName'] ?? '').toString().trim();
         String subName = (sub['subName'] ?? '').toString().trim();
@@ -157,7 +143,6 @@ class OrdersController extends GetxController {
               'subCategories': FieldValue.arrayUnion([subName]),
             },
           );
-          debugPrint('✅ Sub-category added: $subName under $catName');
         }
       }
 
@@ -301,10 +286,11 @@ class OrdersController extends GetxController {
         });
   }
 
-  // ════════════════════════════════════════════════════════════════════════════
-  //  ORDER STATUS UPDATE (WITH INSTANT ATOMIC REWARDS)
-  // ════════════════════════════════════════════════════════════════════════════
-  Future<void> updateOrderStage(String orderId, String newStatus) async {
+  Future<void> updateOrderStage(
+    String orderId,
+    String newStatus, {
+    String reason = '',
+  }) async {
     try {
       final orderRef = _db.collection('orders').doc(orderId);
 
@@ -334,12 +320,7 @@ class OrdersController extends GetxController {
             'rewardedAt': FieldValue.serverTimestamp(),
             'updatedAt': FieldValue.serverTimestamp(),
           });
-
-          debugPrint(
-            "✅ ADMIN: Order #$orderId DELIVERED and REWARDS DISTRIBUTED instantly!",
-          );
         }
-
         Get.back();
       } else {
         DocumentSnapshot orderDoc = await orderRef.get();
@@ -349,10 +330,9 @@ class OrdersController extends GetxController {
 
         await orderRef.update({
           'status': newStatus,
+          if (reason.isNotEmpty) 'rejectionReason': reason,
           'updatedAt': FieldValue.serverTimestamp(),
         });
-
-        debugPrint("✅ ADMIN: Order #$orderId → $newStatus");
 
         if (userId.isNotEmpty) {
           String title = '';
@@ -372,7 +352,7 @@ class OrdersController extends GetxController {
             case 'rejected':
               title = "Order Rejected ❌";
               body =
-                  "Unfortunately, your order #$orderId has been rejected. Please contact support for assistance.";
+                  "Your order #$orderId has been rejected.\nReason: ${reason.isNotEmpty ? reason : 'Not specified'}\n\nNeed help? Tap the WhatsApp icon on the Home Screen and quote your Order ID.";
               break;
           }
 
@@ -421,20 +401,98 @@ class OrdersController extends GetxController {
     }
   }
 
-  // ════════════════════════════════════════════════════════════════════════════
-  //  INSTANT ATOMIC REWARDS & MLM DISTRIBUTION
-  // ════════════════════════════════════════════════════════════════════════════
+  Future<String?> _findFirstAvailableSpotBFS(String startUid) async {
+    List<String> queue = [startUid];
+    Set<String> visited = {};
+    while (queue.isNotEmpty) {
+      String currentUid = queue.removeAt(0);
+      if (visited.contains(currentUid)) continue;
+      visited.add(currentUid);
+      QuerySnapshot childrenSnap = await _db
+          .collection('users')
+          .doc(currentUid)
+          .collection('mlm_downline')
+          .orderBy('joinedAt', descending: false)
+          .get();
+      if (childrenSnap.docs.length < 7) return currentUid;
+      for (var doc in childrenSnap.docs) {
+        if (!visited.contains(doc.id)) queue.add(doc.id);
+      }
+    }
+    return null;
+  }
+
+  Future<Map<String, dynamic>> _ensureUserInTree(
+    String buyerUid,
+    Map<String, dynamic> buyerData,
+  ) async {
+    String parentUid = buyerData['mlmParentUid'] ?? '';
+    if (parentUid.isNotEmpty && (buyerData['mlmLevel'] ?? -1) != -1) {
+      return buyerData;
+    }
+
+    String referralCode = buyerData['referralCode'] ?? '';
+    if (referralCode.isEmpty) return buyerData;
+
+    QuerySnapshot referrerQuery = await _db
+        .collection('users')
+        .where('myReferralCode', isEqualTo: referralCode)
+        .limit(1)
+        .get();
+
+    if (referrerQuery.docs.isEmpty) return buyerData;
+
+    String referrerUid = referrerQuery.docs.first.id;
+    String? newParentUid = await _findFirstAvailableSpotBFS(referrerUid);
+    if (newParentUid == null) return buyerData;
+
+    DocumentSnapshot parentDoc = await _db
+        .collection('users')
+        .doc(newParentUid)
+        .get();
+    int parentLevel =
+        (parentDoc.data() as Map<String, dynamic>)['mlmLevel'] ?? 0;
+    int newUserLevel = parentLevel + 1;
+
+    await _db
+        .collection('users')
+        .doc(newParentUid)
+        .collection('mlm_downline')
+        .doc(buyerUid)
+        .set({
+          'uid': buyerUid,
+          'name': buyerData['name'] ?? buyerData['username'] ?? 'User',
+          'level': newUserLevel,
+          'joinedAt': FieldValue.serverTimestamp(),
+          'isActive': true,
+        });
+
+    Map<String, dynamic> updates = {
+      'isMLMActive': true,
+      'mlmLevel': newUserLevel,
+      'mlmParentUid': newParentUid,
+      'mlmReferrerUid': referrerUid,
+      'firstSaleDone': true,
+    };
+
+    await _db.collection('users').doc(buyerUid).update(updates);
+
+    Map<String, dynamic> updatedData = Map.from(buyerData);
+    updatedData.addAll(updates);
+    return updatedData;
+  }
+
   Future<bool> _processInstantRewardsAtomically(
     String orderId,
     Map<String, dynamic> orderData,
   ) async {
-    String buyerUid = orderData['userId'] ?? '';
+    // ✅ FIX: .toString().trim() add kiya gaya hai taake kisi surat mein bhi empty error crash na kare
+    String buyerUid = (orderData['userId'] ?? '').toString().trim();
     if (buyerUid.isEmpty) return false;
 
     double grossProfit = (orderData['grossProfit'] ?? 0.0).toDouble();
 
     if (grossProfit <= 0) {
-      debugPrint("⚠️ Order $orderId has 0 gross profit. Skipping rewards.");
       return true;
     }
 
@@ -442,7 +500,15 @@ class OrdersController extends GetxController {
     double totalCompanyShare = 0.0;
 
     try {
-      // 1. Fetch MLM Settings
+      DocumentSnapshot buyerDoc = await _db
+          .collection('users')
+          .doc(buyerUid)
+          .get();
+      if (!buyerDoc.exists) return false;
+      Map<String, dynamic> buyerData = buyerDoc.data() as Map<String, dynamic>;
+
+      buyerData = await _ensureUserInTree(buyerUid, buyerData);
+
       DocumentSnapshot settingsDoc = await _db
           .collection('admin_settings')
           .doc('mlm_variables')
@@ -458,7 +524,17 @@ class OrdersController extends GetxController {
 
       double mlmPool = grossProfit * (mlmDistPercent / 100);
 
-      // ── Points formula from Firebase global_config ──────────────────────
+      QuerySnapshot commSnap = await _db
+          .collection('admin_settings')
+          .doc('mlm_variables')
+          .collection('commission_levels')
+          .get();
+      Map<String, double> commPercentages = {};
+      for (var doc in commSnap.docs) {
+        var d = doc.data() as Map<String, dynamic>;
+        commPercentages[doc.id] = (d['percentage'] ?? 0.0).toDouble();
+      }
+
       double profitPerPoint = 199.0;
       bool showDecimals = false;
       try {
@@ -479,32 +555,17 @@ class OrdersController extends GetxController {
           ? double.parse(rawPoints.toStringAsFixed(2))
           : rawPoints.floor();
 
-      // Fetch Commission Levels
-      QuerySnapshot commSnap = await _db
-          .collection('admin_settings')
-          .doc('mlm_variables')
-          .collection('commission_levels')
-          .get();
-      Map<String, double> commPercentages = {};
-      for (var doc in commSnap.docs) {
-        var d = doc.data() as Map<String, dynamic>;
-        commPercentages[doc.id] = (d['percentage'] ?? 0.0).toDouble();
-      }
-
-      // 2. Fetch Buyer Data
-      DocumentSnapshot buyerDoc = await _db
-          .collection('users')
-          .doc(buyerUid)
-          .get();
-      if (!buyerDoc.exists) return false;
-      Map<String, dynamic> buyerData = buyerDoc.data() as Map<String, dynamic>;
-
       double buyerPoints = (buyerData['totalPoints'] ?? 0.0).toDouble();
       String buyerMemStatus = buyerData['membershipStatus'] ?? 'unpaid';
       String buyerName =
           buyerData['name'] ?? buyerData['username'] ?? 'Customer';
+      String buyerParentUid = (buyerData['mlmParentUid'] ?? '')
+          .toString()
+          .trim();
+      String referrerUid = (buyerData['mlmReferrerUid'] ?? '')
+          .toString()
+          .trim();
 
-      // 3. Calculate Buyer Cashback
       double buyerRankMultiplier = _getRankMultiplier(buyerPoints, settings);
       if (buyerMemStatus == 'approved' && buyerRankMultiplier < 100.0) {
         buyerRankMultiplier += 25.0;
@@ -516,7 +577,6 @@ class OrdersController extends GetxController {
       );
       totalCompanyShare += (maxCashback - finalCashback);
 
-      // Add cashback to Buyer Wallet
       _addWalletTransactionToBatch(
         batch: batch,
         uid: buyerUid,
@@ -533,13 +593,11 @@ class OrdersController extends GetxController {
         },
       );
 
-      // Update Buyer Points
       batch.update(_db.collection('users').doc(buyerUid), {
         'totalPoints': FieldValue.increment(pointsEarned.toDouble()),
         'totalCashbackEarned': FieldValue.increment(finalCashback),
       });
 
-      // ── REWARD NOTIFICATION — detailed with cashback + points ───────────
       final String rankLabel = _rankLabelFromMultiplier(buyerRankMultiplier);
       final String rewardBody =
           'Order #$orderId delivered! 🎉\n'
@@ -562,67 +620,136 @@ class OrdersController extends GetxController {
         },
       );
 
-      // ── REVIEW NOTIFICATION — 3 sec delay outside batch ─────────────────
-      // Sent after batch commit so orderId exists in Firestore
-      Future.delayed(const Duration(seconds: 3), () async {
-        try {
-          await _db
-              .collection('users')
-              .doc(buyerUid)
-              .collection('notifications')
-              .add({
-                'title': 'How was your order? 🌟',
-                'body':
-                    'Please take a moment to review your order #$orderId. Your feedback helps us improve!',
-                'type': 'review',
-                'isRead': false,
-                'timestamp': FieldValue.serverTimestamp(),
-                'data': {
-                  'orderId': orderId,
-                  'showReviewButton': true,
-                  'items': orderData['items'] ?? [],
-                },
-              });
-        } catch (e) {
-          debugPrint('⚠️ Review notification error: $e');
-        }
-      });
-
-      // 4. MLM Upline Distribution
       double poolForUplines = mlmPool - maxCashback;
       double totalBaseUsed = 0.0;
-      String currentParentUid = buyerData['mlmParentUid'] ?? '';
 
-      for (int level = 1; level <= maxLevels; level++) {
-        if (currentParentUid.isEmpty) break;
+      if (referrerUid.isNotEmpty) {
+        double level1Percent = commPercentages['level_1'] ?? 0.0;
+        double refBaseComm = mlmPool * (level1Percent / 100);
 
-        DocumentSnapshot uplineDoc = await _db
+        DocumentSnapshot refDoc = await _db
             .collection('users')
-            .doc(currentParentUid)
+            .doc(referrerUid)
             .get();
-        if (!uplineDoc.exists) break;
+        if (refDoc.exists) {
+          var refData = refDoc.data() as Map<String, dynamic>;
+          bool isRefActive = refData['isMLMActive'] ?? false;
+          String refMemStatus = refData['membershipStatus'] ?? 'unpaid';
+          double refPoints = (refData['totalPoints'] ?? 0.0).toDouble();
 
-        Map<String, dynamic> uplineData =
-            uplineDoc.data() as Map<String, dynamic>;
-        bool isMLMActive = uplineData['isMLMActive'] ?? false;
+          if (isRefActive && level1Percent > 0) {
+            double rankMulti = _getRankMultiplier(refPoints, settings);
+            if (refMemStatus == 'approved' && rankMulti < 100.0)
+              rankMulti += 25.0;
+
+            double finalComm = double.parse(
+              (refBaseComm * (rankMulti / 100)).toStringAsFixed(2),
+            );
+            double companyShare = refBaseComm - finalComm;
+
+            if (finalComm > 0) {
+              _addWalletTransactionToBatch(
+                batch: batch,
+                uid: referrerUid,
+                memStatus: refMemStatus,
+                amount: finalComm,
+                type: 'commission',
+                description:
+                    'Direct Sale Bonus (Level 1) from $buyerName\'s order #$orderId',
+                extraData: {
+                  'orderId': orderId,
+                  'level': 1,
+                  'fromUser': buyerName,
+                  'fromUid': buyerUid,
+                  'rankMultiplier': rankMulti,
+                  'grossProfit': grossProfit,
+                },
+              );
+
+              final String refRankLabel = _rankLabelFromMultiplier(rankMulti);
+              _addNotificationToBatch(
+                batch,
+                referrerUid,
+                "Direct Sale Bonus! 🚀",
+                'Rs.${finalComm.toStringAsFixed(0)} Direct Sale Bonus credited! 💰\nFrom: $buyerName\'s order #$orderId\nRank: $refRankLabel',
+                'finance',
+                {
+                  'orderId': orderId,
+                  'level': 1,
+                  'fromUser': buyerName,
+                  'fromUid': buyerUid,
+                  'amount': finalComm,
+                  'rankMultiplier': rankMulti,
+                },
+              );
+
+              DocumentReference commHistRef = _db
+                  .collection('users')
+                  .doc(referrerUid)
+                  .collection('commission_history')
+                  .doc();
+              batch.set(commHistRef, {
+                'amount': finalComm,
+                'baseAmount': refBaseComm,
+                'rankMultiplier': rankMulti,
+                'level': 1,
+                'fromUser': buyerName,
+                'fromUid': buyerUid,
+                'orderId': orderId,
+                'type': 'direct_sale_bonus',
+                'timestamp': FieldValue.serverTimestamp(),
+              });
+            }
+            totalCompanyShare += companyShare;
+            totalBaseUsed += refBaseComm;
+          }
+        }
+      }
+
+      String currentUplineUid = buyerParentUid.trim();
+
+      if (currentUplineUid.isNotEmpty && currentUplineUid == referrerUid) {
+        DocumentSnapshot tDoc = await _db
+            .collection('users')
+            .doc(currentUplineUid)
+            .get();
+        if (tDoc.exists) {
+          currentUplineUid =
+              (tDoc.data() as Map<String, dynamic>)['mlmParentUid']
+                  ?.toString()
+                  .trim() ??
+              '';
+        } else {
+          currentUplineUid = '';
+        }
+      }
+
+      for (int level = 2; level <= maxLevels; level++) {
+        if (currentUplineUid.isEmpty) break;
+
+        DocumentSnapshot uDoc = await _db
+            .collection('users')
+            .doc(currentUplineUid)
+            .get();
+        if (!uDoc.exists) break;
+
+        Map<String, dynamic> uData = uDoc.data() as Map<String, dynamic>;
+        String nextParent = (uData['mlmParentUid'] ?? '').toString().trim();
+        bool isMLMActive = uData['isMLMActive'] ?? false;
 
         if (!isMLMActive) {
-          currentParentUid = uplineData['mlmParentUid'] ?? '';
+          currentUplineUid = nextParent;
           continue;
         }
 
         double levelPercent = commPercentages['level_$level'] ?? 0.0;
         if (levelPercent > 0) {
           double baseComm = mlmPool * (levelPercent / 100);
-          double uplinePoints = (uplineData['totalPoints'] ?? 0.0).toDouble();
-          String uplineMemStatus = uplineData['membershipStatus'] ?? 'unpaid';
-          String uplineName =
-              uplineData['name'] ?? uplineData['username'] ?? 'User';
+          double uPoints = (uData['totalPoints'] ?? 0.0).toDouble();
+          String uMemStatus = uData['membershipStatus'] ?? 'unpaid';
 
-          double rankMulti = _getRankMultiplier(uplinePoints, settings);
-          if (uplineMemStatus == 'approved' && rankMulti < 100.0) {
-            rankMulti += 25.0;
-          }
+          double rankMulti = _getRankMultiplier(uPoints, settings);
+          if (uMemStatus == 'approved' && rankMulti < 100.0) rankMulti += 25.0;
 
           double finalComm = double.parse(
             (baseComm * (rankMulti / 100)).toStringAsFixed(2),
@@ -633,8 +760,8 @@ class OrdersController extends GetxController {
           if (finalComm > 0) {
             _addWalletTransactionToBatch(
               batch: batch,
-              uid: currentParentUid,
-              memStatus: uplineMemStatus,
+              uid: currentUplineUid,
+              memStatus: uMemStatus,
               amount: finalComm,
               type: 'commission',
               description:
@@ -649,18 +776,12 @@ class OrdersController extends GetxController {
               },
             );
 
-            // ── MLM Commission Notification — detailed ───────────────────
-            final String uplineRankLabel = _rankLabelFromMultiplier(rankMulti);
-            final String commBody =
-                'Rs.${finalComm.toStringAsFixed(0)} commission credited! 💰\n'
-                'Level $level • From: $buyerName\'s order\n'
-                'Order #$orderId • Rank: $uplineRankLabel';
-
+            final String uRankLabel = _rankLabelFromMultiplier(rankMulti);
             _addNotificationToBatch(
               batch,
-              currentParentUid,
+              currentUplineUid,
               "Commission Earned! 💰",
-              commBody,
+              'Rs.${finalComm.toStringAsFixed(0)} commission credited! 💰\nLevel $level • From: $buyerName\'s order\nRank: $uRankLabel',
               'finance',
               {
                 'orderId': orderId,
@@ -671,15 +792,31 @@ class OrdersController extends GetxController {
                 'rankMultiplier': rankMulti,
               },
             );
+
+            DocumentReference commHistRef = _db
+                .collection('users')
+                .doc(currentUplineUid)
+                .collection('commission_history')
+                .doc();
+            batch.set(commHistRef, {
+              'amount': finalComm,
+              'baseAmount': baseComm,
+              'rankMultiplier': rankMulti,
+              'level': level,
+              'fromUser': buyerName,
+              'fromUid': buyerUid,
+              'orderId': orderId,
+              'type': 'downline_purchase',
+              'timestamp': FieldValue.serverTimestamp(),
+            });
           }
         }
-        currentParentUid = uplineData['mlmParentUid'] ?? '';
+        currentUplineUid = nextParent;
       }
 
       double unallocated = poolForUplines - totalBaseUsed;
       if (unallocated > 0) totalCompanyShare += unallocated;
 
-      // 5. Update Company Finances
       if (totalCompanyShare > 0) {
         batch.set(
           _db.collection('company_finances').doc('balance'),
@@ -700,13 +837,70 @@ class OrdersController extends GetxController {
         });
       }
 
-      // 6. Commit batch atomically
+      // ✅ FIX: Process COD Payments to Internal Cash Ledger
+      String paymentMethod = orderData['paymentMethod'] ?? '';
+      double grandTotal =
+          (orderData['grandTotal'] ?? orderData['totalAmount'] ?? 0.0)
+              .toDouble();
+
+      if (paymentMethod == 'Cash on Delivery' && grandTotal > 0) {
+        var sysBankSnap = await _db
+            .collection('company_finances')
+            .doc('main_finances')
+            .collection('banks')
+            .where('isSystem', isEqualTo: true)
+            .limit(1)
+            .get();
+
+        if (sysBankSnap.docs.isNotEmpty) {
+          var sysBank = sysBankSnap.docs.first;
+          batch.update(sysBank.reference, {
+            'balance': FieldValue.increment(grandTotal),
+          });
+
+          DocumentReference txRef = _db
+              .collection('company_finances')
+              .doc('main_finances')
+              .collection('transactions')
+              .doc();
+          batch.set(txRef, {
+            'bankId': sysBank.id,
+            'type': 'in',
+            'amount': grandTotal,
+            'date': FieldValue.serverTimestamp(),
+            'description': 'COD Payment added for Order #$orderId',
+          });
+        }
+      }
+
       await batch.commit();
 
-      // Stock updates (non-critical, outside batch)
+      // ✅ FIX: Moved Review Notification here so it only fires if commit is successful!
+      Future.delayed(const Duration(seconds: 3), () async {
+        try {
+          await _db
+              .collection('users')
+              .doc(buyerUid)
+              .collection('notifications')
+              .add({
+                'title': 'How was your order? 🌟',
+                'body':
+                    'Please take a moment to review your order #$orderId. Your feedback helps us improve!',
+                'type': 'review',
+                'isRead': false,
+                'timestamp': FieldValue.serverTimestamp(),
+                'data': {
+                  'orderId': orderId,
+                  'showReviewButton': true,
+                  'items': orderData['items'] ?? [],
+                },
+              });
+        } catch (e) {}
+      });
+
       final List items = orderData['items'] ?? [];
       for (final item in items) {
-        final pid = item['productId']?.toString() ?? '';
+        final pid = (item['productId'] ?? '').toString().trim();
         if (pid.isNotEmpty) {
           int qty = int.tryParse(item['quantity']?.toString() ?? '1') ?? 1;
           _db
@@ -724,7 +918,6 @@ class OrdersController extends GetxController {
     }
   }
 
-  // ── Helper: rank label from multiplier ────────────────────────────────────
   String _rankLabelFromMultiplier(double m) {
     if (m <= 25) return 'Bronze';
     if (m <= 50) return 'Silver';
@@ -844,13 +1037,10 @@ class OrdersController extends GetxController {
     await updateOrderStage(orderId, 'confirmed');
   }
 
-  Future<void> rejectOrder(String orderId) async {
-    await updateOrderStage(orderId, 'rejected');
+  Future<void> rejectOrder(String orderId, {String reason = ''}) async {
+    await updateOrderStage(orderId, 'rejected', reason: reason);
   }
 
-  // ════════════════════════════════════════════════════════════════════════════
-  //  VENDOR REQUESTS
-  // ════════════════════════════════════════════════════════════════════════════
   Future<void> acceptRequest(String requestId) async {
     try {
       var reqDoc = await _db.collection('vendor_requests').doc(requestId).get();
@@ -914,9 +1104,6 @@ class OrdersController extends GetxController {
     }
   }
 
-  // ════════════════════════════════════════════════════════════════════════════
-  //  WITHDRAWAL — APPROVE
-  // ════════════════════════════════════════════════════════════════════════════
   Future<void> approveWithdrawal({
     required String requestId,
     required String userId,
@@ -1041,9 +1228,6 @@ class OrdersController extends GetxController {
     }
   }
 
-  // ════════════════════════════════════════════════════════════════════════════
-  //  WITHDRAWAL — REJECT
-  // ════════════════════════════════════════════════════════════════════════════
   Future<void> rejectWithdrawal(
     String requestId,
     String userId,
@@ -1120,9 +1304,6 @@ class OrdersController extends GetxController {
     }
   }
 
-  // ════════════════════════════════════════════════════════════════════════════
-  //  DEPOSIT — APPROVE
-  // ════════════════════════════════════════════════════════════════════════════
   Future<void> approveDeposit(String requestId, String userId) async {
     try {
       Get.dialog(
@@ -1229,9 +1410,6 @@ class OrdersController extends GetxController {
     }
   }
 
-  // ════════════════════════════════════════════════════════════════════════════
-  //  DEPOSIT — REJECT
-  // ════════════════════════════════════════════════════════════════════════════
   Future<void> rejectDeposit(
     String requestId,
     String userId,
@@ -1297,9 +1475,6 @@ class OrdersController extends GetxController {
     }
   }
 
-  // ════════════════════════════════════════════════════════════════════════════
-  //  ORDER PAYMENT — APPROVE
-  // ════════════════════════════════════════════════════════════════════════════
   Future<void> approveOrderPayment(String financeId) async {
     try {
       Get.dialog(
@@ -1390,9 +1565,6 @@ class OrdersController extends GetxController {
     }
   }
 
-  // ════════════════════════════════════════════════════════════════════════════
-  //  ORDER PAYMENT — REJECT
-  // ════════════════════════════════════════════════════════════════════════════
   Future<void> rejectOrderPayment(
     String financeId,
     String userId,
@@ -1410,11 +1582,12 @@ class OrdersController extends GetxController {
         'processedAt': FieldValue.serverTimestamp(),
       });
 
+      // ✅ FIX: Added Reference ID (financeId) for customer support
       await _sendNotification(
         userId: userId,
         title: "Payment Rejected ❌",
         body:
-            "Your order payment has been rejected. Reason: $reason. Please contact support or resubmit with correct payment details.",
+            "Your order payment (Ref ID: $financeId) has been rejected.\nReason: $reason\n\nNeed help? Tap the WhatsApp icon on the Home Screen and quote your Ref ID.",
         type: 'order',
       );
 
@@ -1436,9 +1609,6 @@ class OrdersController extends GetxController {
     }
   }
 
-  // ════════════════════════════════════════════════════════════════════════════
-  //  OLD FEE REQUESTS
-  // ════════════════════════════════════════════════════════════════════════════
   Future<void> approveFee(String requestId, String userId) async {
     try {
       await _db.collection('fee_requests').doc(requestId).update({
@@ -1490,9 +1660,6 @@ class OrdersController extends GetxController {
     }
   }
 
-  // ════════════════════════════════════════════════════════════════════════════
-  //  HISTORY
-  // ════════════════════════════════════════════════════════════════════════════
   Future<void> fetchHistory() async {
     try {
       var orderSnap = await _db
@@ -1519,9 +1686,6 @@ class OrdersController extends GetxController {
     }
   }
 
-  // ════════════════════════════════════════════════════════════════════════════
-  //  HELPER: Send notification to customer
-  // ════════════════════════════════════════════════════════════════════════════
   Future<void> _sendNotification({
     required String userId,
     required String title,
