@@ -234,9 +234,21 @@ class AdminAppBar extends StatelessWidget {
                 return const SizedBox.shrink();
               }
 
+              // ✅ FIX: Ab yahan har qisam ki pending requests ka total aayega
               int pendingCount =
-                  ordersController.pendingOrders.length +
-                  ordersController.pendingRequests.length;
+                  ordersController.pendingOrders.length + // COD Orders
+                  ordersController
+                      .orderPaymentRequests
+                      .length + // Online Payments
+                  ordersController
+                      .pendingVendorAccounts
+                      .length + // New Vendor Signups
+                  ordersController
+                      .pendingRequests
+                      .length + // Vendor Product Requests
+                  ordersController.withdrawalRequests.length + // Withdrawals
+                  ordersController.depositRequests.length + // Deposits
+                  ordersController.feeRequests.length; // Old Fees
 
               return Row(
                 mainAxisSize: MainAxisSize.min,
@@ -254,7 +266,7 @@ class AdminAppBar extends StatelessWidget {
                     position: badges.BadgePosition.topEnd(top: -5, end: -2),
                     child: _AppBarIcon(
                       icon: Icons.assignment_late_outlined,
-                      tooltip: "Pending Orders & Requests",
+                      tooltip: "Pending Operations & Requests",
                       onTap: () {
                         Get.to(() => const OrdersDashboardScreen());
                       },
