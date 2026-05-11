@@ -22,11 +22,16 @@ import '../../../finance/screens/taxes_screen.dart';
 import '../../../staff/presentation/add_staff_screen.dart';
 import '../../../staff/presentation/staff_list/staff_list_screen.dart';
 import '../../../user_settings/views/user_settings_screen.dart';
+
+// --- VENDOR IMPORTS ---
+import '../../../vendor_purchase_product/presentation/screens/admin_order_requests_screen.dart';
 import '../../../vendor_purchase_product/presentation/screens/vendor_manage_bills_screen.dart';
 import '../../../vendor_purchase_product/presentation/screens/vendor_purchase_screen.dart';
-
 import '../../../vendor_purchase_product/presentation/screens/vendor_dues_history_screen.dart';
 import '../../../vendor_purchase_product/presentation/screens/vendor_payment_dashboard.dart';
+// ✅ NEW SCREEN IMPORT (Path adjust kar lena agar file kisi aur folder me ho)
+import '../../../vendor_purchase_product/presentation/screens/create_order_request_screen.dart';
+
 import '../../controller/layout_controller.dart';
 import '../../../customers/presentation/screens/login_list_screen.dart';
 
@@ -80,7 +85,21 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
         "Add Product",
         "Pending Requests",
         "Categories",
-        "Vendors",
+      ], // ✅ "Vendors" removed from here
+    ),
+    // ✅ NEW DEDICATED VENDORS MENU ADDED
+    AdminMenuItem(
+      title: "Vendors",
+      icon: Icons.storefront_outlined,
+      hasSubmenu: true,
+      subItems: [
+        "All Vendors",
+        "Create Order Request",
+        "All Order Requests", // ✅ Naya submenu for viewing all order requests
+        "Purchase Products",
+        "Vendor Dues",
+        "Vendor Payment",
+        "Manage Vendor Bills",
       ],
     ),
     AdminMenuItem(
@@ -112,23 +131,16 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
         "User Settings & Permissions",
       ],
     ),
-    AdminMenuItem(
-      title: "Payments",
-      icon: Icons.payments_outlined,
-      hasSubmenu: true,
-      subItems: ["Vendor Payment", "Manage Vendor Bills"],
-    ),
+    // ✅ "Payments" Main Menu was fully moved into Vendors, so it's removed
     AdminMenuItem(
       title: "Finance",
       icon: Icons.monetization_on_outlined,
       hasSubmenu: true,
       subItems: [
-        "Purchase Products",
-        "Vendor Dues",
         "Banks",
         "Expenses",
         "Taxes",
-      ],
+      ], // ✅ Vendor stuff removed from Finance
     ),
     AdminMenuItem(title: "Reports", icon: Icons.bar_chart_outlined),
     AdminMenuItem(title: "Profile", icon: Icons.person_outlined),
@@ -428,8 +440,33 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
                                           const PendingRequestsScreen();
                                     } else if (subItem == "Categories") {
                                       targetScreen = CategoriesScreen();
-                                    } else if (subItem == "Vendors") {
+                                    }
+                                  }
+                                  // ─── VENDORS (✅ NAYA SECTION) ───────────────
+                                  else if (item.title == "Vendors") {
+                                    if (subItem == "All Vendors") {
                                       targetScreen = VendorsListScreen();
+                                    } else if (subItem ==
+                                        "Create Order Request") {
+                                      targetScreen =
+                                          const CreateOrderRequestScreen();
+                                    } else if (subItem ==
+                                        "All Order Requests") {
+                                      targetScreen =
+                                          const AdminOrderRequestsScreen();
+                                    } else if (subItem == "Purchase Products") {
+                                      targetScreen =
+                                          const VendorPurchaseScreen();
+                                    } else if (subItem == "Vendor Dues") {
+                                      targetScreen =
+                                          const VendorPaymentsScreen();
+                                    } else if (subItem == "Vendor Payment") {
+                                      targetScreen =
+                                          const VendorPaymentDashboard();
+                                    } else if (subItem ==
+                                        "Manage Vendor Bills") {
+                                      targetScreen =
+                                          const VendorManageBillsScreen();
                                     }
                                   }
                                   // ─── PACKAGES ──────────────────────────────
@@ -466,26 +503,9 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
                                       targetScreen = UserSettingsScreen();
                                     }
                                   }
-                                  // ─── PAYMENTS ──────────────────────────────
-                                  else if (item.title == "Payments") {
-                                    if (subItem == "Vendor Payment") {
-                                      targetScreen =
-                                          const VendorPaymentDashboard();
-                                    } else if (subItem ==
-                                        "Manage Vendor Bills") {
-                                      targetScreen =
-                                          const VendorManageBillsScreen();
-                                    }
-                                  }
                                   // ─── FINANCE ───────────────────────────────
                                   else if (item.title == "Finance") {
-                                    if (subItem == "Purchase Products") {
-                                      targetScreen =
-                                          const VendorPurchaseScreen();
-                                    } else if (subItem == "Vendor Dues") {
-                                      targetScreen =
-                                          const VendorPaymentsScreen();
-                                    } else if (subItem == "Banks") {
+                                    if (subItem == "Banks") {
                                       targetScreen = BanksScreen();
                                     } else if (subItem == "Expenses") {
                                       targetScreen = ExpensesScreen();

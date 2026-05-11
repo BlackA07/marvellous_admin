@@ -23,8 +23,16 @@ class SearchableSelectionField extends StatefulWidget {
 }
 
 class _SearchableSelectionFieldState extends State<SearchableSelectionField> {
-  // Internal controller ko track karne ke liye taake list se select hone pe update kar sakein
   TextEditingController? _textEditingController;
+
+  // ✅ FIX: Helper to collapse selection after a frame — prevents purple highlight
+  void _collapseSelection(TextEditingController ctrl, String text) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (ctrl.text == text) {
+        ctrl.selection = TextSelection.collapsed(offset: text.length);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +42,7 @@ class _SearchableSelectionFieldState extends State<SearchableSelectionField> {
         Text(
           widget.label,
           style: GoogleFonts.comicNeue(
-            fontWeight: FontWeight.w900, // ✅ Boss Level Bold
+            fontWeight: FontWeight.w900,
             fontSize: 20,
             color: Colors.black,
           ),
@@ -52,11 +60,102 @@ class _SearchableSelectionFieldState extends State<SearchableSelectionField> {
               );
             }).toList()..sort();
           },
-          onSelected: widget.onSelected,
+          onSelected: (selection) {
+            widget.onSelected(selection);
+            // ✅ FIX: Defer collapse so Autocomplete's own selectAll runs first,
+            //         then we immediately collapse — no purple highlight remains.
+            if (_textEditingController != null) {
+              _collapseSelection(_textEditingController!, selection);
+            }
+            FocusManager.instance.primaryFocus?.unfocus();
+          },
+
+          // ✅ Custom Options View — black header + close button, no black box
+          optionsViewBuilder: (context, onSelected, options) {
+            return Align(
+              alignment: Alignment.topLeft,
+              child: Material(
+                elevation: 4.0,
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  width: MediaQuery.of(context).size.width - 40,
+                  constraints: const BoxConstraints(maxHeight: 300),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.black, width: 2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Close button header
+                      Container(
+                        alignment: Alignment.centerRight,
+                        decoration: const BoxDecoration(
+                          color: Colors.black,
+                          border: Border(
+                            bottom: BorderSide(color: Colors.black, width: 1.5),
+                          ),
+                        ),
+                        child: IconButton(
+                          icon: const Icon(
+                            Icons.close,
+                            color: Colors.white,
+                            size: 24,
+                          ),
+                          onPressed: () =>
+                              FocusManager.instance.primaryFocus?.unfocus(),
+                        ),
+                      ),
+                      Flexible(
+                        child: ListView.builder(
+                          padding: EdgeInsets.zero,
+                          shrinkWrap: true,
+                          itemCount: options.length,
+                          itemBuilder: (BuildContext context, int index) {
+                            final String option = options.elementAt(index);
+                            return InkWell(
+                              onTap: () {
+                                onSelected(option);
+                                // ✅ FIX: Collapse after Autocomplete's selectAll
+                                if (_textEditingController != null) {
+                                  _collapseSelection(
+                                    _textEditingController!,
+                                    option,
+                                  );
+                                }
+                                FocusManager.instance.primaryFocus?.unfocus();
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(15),
+                                decoration: const BoxDecoration(
+                                  border: Border(
+                                    bottom: BorderSide(color: Colors.black12),
+                                  ),
+                                ),
+                                child: Text(
+                                  option,
+                                  style: GoogleFonts.comicNeue(
+                                    color: Colors.black,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+
           fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
             _textEditingController = controller;
 
-            // ✅ AUTO-SYNC LOGIC: Jab bhi parent variable change ho, field update ho jaye
             if (widget.selectedValue == null && controller.text.isNotEmpty) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 controller.clear();
@@ -65,6 +164,10 @@ class _SearchableSelectionFieldState extends State<SearchableSelectionField> {
                 controller.text != widget.selectedValue) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 controller.text = widget.selectedValue!;
+                // ✅ FIX: Collapse immediately after assigning text
+                controller.selection = TextSelection.collapsed(
+                  offset: controller.text.length,
+                );
               });
             }
 
@@ -73,7 +176,7 @@ class _SearchableSelectionFieldState extends State<SearchableSelectionField> {
               focusNode: focusNode,
               style: GoogleFonts.comicNeue(
                 color: Colors.black,
-                fontSize: 18, // ✅ BARA FONT
+                fontSize: 18,
                 fontWeight: FontWeight.w900,
               ),
               decoration: InputDecoration(
@@ -102,10 +205,7 @@ class _SearchableSelectionFieldState extends State<SearchableSelectionField> {
                 fillColor: Colors.white,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(
-                    color: Colors.black,
-                    width: 2,
-                  ), // ✅ Dark Border
+                  borderSide: const BorderSide(color: Colors.black, width: 2),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
@@ -113,10 +213,7 @@ class _SearchableSelectionFieldState extends State<SearchableSelectionField> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(
-                    color: Colors.black,
-                    width: 3,
-                  ), // Darker on focus
+                  borderSide: const BorderSide(color: Colors.black, width: 3),
                 ),
               ),
             );
@@ -127,41 +224,65 @@ class _SearchableSelectionFieldState extends State<SearchableSelectionField> {
   }
 
   void _showFullList(BuildContext context) {
-    widget.items.sort();
+    List<String> sortedItems = List.from(widget.items)..sort();
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: Colors.white,
+        contentPadding: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(15),
           side: const BorderSide(color: Colors.black, width: 2),
         ),
-        title: Text(
-          "Select ${widget.label}",
-          style: GoogleFonts.comicNeue(
+        titlePadding: EdgeInsets.zero,
+        title: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+          decoration: const BoxDecoration(
             color: Colors.black,
-            fontWeight: FontWeight.w900,
-            fontSize: 24, // ✅ Bara title
+            borderRadius: BorderRadius.vertical(top: Radius.circular(13)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  "Select ${widget.label.split(':').last.trim()}",
+                  style: GoogleFonts.comicNeue(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 22,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ],
           ),
         ),
         content: SizedBox(
           width: double.maxFinite,
           child: ListView.builder(
             shrinkWrap: true,
-            itemCount: widget.items.length,
+            itemCount: sortedItems.length,
             itemBuilder: (context, i) => ListTile(
               title: Text(
-                widget.items[i],
+                sortedItems[i],
                 style: GoogleFonts.comicNeue(
                   color: Colors.black,
-                  fontSize: 20, // ✅ Bara font
+                  fontSize: 20,
                   fontWeight: FontWeight.bold,
                 ),
               ),
               onTap: () {
-                // ✅ Field Update and Parent Update
-                widget.onSelected(widget.items[i]);
-                _textEditingController?.text = widget.items[i];
+                widget.onSelected(sortedItems[i]);
+                if (_textEditingController != null) {
+                  _textEditingController!.text = sortedItems[i];
+                  // ✅ FIX: Collapse after dialog selection too
+                  _collapseSelection(_textEditingController!, sortedItems[i]);
+                }
+                FocusManager.instance.primaryFocus?.unfocus();
                 Navigator.pop(context);
               },
             ),

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -21,6 +22,16 @@ class _VendorPurchaseScreenState extends State<VendorPurchaseScreen> {
   var tempSelectedProduct = Rxn<Map<String, dynamic>>();
 
   Key _paymentTermsKey = UniqueKey();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (Get.arguments != null && Get.arguments['orderRequest'] != null) {
+        controller.loadOrderRequest(Get.arguments['orderRequest']);
+      }
+    });
+  }
 
   void _resetScreen() {
     qtyCtrl.text = "1";
@@ -84,7 +95,7 @@ class _VendorPurchaseScreenState extends State<VendorPurchaseScreen> {
               style: GoogleFonts.comicNeue(
                 fontSize: 20,
                 fontWeight: FontWeight.w900,
-                color: const Color.fromARGB(255, 255, 255, 255),
+                color: Colors.black,
               ),
             ),
           ],
@@ -113,6 +124,31 @@ class _VendorPurchaseScreenState extends State<VendorPurchaseScreen> {
     );
   }
 
+  // ✅ Safe Base64 Image Builder
+  Widget _buildBase64Image(String? base64String, double size) {
+    if (base64String == null || base64String.isEmpty) {
+      return Icon(Icons.image_not_supported, size: size, color: Colors.grey);
+    }
+    try {
+      String cleanBase64 = base64String.contains(',')
+          ? base64String.split(',').last
+          : base64String;
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.memory(
+          base64Decode(cleanBase64),
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) =>
+              Icon(Icons.broken_image, size: size, color: Colors.grey),
+        ),
+      );
+    } catch (e) {
+      return Icon(Icons.broken_image, size: size, color: Colors.grey);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -131,221 +167,208 @@ class _VendorPurchaseScreenState extends State<VendorPurchaseScreen> {
         centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.black),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ✅ EDITABLE DATE ROW
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  "Bill Date:",
-                  style: GoogleFonts.comicNeue(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 20,
-                    color: Colors.black,
-                  ),
-                ),
-                InkWell(
-                  onTap: () async {
-                    DateTime? picked = await showDatePicker(
-                      context: context,
-                      initialDate: controller.billDate.value,
-                      firstDate: DateTime(2000),
-                      lastDate: DateTime(2100),
-                      builder: (context, child) {
-                        return Theme(
-                          data: ThemeData.light().copyWith(
-                            colorScheme: const ColorScheme.light(
-                              primary: Colors.black,
-                              onPrimary: Colors.white,
-                            ),
-                            textButtonTheme: TextButtonThemeData(
-                              style: TextButton.styleFrom(
-                                foregroundColor: Colors.black,
-                              ),
-                            ),
-                          ),
-                          child: child!,
-                        );
-                      },
-                    );
-                    if (picked != null) {
-                      controller.billDate.value = picked;
-                    }
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 15,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      border: Border.all(color: Colors.black, width: 2),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      children: [
-                        Obx(
-                          () => Text(
-                            DateFormat(
-                              'dd MMMM, yyyy',
-                            ).format(controller.billDate.value),
-                            style: GoogleFonts.comicNeue(
-                              color: Colors.black,
-                              fontWeight: FontWeight.w900,
-                              fontSize: 18,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        const Icon(
-                          Icons.calendar_month,
-                          color: Colors.black,
-                          size: 24,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const Divider(height: 35, color: Colors.black, thickness: 2),
+      body: Obx(() {
+        if (controller.isLoading.value) {
+          return const Center(
+            child: CircularProgressIndicator(color: Colors.black),
+          );
+        }
 
-            Obx(
-              () => SearchableSelectionField(
-                label: "Select Vendor / Store Name",
-                hint: "Search Store or Owner...",
-                selectedValue: controller.selectedVendor.value == null
-                    ? null
-                    : "${controller.selectedVendor.value?['storeName']} (${controller.selectedVendor.value?['ownerName']})",
-                items: controller.vendors
-                    .map((e) => "${e['storeName']} (${e['ownerName']})")
-                    .toList(),
-                onSelected: (val) {
-                  var v = controller.vendors.firstWhere(
-                    (e) => "${e['storeName']} (${e['ownerName']})" == val,
-                  );
-                  controller.setVendor(v);
-                },
-              ),
-            ),
-
-            const SizedBox(height: 30),
-
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border.all(color: Colors.black, width: 2),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ✅ EDITABLE DATE ROW
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    "ADD ITEMS TO BILL",
+                    "Bill Date:",
                     style: GoogleFonts.comicNeue(
-                      fontSize: 22,
                       fontWeight: FontWeight.w900,
+                      fontSize: 20,
                       color: Colors.black,
                     ),
                   ),
-                  const Divider(
-                    color: Colors.black,
-                    height: 25,
-                    thickness: 1.5,
-                  ),
-
-                  Obx(
-                    () => SearchableSelectionField(
-                      label: "Select Product",
-                      hint: "Search Product...",
-                      selectedValue: tempSelectedProduct.value == null
-                          ? null
-                          : "${tempSelectedProduct.value?['name']} - ${tempSelectedProduct.value?['modelNumber']}",
-                      items: controller.products
-                          .map((e) => "${e['name']} - ${e['modelNumber']}")
-                          .toList(),
-                      onSelected: (val) {
-                        var p = controller.products.firstWhere(
-                          (e) => "${e['name']} - ${e['modelNumber']}" == val,
-                        );
-                        tempSelectedProduct.value = p;
-                        priceCtrl.text = p['purchasePrice'].toString();
-                      },
-                    ),
-                  ),
-
-                  const SizedBox(height: 25),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildInput("Quantity", qtyCtrl, isNum: true),
+                  InkWell(
+                    onTap: () async {
+                      DateTime? picked = await showDatePicker(
+                        context: context,
+                        initialDate: controller.billDate.value,
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime(2100),
+                        builder: (context, child) {
+                          return Theme(
+                            data: ThemeData.light().copyWith(
+                              colorScheme: const ColorScheme.light(
+                                primary: Colors.black,
+                                onPrimary: Colors.white,
+                              ),
+                              textButtonTheme: TextButtonThemeData(
+                                style: TextButton.styleFrom(
+                                  foregroundColor: Colors.black,
+                                ),
+                              ),
+                            ),
+                            child: child!,
+                          );
+                        },
+                      );
+                      if (picked != null) {
+                        controller.billDate.value = picked;
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 15,
+                        vertical: 10,
                       ),
-                      const SizedBox(width: 15),
-                      Expanded(
-                        child: _buildInput(
-                          "Purchase Price",
-                          priceCtrl,
-                          isNum: true,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 25),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 55,
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.black,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      onPressed: _addItem,
-                      icon: const Icon(
-                        Icons.add,
+                      decoration: BoxDecoration(
                         color: Colors.white,
-                        size: 28,
+                        border: Border.all(color: Colors.black, width: 2),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      label: Text(
-                        "ADD TO BILL",
-                        style: GoogleFonts.comicNeue(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 18,
-                        ),
+                      child: Row(
+                        children: [
+                          Obx(
+                            () => Text(
+                              DateFormat(
+                                'dd MMMM, yyyy',
+                              ).format(controller.billDate.value),
+                              style: GoogleFonts.comicNeue(
+                                color: Colors.black,
+                                fontWeight: FontWeight.w900,
+                                fontSize: 18,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          const Icon(
+                            Icons.calendar_month,
+                            color: Colors.black,
+                            size: 24,
+                          ),
+                        ],
                       ),
                     ),
                   ),
                 ],
               ),
-            ),
+              const Divider(height: 35, color: Colors.black, thickness: 2),
 
-            const SizedBox(height: 35),
+              Obx(
+                () => SearchableSelectionField(
+                  label: "Select Vendor / Store Name",
+                  hint: "Search Store or Owner...",
+                  selectedValue: controller.selectedVendor.value == null
+                      ? null
+                      : "${controller.selectedVendor.value?['storeName']} (${controller.selectedVendor.value?['ownerName']})",
+                  items: controller.vendors
+                      .map((e) => "${e['storeName']} (${e['ownerName']})")
+                      .toList(),
+                  onSelected: (val) {
+                    var v = controller.vendors.firstWhere(
+                      (e) => "${e['storeName']} (${e['ownerName']})" == val,
+                    );
+                    controller.setVendor(v);
+                  },
+                ),
+              ),
 
-            Obx(() {
-              if (controller.addedItems.isEmpty) return const SizedBox();
-              return Container(
-                width: double.infinity,
+              // ✅ NEW: Vendor Details Table
+              if (controller.selectedVendor.value != null) ...[
+                const SizedBox(height: 15),
+                Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    border: Border.all(color: Colors.black, width: 2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Table(
+                    columnWidths: const {
+                      0: FixedColumnWidth(70),
+                      1: FlexColumnWidth(2),
+                      2: FlexColumnWidth(2),
+                      3: FlexColumnWidth(1.5),
+                    },
+                    border: TableBorder.symmetric(
+                      inside: const BorderSide(color: Colors.black12, width: 1),
+                    ),
+                    children: [
+                      TableRow(
+                        decoration: const BoxDecoration(
+                          color: Colors.black,
+                          borderRadius: BorderRadius.vertical(
+                            top: Radius.circular(6),
+                          ),
+                        ),
+                        children: [
+                          _tableHeaderCell("Image"),
+                          _tableHeaderCell("Store & Owner"),
+                          _tableHeaderCell("Contact"),
+                          _tableHeaderCell("Category"),
+                        ],
+                      ),
+                      TableRow(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: _buildBase64Image(
+                              controller.selectedVendor.value!['profileImage'],
+                              50,
+                            ),
+                          ),
+                          _tableDataCell(
+                            "${controller.selectedVendor.value!['storeName']}\n(${controller.selectedVendor.value!['ownerName']})",
+                            isBold: true,
+                          ),
+                          _tableDataCell(
+                            controller
+                                    .selectedVendor
+                                    .value!['contactPersonPhone'] ??
+                                controller
+                                    .selectedVendor
+                                    .value!['storePhone'] ??
+                                "N/A",
+                          ),
+                          _tableDataCell(
+                            (controller.selectedVendor.value!['categories'] !=
+                                        null &&
+                                    controller
+                                        .selectedVendor
+                                        .value!['categories']
+                                        .isNotEmpty)
+                                ? controller
+                                      .selectedVendor
+                                      .value!['categories'][0]
+                                : "General",
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
+              const SizedBox(height: 30),
+
+              Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.blue.shade900, width: 2.5),
+                  color: Colors.white,
+                  border: Border.all(color: Colors.black, width: 2),
+                  borderRadius: BorderRadius.circular(10),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      "BILL ITEMS",
+                      "ADD ITEMS TO BILL",
                       style: GoogleFonts.comicNeue(
-                        fontWeight: FontWeight.w900,
                         fontSize: 22,
+                        fontWeight: FontWeight.w900,
                         color: Colors.black,
                       ),
                     ),
@@ -354,139 +377,254 @@ class _VendorPurchaseScreenState extends State<VendorPurchaseScreen> {
                       height: 25,
                       thickness: 1.5,
                     ),
-                    ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: controller.addedItems.length,
-                      itemBuilder: (ctx, i) {
-                        var item = controller.addedItems[i];
-                        return ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(
-                            "${item['productName']} (${item['model']})",
+
+                    Obx(
+                      () => SearchableSelectionField(
+                        label: "Select Product",
+                        hint: "Search Product...",
+                        selectedValue: tempSelectedProduct.value == null
+                            ? null
+                            : "${tempSelectedProduct.value?['name']} - ${tempSelectedProduct.value?['modelNumber']}",
+                        items: controller.products
+                            .map((e) => "${e['name']} - ${e['modelNumber']}")
+                            .toList(),
+                        onSelected: (val) {
+                          var p = controller.products.firstWhere(
+                            (e) => "${e['name']} - ${e['modelNumber']}" == val,
+                          );
+                          tempSelectedProduct.value = p;
+                          priceCtrl.text = p['purchasePrice'].toString();
+                        },
+                      ),
+                    ),
+
+                    const SizedBox(height: 25),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildInput("Quantity", qtyCtrl, isNum: true),
+                        ),
+                        const SizedBox(width: 15),
+                        Expanded(
+                          child: _buildInput(
+                            "Purchase Price",
+                            priceCtrl,
+                            isNum: true,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 25),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 55,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.black,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        onPressed: _addItem,
+                        icon: const Icon(
+                          Icons.add,
+                          color: Colors.white,
+                          size: 28,
+                        ),
+                        label: Text(
+                          "ADD TO BILL",
+                          style: GoogleFonts.comicNeue(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 18,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 35),
+
+              Obx(() {
+                if (controller.addedItems.isEmpty) return const SizedBox();
+                return Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.blue.shade900, width: 2.5),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "BILL ITEMS",
+                        style: GoogleFonts.comicNeue(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 22,
+                          color: Colors.black,
+                        ),
+                      ),
+                      const Divider(
+                        color: Colors.black,
+                        height: 25,
+                        thickness: 1.5,
+                      ),
+                      ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: controller.addedItems.length,
+                        itemBuilder: (ctx, i) {
+                          var item = controller.addedItems[i];
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 12.0),
+                            child: Row(
+                              children: [
+                                // ✅ NEW: Product Image in Cart
+                                _buildBase64Image(item['image'], 60),
+                                const SizedBox(width: 15),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        "${item['productName']} (${item['model']})",
+                                        style: GoogleFonts.comicNeue(
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 18,
+                                          color: Colors.black,
+                                        ),
+                                      ),
+                                      Text(
+                                        "${item['quantity']} x PKR ${item['unitPrice']}",
+                                        style: GoogleFonts.comicNeue(
+                                          color: Colors.black87,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      "PKR ${item['totalItemPrice']}",
+                                      style: GoogleFonts.comicNeue(
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 18,
+                                        color: Colors.black,
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.delete,
+                                        color: Colors.red,
+                                        size: 30,
+                                      ),
+                                      onPressed: () =>
+                                          controller.removeItemFromBill(i),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                );
+              }),
+
+              const SizedBox(height: 35),
+
+              Obx(
+                () => Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.green.shade800,
+                      width: 2.5,
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            "Previous Balance:",
                             style: GoogleFonts.comicNeue(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 20,
                               color: Colors.black,
                             ),
                           ),
-                          subtitle: Text(
-                            "${item['quantity']} x PKR ${item['unitPrice']}",
+                          Text(
+                            "PKR ${controller.previousBalance.value.toStringAsFixed(0)}",
                             style: GoogleFonts.comicNeue(
-                              color: Colors.black87,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 22,
+                              color: Colors.red.shade900,
                             ),
                           ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                "PKR ${item['totalItemPrice']}",
-                                style: GoogleFonts.comicNeue(
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 18,
-                                  color: Colors.black,
-                                ),
-                              ),
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.delete,
-                                  color: Colors.red,
-                                  size: 30,
-                                ),
-                                onPressed: () =>
-                                    controller.removeItemFromBill(i),
-                              ),
-                            ],
+                        ],
+                      ),
+                      const Divider(
+                        color: Colors.black,
+                        thickness: 1.5,
+                        height: 30,
+                      ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            "GRAND TOTAL:",
+                            style: GoogleFonts.comicNeue(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 24,
+                              color: Colors.black,
+                            ),
                           ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              );
-            }),
-
-            const SizedBox(height: 35),
-
-            Obx(
-              () => Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.green.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.green.shade800, width: 2.5),
-                ),
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          "Previous Balance:",
-                          style: GoogleFonts.comicNeue(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 20,
-                            color: Colors.black,
+                          Text(
+                            "PKR ${controller.calculateGrandTotal().toStringAsFixed(0)}",
+                            style: GoogleFonts.comicNeue(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 30,
+                              color: Colors.green.shade900,
+                            ),
                           ),
-                        ),
-                        Text(
-                          "PKR ${controller.previousBalance.value.toStringAsFixed(0)}",
-                          style: GoogleFonts.comicNeue(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 22,
-                            color: Colors.red.shade900,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Divider(
-                      color: Colors.black,
-                      thickness: 1.5,
-                      height: 30,
-                    ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          "GRAND TOTAL:",
-                          style: GoogleFonts.comicNeue(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 24,
-                            color: Colors.black,
-                          ),
-                        ),
-                        Text(
-                          "PKR ${controller.calculateGrandTotal().toStringAsFixed(0)}",
-                          style: GoogleFonts.comicNeue(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 30,
-                            color: Colors.green.shade900,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
 
-            const SizedBox(height: 40),
+              const SizedBox(height: 40),
 
-            Obx(
-              () => PaymentTermsSection(
-                key: _paymentTermsKey,
-                totalBill: controller.calculateGrandTotal(),
-                onSaveSuccess: _showSuccessPopup,
+              Obx(
+                () => PaymentTermsSection(
+                  key: _paymentTermsKey,
+                  totalBill: controller.calculateGrandTotal(),
+                  onSaveSuccess: _showSuccessPopup,
+                ),
               ),
-            ),
 
-            const SizedBox(height: 100),
-          ],
-        ),
-      ),
+              const SizedBox(height: 100),
+            ],
+          ),
+        );
+      }),
     );
   }
 
@@ -529,6 +667,37 @@ class _VendorPurchaseScreenState extends State<VendorPurchaseScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  // ── Helper Widgets For Vendor Table ──
+  Widget _tableHeaderCell(String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 5),
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: GoogleFonts.comicNeue(
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
+          fontSize: 14,
+        ),
+      ),
+    );
+  }
+
+  Widget _tableDataCell(String text, {bool isBold = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 5),
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: GoogleFonts.comicNeue(
+          color: Colors.black,
+          fontWeight: isBold ? FontWeight.w900 : FontWeight.bold,
+          fontSize: 13,
+        ),
+      ),
     );
   }
 }

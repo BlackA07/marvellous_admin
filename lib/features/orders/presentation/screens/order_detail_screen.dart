@@ -1,4 +1,5 @@
-import 'dart:convert'; // Zaroori hai Base64 decode ke liye
+// Path: lib/features/orders/presentation/screens/order_detail_screen.dart
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../controllers/orders_controller.dart';
@@ -10,10 +11,8 @@ class OrderDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Controller Find Karen
     final OrdersController controller = Get.find<OrdersController>();
 
-    // Responsive Helper
     double titleSize = MediaQuery.of(context).size.width > 600 ? 24 : 18;
     double bodySize = MediaQuery.of(context).size.width > 600 ? 16 : 14;
 
@@ -48,7 +47,6 @@ class OrderDetailScreen extends StatelessWidget {
                           radius: 30,
                           backgroundColor: Colors.grey[200],
                           child: ClipOval(
-                            // Customer Image Logic
                             child: _buildImageWidget(
                               order.customerImage,
                               isAvatar: true,
@@ -103,7 +101,9 @@ class OrderDetailScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      "Product Details",
+                      order.items.isNotEmpty
+                          ? "Order Items (${order.items.length})"
+                          : "Product Details",
                       style: TextStyle(
                         fontSize: titleSize,
                         fontWeight: FontWeight.bold,
@@ -113,27 +113,96 @@ class OrderDetailScreen extends StatelessWidget {
                     const Divider(),
                     const SizedBox(height: 10),
 
-                    // Product Image (Fixed Logic)
-                    Center(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: Container(
-                          height: 200,
-                          width: double.infinity,
-                          color: Colors.grey[200],
-                          child: _buildImageWidget(order.productImage),
+                    // ✅ FIX: Multiple Items List View
+                    if (order.items.isNotEmpty) ...[
+                      ...order.items.map((item) {
+                        String img =
+                            item['image'] ?? item['productImage'] ?? '';
+                        String name =
+                            item['name'] ?? item['productName'] ?? 'Unknown';
+                        int qty =
+                            int.tryParse(item['quantity']?.toString() ?? '1') ??
+                            1;
+                        double sp =
+                            double.tryParse(
+                              item['salePrice']?.toString() ?? '0',
+                            ) ??
+                            0.0;
+
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 15),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Container(
+                                  height: 60,
+                                  width: 60,
+                                  color: Colors.grey[200],
+                                  child: _buildImageWidget(img),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      name,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: bodySize - 1,
+                                      ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      "Qty: $qty  •  Rs. ${sp.toStringAsFixed(0)}",
+                                      style: TextStyle(
+                                        color: Colors.grey[600],
+                                        fontSize: bodySize - 2,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Text(
+                                "Rs. ${(sp * qty).toStringAsFixed(0)}",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: bodySize - 1,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ] else ...[
+                      // Fallback for older orders without items array
+                      Center(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            height: 200,
+                            width: double.infinity,
+                            color: Colors.grey[200],
+                            child: _buildImageWidget(order.productImage),
+                          ),
                         ),
                       ),
-                    ),
+                      const SizedBox(height: 15),
+                      _buildDetailRow(
+                        "Product Name",
+                        order.productName,
+                        bodySize,
+                      ),
+                    ],
 
-                    const SizedBox(height: 15),
+                    const Divider(),
                     _buildDetailRow(
-                      "Product Name",
-                      order.productName,
-                      bodySize,
-                    ),
-                    _buildDetailRow(
-                      "Price",
+                      "Grand Total",
                       "PKR ${order.price.toStringAsFixed(0)}",
                       bodySize,
                     ),
@@ -221,7 +290,6 @@ class OrderDetailScreen extends StatelessWidget {
     );
   }
 
-  // Smart Image Builder (Handles Base64 & URL)
   Widget _buildImageWidget(String data, {bool isAvatar = false}) {
     if (data.isEmpty) {
       return Icon(
@@ -232,7 +300,6 @@ class OrderDetailScreen extends StatelessWidget {
     }
 
     try {
-      // 1. Check if it's a URL
       if (data.startsWith('http')) {
         return Image.network(
           data,
@@ -253,9 +320,8 @@ class OrderDetailScreen extends StatelessWidget {
         );
       }
 
-      // 2. Assume Base64 String
       return Image.memory(
-        base64Decode(data),
+        base64Decode(data.contains(',') ? data.split(',').last : data),
         fit: BoxFit.cover,
         width: double.infinity,
         height: double.infinity,

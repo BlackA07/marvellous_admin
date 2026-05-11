@@ -495,8 +495,6 @@ class OrdersController extends GetxController {
               .toDouble();
 
       if (paymentMethod == 'Cash on Delivery' && grandTotal > 0) {
-        // ✅ FIX: isSystem:true pe multiple banks match ho sakte hain (e.g. internal payment bank bhi isSystem:true ho sakta hai)
-        // Isliye pehle name:'Cash' se dhundho, agar na mile to isSystem:true fallback
         var banksRef = _db
             .collection('company_finances')
             .doc('main_finances')
@@ -504,7 +502,6 @@ class OrdersController extends GetxController {
 
         DocumentSnapshot? codBank;
 
-        // Priority 1: name == 'Cash' wala bank
         try {
           var cashSnap = await banksRef
               .where('name', isEqualTo: 'Cash')
@@ -515,7 +512,6 @@ class OrdersController extends GetxController {
           }
         } catch (_) {}
 
-        // Priority 2: agar 'Cash' naam se nahi mila to isSystem:true wala
         if (codBank == null) {
           try {
             var sysSnap = await banksRef
@@ -632,14 +628,13 @@ class OrdersController extends GetxController {
       );
       totalCompanyShare += (maxCashback - finalCashback);
 
-      // ✅ FIX: Cashback for Buyer — pass isCashback: true so totalCashbackEarned updates
       await _addWalletTransactionToBatch(
         batch: batch,
         uid: buyerUid,
         memStatus: buyerMemStatus,
         amount: finalCashback,
         type: 'cashback',
-        isCashback: true, // ✅ NEW FLAG
+        isCashback: true,
         description: 'Order cashback #$orderId',
         extraData: {
           'orderId': orderId,
@@ -676,10 +671,32 @@ class OrdersController extends GetxController {
         },
       );
 
+      // ✅ FIX 1: Admin app will now send SEPARATE Review notifications for each item
+      final List items = orderData['items'] ?? [];
+      for (var rawItem in items) {
+        final itemMap = Map<String, dynamic>.from(rawItem as Map);
+        final pid = itemMap['productId']?.toString() ?? '';
+        final pName = itemMap['name']?.toString() ?? 'Product';
+
+        if (pid.isNotEmpty) {
+          _addNotificationToBatch(
+            batch,
+            buyerUid,
+            'How was your $pName? 🌟',
+            'Please take a moment to review $pName. Your feedback helps us improve!',
+            'review',
+            {
+              'orderId': orderId,
+              'showReviewButton': true,
+              'items': [itemMap], // Individual item for review
+            },
+          );
+        }
+      }
+
       double poolForUplines = mlmPool - maxCashback;
       double totalBaseUsed = 0.0;
 
-      // 1. Direct Sale Bonus to Referrer (Level 1)
       if (referrerUid.isNotEmpty) {
         double level1Percent = commPercentages['level_1'] ?? 0.0;
         double refBaseComm = mlmPool * (level1Percent / 100);
@@ -751,6 +768,7 @@ class OrdersController extends GetxController {
                 'baseAmount': refBaseComm,
                 'rankMultiplier': rankMulti,
                 'level': 1,
+                'depth': 1, // Physical depth added
                 'fromUser': buyerName,
                 'fromUid': buyerUid,
                 'orderId': orderId,
@@ -764,8 +782,8 @@ class OrdersController extends GetxController {
         }
       }
 
-      // 2. Upline Chain logic (Level 2 to 13)
       String currentUplineUid = buyerParentUid.trim();
+      int physicalDepth = 1; // Used to track exact depth for accurate UI boxes
 
       for (int level = 2; level <= maxLevels; level++) {
         if (currentUplineUid.isEmpty) break;
@@ -779,23 +797,24 @@ class OrdersController extends GetxController {
         Map<String, dynamic> uData = uDoc.data() as Map<String, dynamic>;
         String nextParent = (uData['mlmParentUid'] ?? '').toString().trim();
 
-        // ✅ BUG FIX: Skip Referrer in the chain to prevent Double Commission
         if (currentUplineUid == referrerUid) {
           double levelPercent = commPercentages['level_$level'] ?? 0.0;
           if (levelPercent > 0) {
             double baseComm = mlmPool * (levelPercent / 100);
             if (baseComm > 0) {
-              totalCompanyShare += baseComm; // Divert to company
+              totalCompanyShare += baseComm;
               totalBaseUsed += baseComm;
             }
           }
           currentUplineUid = nextParent;
-          continue; // Go to next level
+          physicalDepth++;
+          continue;
         }
 
         bool isMLMActive = uData['isMLMActive'] ?? false;
         if (!isMLMActive) {
           currentUplineUid = nextParent;
+          physicalDepth++;
           continue;
         }
 
@@ -860,7 +879,8 @@ class OrdersController extends GetxController {
               'amount': finalComm,
               'baseAmount': baseComm,
               'rankMultiplier': rankMulti,
-              'level': level,
+              'level': level, // Matrix table level
+              'depth': physicalDepth, // Physical UI box depth
               'fromUser': buyerName,
               'fromUid': buyerUid,
               'orderId': orderId,
@@ -870,6 +890,7 @@ class OrdersController extends GetxController {
           }
         }
         currentUplineUid = nextParent;
+        physicalDepth++;
       }
 
       double unallocated = poolForUplines - totalBaseUsed;
@@ -897,29 +918,6 @@ class OrdersController extends GetxController {
 
       await batch.commit();
 
-      Future.delayed(const Duration(seconds: 3), () async {
-        try {
-          await _db
-              .collection('users')
-              .doc(buyerUid)
-              .collection('notifications')
-              .add({
-                'title': 'How was your order? 🌟',
-                'body':
-                    'Please take a moment to review your order #$orderId. Your feedback helps us improve!',
-                'type': 'review',
-                'isRead': false,
-                'timestamp': FieldValue.serverTimestamp(),
-                'data': {
-                  'orderId': orderId,
-                  'showReviewButton': true,
-                  'items': orderData['items'] ?? [],
-                },
-              });
-        } catch (e) {}
-      });
-
-      final List items = orderData['items'] ?? [];
       for (final item in items) {
         final pid = (item['productId'] ?? '').toString().trim();
         if (pid.isNotEmpty) {
@@ -956,14 +954,13 @@ class OrdersController extends GetxController {
     return 100.0;
   }
 
-  // ✅ FIXED: Added isCashback parameter to properly update totalCashbackEarned in Firestore
   Future<void> _addWalletTransactionToBatch({
     required WriteBatch batch,
     required String uid,
     required String memStatus,
     required double amount,
     required String type,
-    required bool isCashback, // ✅ NEW PARAM
+    required bool isCashback,
     required String description,
     required Map<String, dynamic> extraData,
   }) async {
@@ -974,7 +971,6 @@ class OrdersController extends GetxController {
     double newRemaining = 0.0;
     bool isDone = false;
 
-    // 1. Check for Active Sponsor Lock
     try {
       var lockSnap = await _db
           .collection('sponsor_locks')
@@ -1013,7 +1009,6 @@ class OrdersController extends GetxController {
               isDone = newRemaining <= 0;
               String userName = lockData['userName'] ?? 'User';
 
-              // Update Sponsor Lock
               batch.update(lockDoc.reference, {
                 'given': newGiven,
                 'remaining': newRemaining,
@@ -1021,13 +1016,11 @@ class OrdersController extends GetxController {
                 if (isDone) 'completedAt': FieldValue.serverTimestamp(),
               });
 
-              // Give money to Sponsor
               batch.update(_db.collection('users').doc(sponsorUidVal), {
                 'walletBalance': FieldValue.increment(actualDeduction),
                 'totalCommissionEarned': FieldValue.increment(actualDeduction),
               });
 
-              // Add Wallet History for SPONSORED USER (Debit)
               DocumentReference spUserHist = _db
                   .collection('users')
                   .doc(uid)
@@ -1047,7 +1040,6 @@ class OrdersController extends GetxController {
                 'timestamp': FieldValue.serverTimestamp(),
               });
 
-              // Add Wallet History for SPONSOR (Credit)
               DocumentReference spHist = _db
                   .collection('users')
                   .doc(sponsorUidVal)
@@ -1067,7 +1059,6 @@ class OrdersController extends GetxController {
                 'timestamp': FieldValue.serverTimestamp(),
               });
 
-              // Update Sponsor's subcollection
               DocumentReference sponsoredSubRef = _db
                   .collection('users')
                   .doc(sponsorUidVal)
@@ -1080,7 +1071,6 @@ class OrdersController extends GetxController {
                 if (isDone) 'completedAt': FieldValue.serverTimestamp(),
               }, SetOptions(merge: true));
 
-              // Sponsor Notification
               _addNotificationToBatch(
                 batch,
                 sponsorUidVal,
@@ -1090,7 +1080,6 @@ class OrdersController extends GetxController {
                 {},
               );
 
-              // User Notification
               _addNotificationToBatch(
                 batch,
                 uid,
@@ -1102,7 +1091,6 @@ class OrdersController extends GetxController {
             }
           }
         } else {
-          // Fix stray active locks
           batch.update(lockDoc.reference, {'active': false});
         }
       }
@@ -1110,7 +1098,6 @@ class OrdersController extends GetxController {
       debugPrint("❌ Admin Sponsor Deduction Error: $e");
     }
 
-    // 2. High Earner Milestone Lock Deduction (Priority 2)
     double afterSponsor = amount - actualDeduction;
     if (afterSponsor < 0) afterSponsor = 0;
 
@@ -1165,8 +1152,7 @@ class OrdersController extends GetxController {
           isHeActive = true;
           heTarget = hDeduction;
           heGiven = 0.0;
-          heEarningsSince =
-              heEarningsSince - hThreshold; // Track overflow safely
+          heEarningsSince = heEarningsSince - hThreshold;
         }
       }
 
@@ -1180,7 +1166,7 @@ class OrdersController extends GetxController {
 
         heGiven += heDeductedAmount;
         if (heGiven >= heTarget) {
-          isHeActive = false; // Milestone Complete
+          isHeActive = false;
         }
       }
 
@@ -1190,7 +1176,6 @@ class OrdersController extends GetxController {
       heLock['earningsSinceLastLock'] = heEarningsSince;
     }
 
-    // 3. Finalize Remaining User Amount
     double netAmount = afterSponsor - heDeductedAmount;
     if (netAmount < 0) netAmount = 0;
 
@@ -1202,14 +1187,10 @@ class OrdersController extends GetxController {
       toMain = double.parse((netAmount - toShopping).toStringAsFixed(2));
     }
 
-    // 4. User Document Bulk Update
-    // ✅ FIX: Agar ye cashback hai to totalCashbackEarned bhi increment karo
-    //         Taake finance screen aur customer detail screen mein sahi value dikhe
     Map<String, dynamic> userUpdates = {
       'totalCommissionEarned': FieldValue.increment(amount),
     };
 
-    // ✅ KEY FIX: cashback ke liye totalCashbackEarned field update karo
     if (isCashback) {
       userUpdates['totalCashbackEarned'] = FieldValue.increment(amount);
     }
@@ -1231,7 +1212,6 @@ class OrdersController extends GetxController {
       batch.update(_db.collection('users').doc(uid), userUpdates);
     }
 
-    // 5. Save Company Income (High Earner Lock)
     if (heDeductedAmount > 0) {
       batch.set(_db.collection('company_finances').doc('balance'), {
         'totalCompanyBalance': FieldValue.increment(heDeductedAmount),
@@ -1263,7 +1243,6 @@ class OrdersController extends GetxController {
       });
     }
 
-    // 6. Update History Logs with Details
     String finalDescription = description;
     if (actualDeduction > 0) {
       finalDescription +=

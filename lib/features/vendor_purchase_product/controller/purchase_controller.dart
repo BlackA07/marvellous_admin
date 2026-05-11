@@ -8,19 +8,16 @@ import '../repository/purchase_repository.dart';
 
 class PurchaseController extends GetxController {
   final PurchaseRepository _repo = PurchaseRepository();
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   var isLoading = false.obs;
   var vendors = [].obs;
   var products = [].obs;
 
-  // Form State
   var selectedVendor = Rxn<Map<String, dynamic>>();
   var previousBalance = 0.0.obs;
   var installmentChart = <Map<String, dynamic>>[].obs;
-
   var billDate = DateTime.now().obs;
-
-  // Cart for multiple items
   var addedItems = <Map<String, dynamic>>[].obs;
 
   @override
@@ -50,13 +47,78 @@ class PurchaseController extends GetxController {
     previousBalance.value = (vendor['beginningBalance'] ?? 0.0).toDouble();
   }
 
-  // ITEM MANAGEMENT METHODS
+  Future<void> loadOrderRequest(Map<String, dynamic> requestData) async {
+    isLoading.value = true;
+    clearData();
+
+    try {
+      var vDoc = await _db
+          .collection('vendors')
+          .doc(requestData['vendorId'])
+          .get();
+      if (vDoc.exists) {
+        setVendor({'id': vDoc.id, ...vDoc.data() as Map<String, dynamic>});
+      }
+
+      List reqItems = requestData['items'] ?? [];
+      for (var item in reqItems) {
+        if (item['isAvailable'] != false) {
+          int qty = item['requestQty'] ?? 1;
+          double price = (item['purchasePrice'] ?? 0).toDouble();
+
+          String prodImg = item['image'] ?? '';
+          if (prodImg.isEmpty) {
+            try {
+              var pDoc = await _db
+                  .collection('products')
+                  .doc(item['productId'])
+                  .get();
+              if (pDoc.exists) {
+                var pData = pDoc.data() as Map<String, dynamic>;
+                if (pData['images'] != null &&
+                    (pData['images'] as List).isNotEmpty) {
+                  prodImg = pData['images'][0];
+                }
+              }
+            } catch (e) {}
+          }
+
+          addedItems.add({
+            'productId': item['productId'],
+            'productName': item['productName'],
+            'brand': item['brand'] ?? 'N/A',
+            'model': item['model'] ?? 'N/A',
+            'image': prodImg,
+            'quantity': qty,
+            'unitPrice': price,
+            'totalItemPrice': qty * price,
+          });
+        }
+      }
+    } catch (e) {
+      Get.snackbar(
+        "Error",
+        "Could not load order request: $e",
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
+
+    isLoading.value = false;
+  }
+
   void addItemToBill(Map<String, dynamic> product, int qty, double price) {
+    String prodImg = '';
+    if (product['images'] != null && (product['images'] as List).isNotEmpty) {
+      prodImg = product['images'][0];
+    }
+
     addedItems.add({
       'productId': product['id'],
       'productName': product['name'],
       'brand': product['brand'],
       'model': product['modelNumber'],
+      'image': prodImg,
       'quantity': qty,
       'unitPrice': price,
       'totalItemPrice': qty * price,
@@ -83,29 +145,34 @@ class PurchaseController extends GetxController {
     installmentChart.clear();
   }
 
-  // BILL NUMBER GENERATOR
   String _generateBillNumber(String paymentMode, String? creditType) {
     String prefix = 'B';
-    if (paymentMode == 'Cash')
-      prefix = 'C';
-    else if (paymentMode == 'Both')
-      prefix = 'M';
-    else if (paymentMode == 'Credit') {
+    if (paymentMode == 'Cash') {
+      prefix = 'CA';
+    } else if (paymentMode == 'Both') {
+      if (creditType == 'Daily')
+        prefix = 'BD';
+      else if (creditType == 'Weekly')
+        prefix = 'BW';
+      else if (creditType == 'Monthly')
+        prefix = 'BM';
+      else
+        prefix = 'BC';
+    } else if (paymentMode == 'Credit') {
       if (creditType == 'Daily')
         prefix = 'D';
       else if (creditType == 'Weekly')
         prefix = 'W';
       else if (creditType == 'Monthly')
-        prefix = 'MO';
+        prefix = 'M';
       else
-        prefix = 'CR'; // Custom
+        prefix = 'C';
     }
 
     int randomNum = Random().nextInt(9000) + 1000;
     return "$prefix-$randomNum";
   }
 
-  // Chart Generation Logic
   void generatePreviewChart({
     required double currentBill,
     required double firstPaymentAmount,
@@ -170,7 +237,6 @@ class PurchaseController extends GetxController {
     }
   }
 
-  // REAL SAVE LOGIC
   Future<bool> submitTransaction({
     required double totalBill,
     required String paymentMode,
@@ -181,7 +247,13 @@ class PurchaseController extends GetxController {
     required double firstPaymentAmount,
     required DateTime? startingDate,
     required double perInstallmentAmount,
-    int? customDaysLimit, // ✅ NAYA
+    int? customDaysLimit,
+    required String transactionMode,
+    String? bankId,
+    String? bankName,
+    String? screenshotBase64,
+    String? chequeNumber,
+    DateTime? chequeDate,
   }) async {
     if (selectedVendor.value == null || addedItems.isEmpty) {
       Get.snackbar(
@@ -215,13 +287,61 @@ class PurchaseController extends GetxController {
         firstPaymentDate: firstPaymentDate,
         startingDate: startingDate,
         perInstallmentAmount: perInstallmentAmount,
-        customDaysLimit: customDaysLimit, // ✅ NAYA
+        customDaysLimit: customDaysLimit,
       );
 
       List<Map<String, dynamic>> realSchedule = [];
 
-      if (paymentMode == "Credit" || paymentMode == "Both") {
-        // Save First Payment explicitly for Custom too
+      Future<void> _recordPaymentHistory(
+        String docIdNote,
+        DateTime payDate,
+        double amt,
+        String noteText,
+      ) async {
+        var historyData = {
+          'vendorId': selectedVendor.value!['id'],
+          'vendorName':
+              "${selectedVendor.value!['storeName']} (${selectedVendor.value!['ownerName']})",
+          'dueDocId': docIdNote,
+          'billNumber': generatedBillNumber,
+          'paidAmount': amt,
+          'paymentDate': Timestamp.fromDate(payDate),
+          'paymentMode': transactionMode,
+          'note': noteText,
+          'createdAt': Timestamp.now(),
+        };
+
+        if (transactionMode == 'Bank Transfer') {
+          historyData['bankId'] = bankId ?? '';
+          historyData['bankName'] = bankName ?? '';
+          historyData['screenshot'] = screenshotBase64 ?? '';
+        } else if (transactionMode == 'Cheque') {
+          historyData['chequeNumber'] = chequeNumber ?? '';
+          historyData['chequeDate'] = chequeDate != null
+              ? Timestamp.fromDate(chequeDate)
+              : null;
+        }
+
+        await _db.collection('vendor_payment_history').add(historyData);
+      }
+
+      if (paymentMode == "Cash") {
+        realSchedule.add({
+          'dueDate': Timestamp.fromDate(billDate.value),
+          'amountDue': totalBill,
+          'note': 'Cash Payment Full',
+          'billNumber': generatedBillNumber,
+          'isPaid': true,
+          'paidAmount': cashPaid,
+        });
+
+        await _recordPaymentHistory(
+          'CASH_PAYMENT',
+          billDate.value,
+          cashPaid,
+          'Cash Payment Full for Bill #$generatedBillNumber',
+        );
+      } else if (paymentMode == "Credit" || paymentMode == "Both") {
         double scheduleRemaining = remainingForThisBill;
         if (firstPaymentAmount > 0 && firstPaymentDate != null) {
           scheduleRemaining -= firstPaymentAmount;
@@ -230,9 +350,18 @@ class PurchaseController extends GetxController {
             'amountDue': firstPaymentAmount,
             'note': 'First/Advance Payment',
             'billNumber': generatedBillNumber,
-            'isPaid': false, // Add this for consistency
+            'isPaid': false,
             'paidAmount': 0.0,
           });
+
+          if (cashPaid > 0) {
+            await _recordPaymentHistory(
+              'ADVANCE_PAYMENT',
+              firstPaymentDate,
+              cashPaid,
+              'Advance Payment for Bill #$generatedBillNumber',
+            );
+          }
         }
 
         if (creditType != "Custom") {
@@ -280,6 +409,44 @@ class PurchaseController extends GetxController {
       }
 
       await _repo.savePurchase(newPurchase, realSchedule);
+
+      // ✅ FIX: BANK AND CASH DEDUCTION LOGIC
+      if (cashPaid > 0) {
+        if (transactionMode == 'Bank Transfer' &&
+            bankId != null &&
+            bankId.isNotEmpty) {
+          DocumentReference bankRef = _db
+              .collection('company_finances')
+              .doc('main_finances')
+              .collection('banks')
+              .doc(bankId);
+          await bankRef.update({'balance': FieldValue.increment(-cashPaid)});
+        } else if (transactionMode == 'Cash') {
+          // Cash bank se deduct karo jahan name 'Cash' ho
+          var cashBankQuery = await _db
+              .collection('company_finances')
+              .doc('main_finances')
+              .collection('banks')
+              .where('bankName', isEqualTo: 'Cash')
+              .limit(1)
+              .get();
+          if (cashBankQuery.docs.isNotEmpty) {
+            await cashBankQuery.docs.first.reference.update({
+              'balance': FieldValue.increment(-cashPaid),
+            });
+          }
+        }
+      }
+
+      if (Get.arguments != null && Get.arguments['orderRequest'] != null) {
+        String reqId = Get.arguments['orderRequest']['requestId'];
+        if (reqId.isNotEmpty) {
+          await _db.collection('order_requests').doc(reqId).update({
+            'status': 'completed',
+          });
+        }
+      }
+
       isLoading.value = false;
       return true;
     } catch (e) {
