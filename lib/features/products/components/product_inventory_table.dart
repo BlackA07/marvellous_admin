@@ -38,6 +38,8 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
   bool ascending = true;
   int? sortColumnIndex;
 
+  int inOutSortState = 0;
+
   // --- PAGINATION STATE ---
   int _currentPage = 1;
   final int _itemsPerPage = 11;
@@ -80,6 +82,7 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
     int columnIndex,
   ) {
     setState(() {
+      inOutSortState = 0; // ✅ Reset In/Out state when other columns are clicked
       if (sortColumnIndex == columnIndex) {
         ascending = !ascending;
       } else {
@@ -93,6 +96,38 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
             ? Comparable.compare(aValue, bValue)
             : Comparable.compare(bValue, aValue);
       });
+    });
+  }
+
+  // ✅ NEW: Custom Sort for In/Out Column (Only Descending Toggle)
+  void _sortInOut(int columnIndex) {
+    setState(() {
+      sortColumnIndex = columnIndex;
+      ascending = false; // Always show descending arrow for this logic
+
+      if (inOutSortState == 0 || inOutSortState == 2) {
+        inOutSortState = 1; // Sort by IN Descending
+        widget.filteredList.sort(
+          (a, b) => b.stockQuantity.compareTo(a.stockQuantity),
+        );
+        Get.snackbar(
+          "Sorting Applied",
+          "Sorted by IN (Available Stock) - Highest to Lowest",
+          backgroundColor: Colors.blueAccent,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 1),
+        );
+      } else {
+        inOutSortState = 2; // Sort by OUT Descending
+        widget.filteredList.sort((a, b) => b.stockOut.compareTo(a.stockOut));
+        Get.snackbar(
+          "Sorting Applied",
+          "Sorted by OUT (Sold Stock) - Highest to Lowest",
+          backgroundColor: Colors.orangeAccent,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 1),
+        );
+      }
     });
   }
 
@@ -543,8 +578,8 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                                         textColor,
                                         _fontSize,
                                       ),
-                                      onSort: (index, _) =>
-                                          _sort((p) => p.stockQuantity, index),
+                                      // ✅ FIX: Call our custom sorting function
+                                      onSort: (index, _) => _sortInOut(index),
                                     ),
                                     DataColumn(
                                       label: _tableHeader(
@@ -620,6 +655,7 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                                           ),
                                         ),
                                         // --- PRODUCT NAME & MODEL NUMBER ---
+                                        // --- PRODUCT NAME & MODEL NUMBER ---
                                         DataCell(
                                           Row(
                                             mainAxisSize: MainAxisSize.min,
@@ -682,6 +718,21 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                                                                   _fontSize - 2,
                                                             ),
                                                       ),
+                                                    // ✅ NEW: Product ID Added Here
+                                                    Text(
+                                                      "ID: ${product.id ?? 'Unknown'}",
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style: GoogleFonts.comicNeue(
+                                                        color: Colors
+                                                            .black87, // Dark and visible
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        fontSize:
+                                                            _fontSize -
+                                                            3, // Slightly smaller than model number
+                                                      ),
+                                                    ),
                                                   ],
                                                 ),
                                               ),

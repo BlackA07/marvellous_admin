@@ -356,7 +356,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
         if (snapshot.hasData && snapshot.data!.exists) {
           final data = snapshot.data!.data() as Map<String, dynamic>;
-          // ✅ FIX: Safe parsing using tryParse in case value was saved as string
           profitPerPoint =
               double.tryParse(data['profitPerPoint']?.toString() ?? '100.0') ??
               100.0;
@@ -374,12 +373,41 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           calculatedPoints = grossProfit / profitPerPoint;
         }
 
-        // ✅ EXACT TRUNCATION applied here
         String displayPoints = formatTruncated(calculatedPoints, showDecimals);
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ✅ NEW: Firestore Product ID (UID) Badge Added Here
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              margin: const EdgeInsets.only(bottom: 15),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white24),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.fingerprint,
+                    color: Colors.cyanAccent,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    "Product ID: ${widget.product.id ?? 'Unknown'}",
+                    style: GoogleFonts.comicNeue(
+                      color: Colors.white70,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.1,
+                    ),
+                  ),
+                ],
+              ),
+            ),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
