@@ -27,7 +27,7 @@ class AddStaffController extends GetxController {
   final RxDouble locationLng = 0.0.obs;
 
   // --- Employment ---
-  final RxString employmentType = 'salary'.obs; // salary, commission, both
+  final RxString employmentType = 'salary'.obs;
 
   // --- Salary ---
   final salaryController = TextEditingController();
@@ -86,17 +86,14 @@ class AddStaffController extends GetxController {
   void onInit() {
     super.onInit();
 
-    // Initialize & listen to Bonus changes
     _initBonusPayDates();
     ever(bonusYearlyCount, (_) => _initBonusPayDates());
     ever(bonusType, (_) => _calculateBonus());
     salaryController.addListener(_calculateBonus);
 
-    // Listen to Fuel changes
     petrolRateCtrl.addListener(_calculateFuel);
     avgRunningCtrl.addListener(_calculateFuel);
 
-    // Listen to Timing changes
     ever(onTimeHour, (_) => _calculateTotalHours());
     ever(onTimeMinute, (_) => _calculateTotalHours());
     ever(onTimePeriod, (_) => _calculateTotalHours());
@@ -154,7 +151,6 @@ class AddStaffController extends GetxController {
   void _calculateBonus() {
     final salary = double.tryParse(salaryController.text) ?? 0;
 
-    // If there is no base salary, or employment is strictly commission, bonus structure is 0
     if (salary <= 0 || employmentType.value == 'commission') {
       perBonusAmount.value = 0;
       bonusMonthlyAmount.value = 0;
@@ -212,7 +208,6 @@ class AddStaffController extends GetxController {
     }
   }
 
-  // Resets all form fields and variables to their default state
   void _resetForm() {
     joiningDate.value = DateTime.now();
 
@@ -286,21 +281,24 @@ class AddStaffController extends GetxController {
       final staffEmail = emailController.text.trim();
       final staffPassword = passwordController.text.trim();
 
-      // 2. Background Authentication (Creates Staff Login without logging Admin out)
+      // 2. Background Authentication — Staff ka Auth account banao
+      //    Secondary app use karte hain taake Admin logout na ho
       FirebaseApp secondaryApp = await Firebase.initializeApp(
         name: 'SecondaryAuthApp',
         options: Firebase.app().options,
       );
 
+      // ✅ FIX: staffUid capture karo taake Firestore doc ID = Auth uid ho
+      String staffUid = '';
       try {
-        await FirebaseAuth.instanceFor(
-          app: secondaryApp,
-        ).createUserWithEmailAndPassword(
-          email: staffEmail,
-          password: staffPassword,
-        );
+        final staffCred = await FirebaseAuth.instanceFor(app: secondaryApp)
+            .createUserWithEmailAndPassword(
+              email: staffEmail,
+              password: staffPassword,
+            );
+        staffUid = staffCred.user!.uid;
       } finally {
-        // Ensure the temporary app connection is always deleted to prevent memory leaks or state issues
+        // Secondary app hamesha delete karo — memory leak se bachao
         await secondaryApp.delete();
       }
 
@@ -356,10 +354,10 @@ class AddStaffController extends GetxController {
         createdAt: DateTime.now(),
       );
 
-      // 4. Save to Firestore
-      await _repository.addStaff(staff);
+      // 4. ✅ FIX: staffUid pass karo — doc ID = Auth uid hogi ab
+      await _repository.addStaff(staff, staffUid);
 
-      // 5. Reset the form completely upon successful save
+      // 5. Form reset karo
       _resetForm();
 
       Get.back();

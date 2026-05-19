@@ -24,11 +24,13 @@ class PaymentTermsSection extends StatefulWidget {
 
 class _PaymentTermsSectionState extends State<PaymentTermsSection> {
   final controller = Get.find<PurchaseController>();
+
+  // ✅ UPDATED MODES: Cash, Online, Credit, Both
   String paymentMode = "Cash";
   String creditType = "Daily";
 
-  // ✅ NAYA: Actual Transaction Mode for the Cash part
-  String transactionMode = "Cash"; // Cash, Bank Transfer, Cheque
+  // Actual Transaction Mode for the Upfront part
+  String transactionMode = "Cash";
   String? selectedBankId;
   String? selectedBankName;
   String? bankScreenshotBase64;
@@ -64,6 +66,13 @@ class _PaymentTermsSectionState extends State<PaymentTermsSection> {
   ];
   String selectedWeeklyDay = "Monday";
 
+  @override
+  void initState() {
+    super.initState();
+    // Default Cash selection locks the amount to Total Bill
+    paidAmountCtrl.text = widget.totalBill.toStringAsFixed(0);
+  }
+
   Future<void> _pickImage() async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(
@@ -82,6 +91,8 @@ class _PaymentTermsSectionState extends State<PaymentTermsSection> {
             lockAspectRatio: false,
           ),
           IOSUiSettings(title: 'Crop Screenshot'),
+          // ✅ FIX: Web UI Settings added to prevent crash on Flutter Web
+          WebUiSettings(context: context, presentStyle: WebPresentStyle.dialog),
         ],
       );
       if (croppedFile != null) {
@@ -100,7 +111,7 @@ class _PaymentTermsSectionState extends State<PaymentTermsSection> {
     final DateTime? picked = await showDatePicker(
       context: context,
       initialDate: DateTime.now(),
-      firstDate: DateTime(2000), // Allowing backdate for cheques etc
+      firstDate: DateTime(2000),
       lastDate: DateTime(2100),
       builder: (context, child) {
         return Theme(
@@ -135,26 +146,47 @@ class _PaymentTermsSectionState extends State<PaymentTermsSection> {
 
     double cashPaid = double.tryParse(paidAmountCtrl.text) ?? 0.0;
 
-    // Validations for Bank & Cheque
-    if ((paymentMode == "Cash" || paymentMode == "Both") && cashPaid > 0) {
-      if (transactionMode == 'Bank Transfer' && selectedBankId == null) {
+    // ✅ STRICT AMOUNT VALIDATIONS
+    if (paymentMode == "Cash" || paymentMode == "Online") {
+      if (cashPaid != widget.totalBill) {
         Get.snackbar(
-          "Required",
-          "Please select a bank.",
-          backgroundColor: Colors.red,
+          "Amount Limit",
+          "For $paymentMode, paid amount must be exactly equal to Total Bill (PKR ${widget.totalBill}).",
+          backgroundColor: Colors.red.shade900,
           colorText: Colors.white,
         );
         return;
       }
-      if (transactionMode == 'Cheque' && chequeNumberCtrl.text.isEmpty) {
+    } else if (paymentMode == "Both") {
+      if (cashPaid <= 0 || cashPaid >= widget.totalBill) {
         Get.snackbar(
-          "Required",
-          "Please enter cheque number.",
-          backgroundColor: Colors.red,
+          "Amount Limit",
+          "For 'Both', paid amount must be greater than 0 and less than Total Bill.",
+          backgroundColor: Colors.red.shade900,
           colorText: Colors.white,
         );
         return;
       }
+    }
+
+    // ✅ REQUIRED BANK & CHEQUE VALIDATIONS
+    if (transactionMode == 'Bank Transfer' && selectedBankId == null) {
+      Get.snackbar(
+        "Required",
+        "Please select a bank.",
+        backgroundColor: Colors.red.shade900,
+        colorText: Colors.white,
+      );
+      return;
+    }
+    if (transactionMode == 'Cheque' && chequeNumberCtrl.text.isEmpty) {
+      Get.snackbar(
+        "Required",
+        "Please enter cheque number.",
+        backgroundColor: Colors.red.shade900,
+        colorText: Colors.white,
+      );
+      return;
     }
 
     List<String> activeDays = [];
@@ -172,7 +204,7 @@ class _PaymentTermsSectionState extends State<PaymentTermsSection> {
       startingDate: startingDate,
       perInstallmentAmount: double.tryParse(perDayCtrl.text) ?? 0.0,
       customDaysLimit: int.tryParse(customDaysLimitCtrl.text),
-      // Nayi fields
+
       transactionMode: transactionMode,
       bankId: selectedBankId,
       bankName: selectedBankName,
@@ -204,26 +236,50 @@ class _PaymentTermsSectionState extends State<PaymentTermsSection> {
         ),
         const SizedBox(height: 15),
 
+        // ✅ MODIFIED RADIO BUTTONS
         Row(
-          children: ["Cash", "Credit", "Both"]
+          children: ["Cash", "Online", "Credit", "Both"]
               .map(
                 (mode) => Expanded(
-                  child: RadioListTile(
-                    title: Text(
-                      mode,
-                      style: GoogleFonts.comicNeue(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
+                  child: Row(
+                    children: [
+                      Radio<String>(
+                        value: mode,
+                        groupValue: paymentMode,
+                        activeColor: Colors.black,
+                        visualDensity: VisualDensity.compact,
+                        onChanged: (val) => setState(() {
+                          paymentMode = val!;
+                          controller.installmentChart.clear();
+                          if (paymentMode == "Cash") {
+                            paidAmountCtrl.text = widget.totalBill
+                                .toStringAsFixed(0);
+                            transactionMode = "Cash";
+                          } else if (paymentMode == "Online") {
+                            paidAmountCtrl.text = widget.totalBill
+                                .toStringAsFixed(0);
+                            transactionMode = "Bank Transfer";
+                          } else if (paymentMode == "Credit") {
+                            paidAmountCtrl.text = "0";
+                            transactionMode = "Cash";
+                          } else if (paymentMode == "Both") {
+                            paidAmountCtrl.clear();
+                            transactionMode = "Cash";
+                          }
+                        }),
                       ),
-                    ),
-                    value: mode,
-                    groupValue: paymentMode,
-                    activeColor: Colors.black,
-                    onChanged: (val) => setState(() {
-                      paymentMode = val!;
-                      controller.installmentChart.clear();
-                    }),
+                      Expanded(
+                        child: Text(
+                          mode,
+                          style: GoogleFonts.comicNeue(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               )
@@ -232,55 +288,70 @@ class _PaymentTermsSectionState extends State<PaymentTermsSection> {
 
         const SizedBox(height: 20),
 
-        if (paymentMode == "Cash" || paymentMode == "Both") ...[
-          _buildSimpleInput("Paid Amount", paidAmountCtrl, isNum: true),
+        if (paymentMode != "Credit") ...[
+          _buildSimpleInput(
+            "Paid Amount Now",
+            paidAmountCtrl,
+            isNum: true,
+            readOnly: paymentMode == "Cash" || paymentMode == "Online",
+          ),
           const SizedBox(height: 15),
 
-          // ✅ NAYA: Transaction Mode Dropdown
-          Text(
-            "Transaction Mode:",
-            style: GoogleFonts.comicNeue(
-              fontSize: 16,
-              color: Colors.black,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 5),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border.all(color: Colors.black87, width: 1.5),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                isExpanded: true,
-                value: transactionMode,
-                style: GoogleFonts.comicNeue(
-                  fontSize: 16,
-                  color: Colors.black,
-                  fontWeight: FontWeight.bold,
-                ),
-                icon: const Icon(Icons.arrow_drop_down, color: Colors.black),
-                items: ["Cash", "Bank Transfer", "Cheque"]
-                    .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                    .toList(),
-                onChanged: (v) => setState(() {
-                  transactionMode = v!;
-                  selectedBankId = null;
-                  selectedBankName = null;
-                  bankScreenshotBase64 = null;
-                  chequeDate = null;
-                  chequeNumberCtrl.clear();
-                }),
+          if (paymentMode == "Both") ...[
+            Text(
+              "Transaction Mode for Upfront Payment:",
+              style: GoogleFonts.comicNeue(
+                fontSize: 16,
+                color: Colors.black,
+                fontWeight: FontWeight.bold,
               ),
             ),
-          ),
+            const SizedBox(height: 5),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border.all(color: Colors.black87, width: 1.5),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  isExpanded: true,
+                  dropdownColor: Colors.white, // ✅ FIX: Force White Background
+                  focusColor: Colors.white, // ✅ FIX: Force focus color to white
+                  value: transactionMode,
+                  style: GoogleFonts.comicNeue(
+                    fontSize: 16,
+                    color: Colors.black, // ✅ FIX: Force black text
+                    fontWeight: FontWeight.bold,
+                  ),
+                  icon: const Icon(Icons.arrow_drop_down, color: Colors.black),
+                  items: ["Cash", "Bank Transfer", "Cheque"]
+                      .map(
+                        (e) => DropdownMenuItem(
+                          value: e,
+                          child: Text(
+                            e,
+                            style: const TextStyle(color: Colors.black),
+                          ), // ✅ FIX
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (v) => setState(() {
+                    transactionMode = v!;
+                    selectedBankId = null;
+                    selectedBankName = null;
+                    bankScreenshotBase64 = null;
+                    chequeDate = null;
+                    chequeNumberCtrl.clear();
+                  }),
+                ),
+              ),
+            ),
+            const SizedBox(height: 15),
+          ],
 
-          const SizedBox(height: 15),
-
-          // ✅ NAYA: Bank Transfer Details
+          // ✅ BANK TRANSFER DETAILS
           if (transactionMode == 'Bank Transfer') ...[
             Container(
               padding: const EdgeInsets.all(15),
@@ -297,11 +368,14 @@ class _PaymentTermsSectionState extends State<PaymentTermsSection> {
                     style: GoogleFonts.comicNeue(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
+                      color: Colors.black,
                     ),
                   ),
                   const SizedBox(height: 5),
                   StreamBuilder<QuerySnapshot>(
                     stream: FirebaseFirestore.instance
+                        .collection('company_finances')
+                        .doc('main_finances')
                         .collection('banks')
                         .snapshots(),
                     builder: (context, snapshot) {
@@ -318,15 +392,35 @@ class _PaymentTermsSectionState extends State<PaymentTermsSection> {
                         child: DropdownButtonHideUnderline(
                           child: DropdownButton<String>(
                             isExpanded: true,
-                            hint: const Text("Choose a Bank..."),
+                            dropdownColor: Colors.white, // ✅ FIX: Background
+                            focusColor: Colors.white, // ✅ FIX: Focus color
+                            hint: Text(
+                              "Choose a Bank...",
+                              style: GoogleFonts.comicNeue(
+                                color: Colors.black54,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                             value: selectedBankId,
+                            style: GoogleFonts.comicNeue(
+                              color: Colors.black, // ✅ FIX: Black selected text
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                            icon: const Icon(
+                              Icons.arrow_drop_down,
+                              color: Colors.black,
+                            ),
                             items: bankDocs.map((doc) {
                               var d = doc.data() as Map<String, dynamic>;
                               String name =
-                                  "${d['bankName']} - ${d['accountTitle']}";
+                                  "${d['name'] ?? d['bankName']} - ${d['accountTitle']}";
                               return DropdownMenuItem(
                                 value: doc.id,
-                                child: Text(name),
+                                child: Text(
+                                  name,
+                                  style: const TextStyle(color: Colors.black),
+                                ), // ✅ FIX
                               );
                             }).toList(),
                             onChanged: (v) {
@@ -337,7 +431,7 @@ class _PaymentTermsSectionState extends State<PaymentTermsSection> {
                                 );
                                 var d = bDoc.data() as Map<String, dynamic>;
                                 selectedBankName =
-                                    "${d['bankName']} - ${d['accountTitle']}";
+                                    "${d['name'] ?? d['bankName']} - ${d['accountTitle']}";
                               });
                             },
                           ),
@@ -454,7 +548,7 @@ class _PaymentTermsSectionState extends State<PaymentTermsSection> {
               children: [
                 Expanded(
                   child: _buildSimpleInput(
-                    "First Payment Amount",
+                    "First Scheduled Payment",
                     firstPaymentAmtCtrl,
                     isNum: true,
                   ),
@@ -487,12 +581,11 @@ class _PaymentTermsSectionState extends State<PaymentTermsSection> {
               ),
             ),
           ] else ...[
-            // ✅ Standard Credit Mode Inputs
             Row(
               children: [
                 Expanded(
                   child: _buildSimpleInput(
-                    "First Payment Amount",
+                    "First Scheduled Payment",
                     firstPaymentAmtCtrl,
                     isNum: true,
                   ),
@@ -511,7 +604,6 @@ class _PaymentTermsSectionState extends State<PaymentTermsSection> {
               ],
             ),
             const SizedBox(height: 20),
-
             Row(
               children: [
                 Expanded(
@@ -812,6 +904,7 @@ class _PaymentTermsSectionState extends State<PaymentTermsSection> {
     String label,
     TextEditingController ctrl, {
     bool isNum = false,
+    bool readOnly = false,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -827,6 +920,7 @@ class _PaymentTermsSectionState extends State<PaymentTermsSection> {
         const SizedBox(height: 5),
         TextField(
           controller: ctrl,
+          readOnly: readOnly,
           keyboardType: isNum ? TextInputType.number : TextInputType.text,
           onChanged: (v) => setState(() {}),
           style: GoogleFonts.comicNeue(
@@ -836,7 +930,7 @@ class _PaymentTermsSectionState extends State<PaymentTermsSection> {
           ),
           decoration: InputDecoration(
             filled: true,
-            fillColor: Colors.white,
+            fillColor: readOnly ? Colors.grey.shade200 : Colors.white,
             border: OutlineInputBorder(
               borderSide: const BorderSide(color: Colors.black87),
               borderRadius: BorderRadius.circular(8),

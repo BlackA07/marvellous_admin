@@ -40,17 +40,14 @@ class PurchaseRepository {
       'totalOutstanding': FieldValue.increment(purchase.remainingBalance),
     }, SetOptions(merge: true));
 
-    // ✅ FIX: Extract all product names from the list to show in Finance Screen
     String allProductsJoined = purchase.items
         .map((item) => item['productName'])
         .join(", ");
 
-    // 4. Save Installment Schedule (These are the DUES to be paid in Finance screen)
+    // 4. Save Installment Schedule
     if (schedule.isNotEmpty) {
       for (var inst in schedule) {
         DocumentReference instRef = _db.collection('vendor_dues').doc();
-
-        // ✅ originalAmountDue: paid hone ke baad bhi original amount yaad rahe
         double originalAmt = (inst['amountDue'] ?? 0.0).toDouble();
 
         inst.addAll({
@@ -59,10 +56,64 @@ class PurchaseRepository {
           'vendorName': purchase.vendorName,
           'productName': allProductsJoined,
           'isPaid': false,
-          'originalAmountDue': originalAmt, // ✅ SIRF YEH EK LINE ADD HUI HAI
+          'originalAmountDue': originalAmt,
           'createdAt': FieldValue.serverTimestamp(),
         });
         batch.set(instRef, inst);
+      }
+    }
+
+    // ✅ 5. INITIAL PAYMENT DEDUCTION LOGIC (Bank / Cash Deduction & Payment History)
+    if (purchase.cashPaid > 0) {
+      // 5A. Save Payment History Record
+      DocumentReference transactionRef = _db
+          .collection('vendor_payment_history')
+          .doc();
+      batch.set(transactionRef, {
+        'vendorId': purchase.vendorId,
+        'vendorName': purchase.vendorName,
+        'dueDocId': "INITIAL_PAYMENT",
+        'billNumber': purchase.billNumber,
+        'paidAmount': purchase.cashPaid,
+        'paymentDate': Timestamp.fromDate(purchase.date),
+        'paymentMode': purchase.initialTransactionMode ?? 'Cash',
+        'note': "Upfront payment at bill generation",
+        'createdAt': FieldValue.serverTimestamp(),
+        'bankId': purchase.initialBankId,
+        'bankName': purchase.initialBankName,
+        'screenshot': purchase.initialScreenshot,
+        'chequeNumber': purchase.initialChequeNumber,
+        'chequeDate': purchase.initialChequeDate != null
+            ? Timestamp.fromDate(purchase.initialChequeDate!)
+            : null,
+      });
+
+      // 5B. Real-Time Bank/Cash Money Deduction
+      if (purchase.initialTransactionMode == 'Bank Transfer' &&
+          purchase.initialBankId != null &&
+          purchase.initialBankId!.isNotEmpty) {
+        DocumentReference bankRef = _db
+            .collection('company_finances')
+            .doc('main_finances')
+            .collection('banks')
+            .doc(purchase.initialBankId);
+        batch.update(bankRef, {
+          'balance': FieldValue.increment(-purchase.cashPaid),
+        });
+      } else if (purchase.initialTransactionMode == 'Cash' ||
+          purchase.initialTransactionMode == null) {
+        var cashBankQuery = await _db
+            .collection('company_finances')
+            .doc('main_finances')
+            .collection('banks')
+            .where('name', isEqualTo: 'Cash')
+            .limit(1)
+            .get();
+        if (cashBankQuery.docs.isNotEmpty) {
+          batch.update(cashBankQuery.docs.first.reference, {
+            'balance': FieldValue.increment(-purchase.cashPaid),
+          });
+        }
       }
     }
 

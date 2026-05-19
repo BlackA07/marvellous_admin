@@ -288,6 +288,12 @@ class PurchaseController extends GetxController {
         startingDate: startingDate,
         perInstallmentAmount: perInstallmentAmount,
         customDaysLimit: customDaysLimit,
+        initialTransactionMode: transactionMode,
+        initialBankId: bankId,
+        initialBankName: bankName,
+        initialScreenshot: screenshotBase64,
+        initialChequeNumber: chequeNumber,
+        initialChequeDate: chequeDate,
       );
 
       List<Map<String, dynamic>> realSchedule = [];

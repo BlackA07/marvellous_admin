@@ -5,12 +5,14 @@ class StaffRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   static const String _collection = 'staff';
 
-  Future<String> addStaff(StaffModel staff) async {
+  // uid parameter add kiya — ab document ID = Firebase Auth uid hoga
+  Future<String> addStaff(StaffModel staff, String uid) async {
     try {
-      final docRef = await _firestore
+      await _firestore
           .collection(_collection)
-          .add(staff.toFirestore());
-      return docRef.id;
+          .doc(uid) // Random ID nahi, Auth uid use hogi
+          .set(staff.toFirestore());
+      return uid;
     } catch (e) {
       throw Exception('Staff save karne mein error: $e');
     }
