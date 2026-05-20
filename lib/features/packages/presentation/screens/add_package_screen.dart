@@ -189,6 +189,15 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
                             codFee = cod;
                           });
                         },
+                        initialDeliveryFees: widget.packageToEdit != null
+                            ? deliveryFeesMap
+                            : null,
+                        initialDeliveryTimes: widget.packageToEdit != null
+                            ? deliveryTimeMap
+                            : null,
+                        initialCodFee: widget.packageToEdit != null
+                            ? codFee
+                            : null,
                       ),
                       const SizedBox(height: 30),
                       PackagePricingSection(
@@ -279,7 +288,7 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
       child: Center(
         child: Container(
           width: 300,
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(25), // Thodi zyada padding
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(20),
@@ -287,15 +296,21 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.check_circle, color: Colors.green, size: 60),
+              const Icon(
+                Icons.check_circle,
+                color: Colors.green,
+                size: 70,
+              ), // Icon size thoda bada kiya
               const SizedBox(height: 20),
               Text(
                 widget.packageToEdit == null
                     ? "Package Created!"
                     : "Package Updated!",
+                textAlign: TextAlign.center, // Text center align kiya
                 style: GoogleFonts.orbitron(
+                  color: Colors.black, // Color explicit set kiya
                   fontWeight: FontWeight.bold,
-                  fontSize: 18,
+                  fontSize: 20,
                 ),
               ),
               const SizedBox(height: 30),
@@ -305,6 +320,7 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
                   onPressed: () => Get.offAll(() => MainLayoutScreen()),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.deepPurple,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
                   child: const Text(
                     "Go to Dashboard",

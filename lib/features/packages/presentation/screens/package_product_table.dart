@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -31,12 +32,12 @@ class _PackageProductTableState extends State<PackageProductTable> {
   String _productSearchQuery = "";
   int? sortColumnIndex;
   bool ascending = true;
-  final ScrollController _verticalScroll = ScrollController();
 
-  @override
-  void dispose() {
-    _verticalScroll.dispose();
-    super.dispose();
+  // Image cache to avoid repeated base64Decode
+  final Map<String, Uint8List> _imageCache = {};
+
+  Uint8List _getImage(String base64Str) {
+    return _imageCache.putIfAbsent(base64Str, () => base64Decode(base64Str));
   }
 
   void _sortProducts(int columnIndex, bool asc) {
@@ -48,65 +49,69 @@ class _PackageProductTableState extends State<PackageProductTable> {
 
   List<ProductModel> _getSortedProducts(List<ProductModel> products) {
     if (sortColumnIndex == null) return products;
-    List<ProductModel> sortedList = List.from(products);
-    sortedList.sort((a, b) {
-      int comparison = 0;
+    final sorted = List<ProductModel>.from(products);
+    sorted.sort((a, b) {
+      int cmp = 0;
       switch (sortColumnIndex) {
         case 1:
-          comparison = a.name.compareTo(b.name);
+          cmp = a.name.compareTo(b.name);
           break;
         case 2:
-          comparison = a.brand.compareTo(b.brand);
+          cmp = a.brand.compareTo(b.brand);
           break;
         case 3:
-          comparison = a.category.compareTo(b.category);
+          cmp = a.category.compareTo(b.category);
           break;
         case 4:
-          comparison = a.subCategory.compareTo(b.subCategory);
+          cmp = a.subCategory.compareTo(b.subCategory);
           break;
         case 5:
-          comparison = a.deliveryLocation.compareTo(b.deliveryLocation);
+          cmp = a.deliveryLocation.compareTo(b.deliveryLocation);
           break;
         case 6:
-          comparison = a.purchasePrice.compareTo(b.purchasePrice);
+          cmp = a.purchasePrice.compareTo(b.purchasePrice);
           break;
         case 7:
-          comparison = a.salePrice.compareTo(b.salePrice);
+          cmp = a.salePrice.compareTo(b.salePrice);
           break;
         case 8:
-          comparison = (a.salePrice - a.purchasePrice).compareTo(
+          cmp = (a.salePrice - a.purchasePrice).compareTo(
             b.salePrice - b.purchasePrice,
           );
           break;
         case 9:
-          comparison = a.productPoints.compareTo(b.productPoints);
+          cmp = _custPts(a).compareTo(_custPts(b));
+          break;
+        case 10:
+          cmp = _origPts(a).compareTo(_origPts(b));
           break;
       }
-      return ascending ? comparison : -comparison;
+      return ascending ? cmp : -cmp;
     });
-    return sortedList;
+    return sorted;
+  }
+
+  double _origPts(ProductModel p) =>
+      widget.productController.calculatePoints(p.purchasePrice, p.salePrice);
+
+  double _custPts(ProductModel p) {
+    final pts = _origPts(p);
+    final showDec = widget.productController.showDecimals.value;
+    return showDec ? double.parse(pts.toStringAsFixed(2)) : pts.floorToDouble();
   }
 
   double get totalSellingPrice =>
-      widget.selectedProducts.fold(0, (sum, p) => sum + p.salePrice);
+      widget.selectedProducts.fold(0, (s, p) => s + p.salePrice);
 
   double get totalOriginalPoints =>
-      widget.selectedProducts.fold(0, (sum, p) => sum + p.productPoints);
+      widget.selectedProducts.fold(0, (s, p) => s + _origPts(p));
 
-  double get totalCustomerPoints {
-    bool showDec = widget.productController.showDecimals.value;
-    return widget.selectedProducts.fold(0, (sum, p) {
-      double pts = p.productPoints;
-      return sum +
-          (showDec
-              ? double.parse(pts.toStringAsFixed(2))
-              : pts.floorToDouble());
-    });
-  }
+  double get totalCustomerPoints =>
+      widget.selectedProducts.fold(0, (s, p) => s + _custPts(p));
 
   @override
   Widget build(BuildContext context) {
-    bool showDecimals = widget.productController.showDecimals.value;
+    final bool showDecimals = widget.productController.showDecimals.value;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -141,8 +146,8 @@ class _PackageProductTableState extends State<PackageProductTable> {
         ),
         const SizedBox(height: 10),
         Obx(() {
+          final query = _productSearchQuery.toLowerCase();
           var all = widget.productController.productsOnly.where((p) {
-            String query = _productSearchQuery.toLowerCase();
             return p.name.toLowerCase().contains(query) ||
                 p.brand.toLowerCase().contains(query) ||
                 p.category.toLowerCase().contains(query) ||
@@ -152,287 +157,52 @@ class _PackageProductTableState extends State<PackageProductTable> {
           }).toList();
           all = _getSortedProducts(all);
 
+          // Column widths
+          const double wSel = 35;
+          const double wProd = 130;
+          const double wBrand = 65;
+          const double wCat = 65;
+          const double wSub = 65;
+          const double wLoc = 65;
+          const double wNum = 65;
+          const double totalWidth =
+              wSel + wProd + wBrand + wCat + wSub + wLoc + (wNum * 5) + 80;
+
           return Container(
             height: 400,
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
-              boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 5)],
+              boxShadow: const [
+                BoxShadow(color: Colors.black12, blurRadius: 5),
+              ],
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: Scrollbar(
-                controller: _verticalScroll,
                 thumbVisibility: true,
                 trackVisibility: true,
                 thickness: 10,
                 child: SingleChildScrollView(
-                  controller: _verticalScroll,
                   scrollDirection: Axis.vertical,
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      return DataTable(
-                        sortColumnIndex: sortColumnIndex,
-                        sortAscending: ascending,
-                        columnSpacing: 4,
-                        horizontalMargin: 8,
-                        headingRowColor: MaterialStateProperty.all(
-                          Colors.grey.shade200,
-                        ),
-                        showCheckboxColumn: false,
-                        dataRowHeight: 70,
-                        columns: [
-                          DataColumn(
-                            label: SizedBox(
-                              width: 70,
-                              child: _headerText("Sel"),
-                            ),
-                          ),
-                          DataColumn(
-                            label: SizedBox(
-                              width: 140,
-                              child: _headerText("Product"),
-                            ),
-                            onSort: _sortProducts,
-                          ),
-                          DataColumn(
-                            label: SizedBox(
-                              width: 70,
-                              child: _headerText("Brand"),
-                            ),
-                            onSort: _sortProducts,
-                          ),
-                          DataColumn(
-                            label: SizedBox(
-                              width: 70,
-                              child: _headerText("Cat"),
-                            ),
-                            onSort: _sortProducts,
-                          ),
-                          DataColumn(
-                            label: SizedBox(
-                              width: 70,
-                              child: _headerText("Sub"),
-                            ),
-                            onSort: _sortProducts,
-                          ),
-                          DataColumn(
-                            label: SizedBox(
-                              width: 70,
-                              child: _headerText("Loc"),
-                            ),
-                            onSort: _sortProducts,
-                          ),
-                          DataColumn(
-                            label: SizedBox(
-                              width: 70,
-                              child: _headerText("Buy"),
-                            ),
-                            numeric: true,
-                            onSort: _sortProducts,
-                          ),
-                          DataColumn(
-                            label: SizedBox(
-                              width: 70,
-                              child: _headerText("Sell"),
-                            ),
-                            numeric: true,
-                            onSort: _sortProducts,
-                          ),
-                          DataColumn(
-                            label: SizedBox(
-                              width: 70,
-                              child: _headerText("GP"),
-                            ),
-                            numeric: true,
-                            onSort: _sortProducts,
-                          ),
-                          DataColumn(
-                            label: SizedBox(
-                              width: 70,
-                              child: _headerText("Cust"),
-                            ),
-                            numeric: true,
-                            onSort: _sortProducts,
-                          ),
-                          DataColumn(
-                            label: SizedBox(
-                              width: 70,
-                              child: _headerText("Orig"),
-                            ),
-                            numeric: true,
-                            onSort: _sortProducts,
-                          ),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: SizedBox(
+                      width: totalWidth,
+                      child: Column(
+                        children: [
+                          // Header
+                          _buildHeader(),
+                          const Divider(height: 1),
+                          // Rows via ListView.builder logic (Column with items)
+                          ...all
+                              .map(
+                                (product) => _buildRow(product, showDecimals),
+                              )
+                              .toList(),
                         ],
-                        rows: all.map((product) {
-                          final isSelected = widget.selectedProducts.any(
-                            (p) => p.id == product.id,
-                          );
-                          double origPts = product.productPoints;
-                          String custPtsDisplay = showDecimals
-                              ? origPts.toStringAsFixed(2)
-                              : origPts.floor().toString();
-
-                          return DataRow(
-                            selected: isSelected,
-                            onSelectChanged: (_) =>
-                                widget.onProductToggle(product),
-                            cells: [
-                              DataCell(
-                                SizedBox(
-                                  width: 35,
-                                  child: Checkbox(
-                                    value: isSelected,
-                                    onChanged: (_) =>
-                                        widget.onProductToggle(product),
-                                    activeColor: Colors.deepPurple,
-                                  ),
-                                ),
-                              ),
-                              DataCell(
-                                SizedBox(
-                                  width: 130,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      if (product.images.isNotEmpty)
-                                        Container(
-                                          width: 40,
-                                          height: 40,
-                                          margin: const EdgeInsets.only(
-                                            right: 6,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            borderRadius: BorderRadius.circular(
-                                              6,
-                                            ),
-                                            image: DecorationImage(
-                                              image: MemoryImage(
-                                                base64Decode(
-                                                  product.images.first,
-                                                ),
-                                              ),
-                                              fit: BoxFit.cover,
-                                            ),
-                                          ),
-                                        ),
-                                      Expanded(
-                                        child: Column(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              product.name,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: GoogleFonts.comicNeue(
-                                                color: Colors.black,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 11,
-                                              ),
-                                            ),
-                                            Text(
-                                              product.modelNumber,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: GoogleFonts.comicNeue(
-                                                color: Colors.black,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 9,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              DataCell(
-                                SizedBox(
-                                  width: 70,
-                                  child: _cellText(product.brand, maxLines: 2),
-                                ),
-                              ),
-                              DataCell(
-                                SizedBox(
-                                  width: 70,
-                                  child: _cellText(
-                                    product.category,
-                                    maxLines: 2,
-                                  ),
-                                ),
-                              ),
-                              DataCell(
-                                SizedBox(
-                                  width: 70,
-                                  child: _cellText(
-                                    product.subCategory,
-                                    maxLines: 2,
-                                  ),
-                                ),
-                              ),
-                              DataCell(
-                                SizedBox(
-                                  width: 70,
-                                  child: _cellText(
-                                    product.deliveryLocation,
-                                    maxLines: 2,
-                                  ),
-                                ),
-                              ),
-                              DataCell(
-                                SizedBox(
-                                  width: 70,
-                                  child: _cellText(
-                                    "${product.purchasePrice.toInt()}",
-                                    color: Colors.red,
-                                  ),
-                                ),
-                              ),
-                              DataCell(
-                                SizedBox(
-                                  width: 70,
-                                  child: _cellText(
-                                    "${product.salePrice.toInt()}",
-                                    color: Colors.purple,
-                                  ),
-                                ),
-                              ),
-                              DataCell(
-                                SizedBox(
-                                  width: 70,
-                                  child: _cellText(
-                                    "${(product.salePrice - product.purchasePrice).toInt()}",
-                                    color: Colors.blue,
-                                  ),
-                                ),
-                              ),
-                              DataCell(
-                                SizedBox(
-                                  width: 70,
-                                  child: _cellText(
-                                    custPtsDisplay,
-                                    color: Colors.orange.shade900,
-                                  ),
-                                ),
-                              ),
-                              DataCell(
-                                SizedBox(
-                                  width: 70,
-                                  child: _cellText(
-                                    origPts.toStringAsFixed(2),
-                                    color: Colors.deepOrange,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          );
-                        }).toList(),
-                      );
-                    },
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -442,6 +212,186 @@ class _PackageProductTableState extends State<PackageProductTable> {
         const SizedBox(height: 10),
         _buildSummary(showDecimals),
       ],
+    );
+  }
+
+  Widget _buildHeader() {
+    final headers = [
+      ("", 35.0, false, -1),
+      ("Product", 130.0, true, 1),
+      ("Brand", 65.0, true, 2),
+      ("Cat", 65.0, true, 3),
+      ("Sub", 65.0, true, 4),
+      ("Loc", 65.0, true, 5),
+      ("Buy", 65.0, true, 6),
+      ("Sell", 65.0, true, 7),
+      ("GP", 65.0, true, 8),
+      ("Cust", 65.0, true, 9),
+      ("Orig", 65.0, true, 10),
+    ];
+
+    return Container(
+      height: 40,
+      color: Colors.grey.shade200,
+      child: Row(
+        children: headers.map((h) {
+          final (label, width, sortable, colIdx) = h;
+          return GestureDetector(
+            onTap: sortable
+                ? () {
+                    if (sortColumnIndex == colIdx) {
+                      _sortProducts(colIdx, !ascending);
+                    } else {
+                      _sortProducts(colIdx, true);
+                    }
+                  }
+                : null,
+            child: SizedBox(
+              width: width,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      label,
+                      style: GoogleFonts.comicNeue(
+                        color: Colors.black,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (sortable && sortColumnIndex == colIdx)
+                    Icon(
+                      ascending ? Icons.arrow_upward : Icons.arrow_downward,
+                      size: 12,
+                      color: Colors.deepPurple,
+                    ),
+                ],
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildRow(ProductModel product, bool showDecimals) {
+    final isSelected = widget.selectedProducts.any((p) => p.id == product.id);
+    final origPts = _origPts(product);
+    final custPtsStr = showDecimals
+        ? origPts.toStringAsFixed(2)
+        : origPts.floor().toString();
+    final origPtsStr = origPts.toStringAsFixed(2);
+
+    return InkWell(
+      onTap: () => widget.onProductToggle(product),
+      child: Container(
+        height: 68,
+        decoration: BoxDecoration(
+          color: isSelected
+              ? Colors.deepPurple.withOpacity(0.06)
+              : Colors.white,
+          border: const Border(bottom: BorderSide(color: Color(0xFFEEEEEE))),
+        ),
+        child: Row(
+          children: [
+            // Checkbox
+            SizedBox(
+              width: 35,
+              child: Checkbox(
+                value: isSelected,
+                onChanged: (_) => widget.onProductToggle(product),
+                activeColor: Colors.deepPurple,
+              ),
+            ),
+            // Product name + image
+            SizedBox(
+              width: 130,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (product.images.isNotEmpty)
+                    Container(
+                      width: 40,
+                      height: 40,
+                      margin: const EdgeInsets.only(right: 6),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(6),
+                        image: DecorationImage(
+                          image: MemoryImage(_getImage(product.images.first)),
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    ),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          product.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.comicNeue(
+                            color: Colors.black,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                          ),
+                        ),
+                        Text(
+                          product.modelNumber,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.comicNeue(
+                            color: Colors.black54,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 9,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            _cell(product.brand, 65, Colors.black),
+            _cell(product.category, 65, Colors.black),
+            _cell(product.subCategory, 65, Colors.black),
+            _cell(product.deliveryLocation, 65, Colors.black),
+            _cell("${product.purchasePrice.toInt()}", 65, Colors.red),
+            _cell("${product.salePrice.toInt()}", 65, Colors.purple),
+            _cell(
+              "${(product.salePrice - product.purchasePrice).toInt()}",
+              65,
+              Colors.blue,
+            ),
+            _cell(custPtsStr, 65, Colors.orange.shade900),
+            _cell(origPtsStr, 65, Colors.deepOrange),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _cell(String text, double width, Color color) {
+    return SizedBox(
+      width: width,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Text(
+          text,
+          style: GoogleFonts.comicNeue(
+            color: color,
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+          ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
     );
   }
 
@@ -491,31 +441,6 @@ class _PackageProductTableState extends State<PackageProductTable> {
       ),
     );
   }
-
-  Widget _headerText(String text) => Text(
-    text,
-    style: GoogleFonts.comicNeue(
-      color: Colors.black,
-      fontWeight: FontWeight.bold,
-      fontSize: 13,
-    ),
-    overflow: TextOverflow.ellipsis,
-  );
-
-  Widget _cellText(
-    String text, {
-    Color color = Colors.black,
-    int maxLines = 1,
-  }) => Text(
-    text,
-    style: GoogleFonts.comicNeue(
-      color: color,
-      fontWeight: FontWeight.bold,
-      fontSize: 13,
-    ),
-    maxLines: maxLines,
-    overflow: TextOverflow.ellipsis,
-  );
 
   Widget _sumItem(String label, String value, Color color) => Column(
     mainAxisSize: MainAxisSize.min,

@@ -348,6 +348,46 @@ class OrdersController extends GetxController {
               title = "Order Rejected ❌";
               body =
                   "Your order #$orderId has been rejected.\nReason: ${reason.isNotEmpty ? reason : 'Not specified'}\n\nNeed help? Tap the WhatsApp icon on the Home Screen and quote your Order ID.";
+
+              // Refund logic
+              String src = data['paymentSource'] ?? '';
+              double deduction = (data['actualDeduction'] ?? 0.0).toDouble();
+
+              if (deduction > 0) {
+                if (src == 'main_wallet') {
+                  await _db.collection('users').doc(userId).update({
+                    'walletBalance': FieldValue.increment(deduction),
+                  });
+                  await _db
+                      .collection('users')
+                      .doc(userId)
+                      .collection('wallet_history')
+                      .add({
+                        'amount': deduction,
+                        'type': 'order_refund_wallet',
+                        'description':
+                            'Order #$orderId rejected — Rs.${deduction.toStringAsFixed(0)} refunded to wallet',
+                        'orderId': orderId,
+                        'timestamp': FieldValue.serverTimestamp(),
+                      });
+                } else if (src == 'shopping_wallet') {
+                  await _db.collection('users').doc(userId).update({
+                    'shoppingWalletBalance': FieldValue.increment(deduction),
+                  });
+                  await _db
+                      .collection('users')
+                      .doc(userId)
+                      .collection('wallet_history')
+                      .add({
+                        'amount': deduction,
+                        'type': 'order_refund_shopping_wallet',
+                        'description':
+                            'Order #$orderId rejected — Rs.${deduction.toStringAsFixed(0)} refunded to shopping wallet',
+                        'orderId': orderId,
+                        'timestamp': FieldValue.serverTimestamp(),
+                      });
+                }
+              }
               break;
           }
 
@@ -635,7 +675,7 @@ class OrdersController extends GetxController {
         amount: finalCashback,
         type: 'cashback',
         isCashback: true,
-        description: 'Order cashback #$orderId',
+        description: 'Order cashback\nOrder No: $orderId',
         extraData: {
           'orderId': orderId,
           'points': pointsEarned,
@@ -730,7 +770,7 @@ class OrdersController extends GetxController {
                 type: 'commission',
                 isCashback: false,
                 description:
-                    'Direct Sale Bonus (Level 1) from $buyerName\'s order #$orderId',
+                    'Direct Sale Bonus (Level 1)\nFrom: $buyerName\nOrder No: $orderId',
                 extraData: {
                   'orderId': orderId,
                   'level': 1,
@@ -746,7 +786,7 @@ class OrdersController extends GetxController {
                 batch,
                 referrerUid,
                 "Direct Sale Bonus! 🚀",
-                'Rs.${finalComm.toStringAsFixed(0)} Direct Sale Bonus credited! 💰\nFrom: $buyerName\'s order #$orderId\nRank: $refRankLabel',
+                'Rs.${finalComm.toStringAsFixed(0)} Direct Sale Bonus credited! 💰\nFrom: $buyerName\nOrder No: $orderId\nRank: $refRankLabel',
                 'finance',
                 {
                   'orderId': orderId,
@@ -783,11 +823,11 @@ class OrdersController extends GetxController {
       }
 
       String currentUplineUid = buyerParentUid.trim();
-      int physicalDepth = 1; // Used to track exact depth for accurate UI boxes
+      int physicalDepth = 1;
+      int level =
+          2; // ✅ FIX: Use while loop to properly control skipped referrer
 
-      for (int level = 2; level <= maxLevels; level++) {
-        if (currentUplineUid.isEmpty) break;
-
+      while (currentUplineUid.isNotEmpty && level <= maxLevels) {
         DocumentSnapshot uDoc = await _db
             .collection('users')
             .doc(currentUplineUid)
@@ -797,6 +837,7 @@ class OrdersController extends GetxController {
         Map<String, dynamic> uData = uDoc.data() as Map<String, dynamic>;
         String nextParent = (uData['mlmParentUid'] ?? '').toString().trim();
 
+        // ✅ FIX: Referrer skip without incrementing the level
         if (currentUplineUid == referrerUid) {
           double levelPercent = commPercentages['level_$level'] ?? 0.0;
           if (levelPercent > 0) {
@@ -815,6 +856,7 @@ class OrdersController extends GetxController {
         if (!isMLMActive) {
           currentUplineUid = nextParent;
           physicalDepth++;
+          level++;
           continue;
         }
 
@@ -842,7 +884,7 @@ class OrdersController extends GetxController {
               type: 'commission',
               isCashback: false,
               description:
-                  'Level $level Commission from $buyerName\'s order #$orderId',
+                  'Level $level Commission\nFrom: $buyerName\nOrder No: $orderId',
               extraData: {
                 'orderId': orderId,
                 'level': level,
@@ -858,7 +900,7 @@ class OrdersController extends GetxController {
               batch,
               currentUplineUid,
               "Commission Earned! 💰",
-              'Rs.${finalComm.toStringAsFixed(0)} commission credited! 💰\nLevel $level • From: $buyerName\'s order\nRank: $uRankLabel',
+              'Rs.${finalComm.toStringAsFixed(0)} commission credited! 💰\nLevel $level\nFrom: $buyerName\nOrder No: $orderId\nRank: $uRankLabel',
               'finance',
               {
                 'orderId': orderId,
@@ -879,7 +921,7 @@ class OrdersController extends GetxController {
               'amount': finalComm,
               'baseAmount': baseComm,
               'rankMultiplier': rankMulti,
-              'level': level, // Matrix table level
+              'level': level, // Matrix table level mapped exactly
               'depth': physicalDepth, // Physical UI box depth
               'fromUser': buyerName,
               'fromUid': buyerUid,
@@ -891,6 +933,7 @@ class OrdersController extends GetxController {
         }
         currentUplineUid = nextParent;
         physicalDepth++;
+        level++;
       }
 
       double unallocated = poolForUplines - totalBaseUsed;
@@ -1147,7 +1190,8 @@ class OrdersController extends GetxController {
           .toDouble();
 
       if (!isHeActive) {
-        heEarningsSince += afterSponsor;
+        heEarningsSince +=
+            amount; // ✅ FIX: Use 'amount' (Gross) instead of 'afterSponsor' for total earnings metric calculations
         if (heEarningsSince >= hThreshold) {
           isHeActive = true;
           heTarget = hDeduction;
@@ -1246,7 +1290,7 @@ class OrdersController extends GetxController {
     String finalDescription = description;
     if (actualDeduction > 0) {
       finalDescription +=
-          ' (Sponsor Rs.${actualDeduction.toStringAsFixed(0)} deducted)';
+          '\n(Sponsor Rs.${actualDeduction.toStringAsFixed(0)} deducted)';
     }
 
     if (toMain > 0) {
@@ -1590,7 +1634,6 @@ class OrdersController extends GetxController {
     }
   }
 
-  // ✅ SAFE DEPOSIT APPROVAL WITH BANK BALANCE INCREMENT
   Future<void> approveDeposit(String requestId, String userId) async {
     try {
       Get.dialog(
@@ -1616,7 +1659,6 @@ class OrdersController extends GetxController {
         'processedAt': FieldValue.serverTimestamp(),
       });
 
-      // ✅ Securely updating bank balance using runTransaction
       if (bankId.isNotEmpty || paymentMethod.isNotEmpty) {
         try {
           var banksRef = _db
@@ -1832,7 +1874,6 @@ class OrdersController extends GetxController {
     }
   }
 
-  // ✅ SAFE ORDER PAYMENT APPROVAL WITH BANK BALANCE INCREMENT
   Future<void> approveOrderPayment(String financeId) async {
     try {
       Get.dialog(
@@ -1888,7 +1929,6 @@ class OrdersController extends GetxController {
         'processedAt': FieldValue.serverTimestamp(),
       });
 
-      // ✅ Securely updating bank balance using runTransaction
       if (bankId.isNotEmpty || paymentMethod.isNotEmpty) {
         try {
           var banksRef = _db
