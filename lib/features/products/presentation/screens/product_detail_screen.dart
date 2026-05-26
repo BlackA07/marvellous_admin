@@ -240,11 +240,22 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       Positioned.fill(
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(16),
-                          child: Image.memory(
-                            base64Decode(
-                              widget.product.images[_currentImageIndex],
-                            ),
+                          child: Image.network(
+                            widget.product.images[_currentImageIndex],
                             fit: BoxFit.contain,
+                            loadingBuilder: (_, child, progress) =>
+                                progress == null
+                                ? child
+                                : const Center(
+                                    child: CircularProgressIndicator(
+                                      color: Colors.cyanAccent,
+                                    ),
+                                  ),
+                            errorBuilder: (_, __, ___) => const Icon(
+                              Icons.broken_image,
+                              color: Colors.white24,
+                              size: 60,
+                            ),
                           ),
                         ),
                       ),
@@ -1091,12 +1102,26 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer> {
                 });
               },
               itemBuilder: (context, index) {
-                final imageBytes = base64Decode(widget.images[index]);
                 return InteractiveViewer(
                   minScale: 0.1,
                   maxScale: 5.0,
                   child: Center(
-                    child: Image.memory(imageBytes, fit: BoxFit.contain),
+                    child: Image.network(
+                      widget.images[index],
+                      fit: BoxFit.contain,
+                      loadingBuilder: (_, child, progress) => progress == null
+                          ? child
+                          : const Center(
+                              child: CircularProgressIndicator(
+                                color: Colors.cyanAccent,
+                              ),
+                            ),
+                      errorBuilder: (_, __, ___) => const Icon(
+                        Icons.broken_image,
+                        color: Colors.white54,
+                        size: 80,
+                      ),
+                    ),
                   ),
                 );
               },

@@ -386,6 +386,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
   void _saveProduct() async {
     if (_formKey.currentState!.validate()) {
+      List<String> uploadedUrls = await productController
+          .uploadImagesToCloudinary(selectedImagesBase64);
       if (selectedCategory == null) {
         Get.snackbar(
           "Required",
@@ -413,7 +415,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
         vendorId: _vendorId,
         vendorName: _vendorName,
         status: _productStatus,
-        images: selectedImagesBase64,
+        images: uploadedUrls,
         dateAdded: selectedDate,
         deliveryLocation: selectedLocation,
         warranty: _getCombinedWarranty(),

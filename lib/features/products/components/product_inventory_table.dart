@@ -248,6 +248,32 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
     );
   }
 
+  // ✅ NEW: Smart Image Loader for fixing the crash
+  Widget _buildSmartImage(String data) {
+    if (data.isEmpty) {
+      return const Icon(Icons.image, color: Colors.white24);
+    }
+    try {
+      if (data.startsWith('http')) {
+        return Image.network(
+          data,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) =>
+              const Icon(Icons.broken_image, color: Colors.white24),
+        );
+      } else {
+        return Image.memory(
+          base64Decode(data),
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) =>
+              const Icon(Icons.broken_image, color: Colors.white24),
+        );
+      }
+    } catch (e) {
+      return const Icon(Icons.broken_image, color: Colors.white24);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     const Color cardColor = Color.fromARGB(255, 231, 225, 225);
@@ -655,7 +681,6 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                                           ),
                                         ),
                                         // --- PRODUCT NAME & MODEL NUMBER ---
-                                        // --- PRODUCT NAME & MODEL NUMBER ---
                                         DataCell(
                                           Row(
                                             mainAxisSize: MainAxisSize.min,
@@ -672,13 +697,16 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                                                         BorderRadius.circular(
                                                           4,
                                                         ),
-                                                    image: DecorationImage(
-                                                      image: MemoryImage(
-                                                        base64Decode(
-                                                          product.images.first,
+                                                    color: Colors.black12,
+                                                  ),
+                                                  // ✅ FIX: Replaced MemoryImage with _buildSmartImage
+                                                  child: ClipRRect(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          4,
                                                         ),
-                                                      ),
-                                                      fit: BoxFit.cover,
+                                                    child: _buildSmartImage(
+                                                      product.images.first,
                                                     ),
                                                   ),
                                                 ),

@@ -243,6 +243,11 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
         return;
       }
 
+      // ✅ CLOUDINARY UPLOAD: Package ki images ko bhi URL mein badalna hai
+      // productController aapka wahi controller hai jisme uploadImagesToCloudinary hai
+      List<String> uploadedUrls = await productController
+          .uploadImagesToCloudinary(selectedImagesBase64);
+
       double sell = double.tryParse(salePriceCtrl.text) ?? 0;
       double points = productController.calculatePoints(totalBuy, sell);
 
@@ -259,7 +264,9 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
         originalPrice: double.tryParse(originalPriceCtrl.text) ?? 0,
         stockQuantity: int.tryParse(stockCtrl.text) ?? 0,
         vendorId: selectedVendorId!,
-        images: selectedImagesBase64,
+        vendorName: "Marvellous Official Store", // Update if needed
+        status: "approved",
+        images: uploadedUrls, // ✅ Yahan URLs aa gaye
         dateAdded: DateTime.now(),
         deliveryLocation: selectedLocation ?? 'Worldwide',
         warranty: "See Items",
@@ -274,8 +281,9 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
         totalReviews: widget.packageToEdit?.totalReviews ?? 0,
       );
 
+      // Save call
       bool success = widget.packageToEdit == null
-          ? await productController.addNewProduct(newPackage)
+          ? await productController.addNewPackage(newPackage)
           : await productController.updateProduct(newPackage);
 
       if (success) setState(() => _isSuccess = true);

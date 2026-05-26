@@ -292,13 +292,12 @@ class _PackagesHomeScreenState extends State<PackagesHomeScreen> {
                                                       image:
                                                           pkg.images.isNotEmpty
                                                           ? DecorationImage(
-                                                              image: MemoryImage(
-                                                                base64Decode(
-                                                                  pkg
-                                                                      .images
-                                                                      .first,
-                                                                ),
-                                                              ),
+                                                              image:
+                                                                  NetworkImage(
+                                                                    pkg
+                                                                        .images
+                                                                        .first,
+                                                                  ),
                                                               fit: BoxFit.cover,
                                                             )
                                                           : null,

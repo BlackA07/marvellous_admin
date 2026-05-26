@@ -1,4 +1,4 @@
-import 'dart:convert'; // For base64 decode
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -7,22 +7,59 @@ import 'package:marvellous_admin/features/products/presentation/screens/product_
 import '../models/vendor_model.dart';
 import 'add_vendor_screen.dart';
 import '../controllers/vendor_controller.dart';
-import '../../products/models/product_model.dart'; // Import Product Model
+import '../../products/models/product_model.dart';
 
-class VendorDetailScreen extends StatelessWidget {
+class VendorDetailScreen extends StatefulWidget {
   final VendorModel vendor;
 
-  // Controller inject karke vendor ke products fetch karenge
+  const VendorDetailScreen({Key? key, required this.vendor}) : super(key: key);
+
+  @override
+  State<VendorDetailScreen> createState() => _VendorDetailScreenState();
+}
+
+class _VendorDetailScreenState extends State<VendorDetailScreen> {
   final VendorController controller = Get.find();
 
-  VendorDetailScreen({Key? key, required this.vendor}) : super(key: key);
+  @override
+  void initState() {
+    super.initState();
+    controller.fetchVendorProducts(widget.vendor.id ?? widget.vendor.uid);
+  }
+
+  Color _statusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'approved':
+        return Colors.greenAccent;
+      case 'rejected':
+        return Colors.redAccent;
+      case 'pending':
+        return Colors.orangeAccent;
+      default:
+        return Colors.white54;
+    }
+  }
+
+  String _formatDate(DateTime? dt) {
+    if (dt == null) return 'N/A';
+    return '${dt.day}/${dt.month}/${dt.year}  '
+        '${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
+  }
 
   @override
   Widget build(BuildContext context) {
-    // Screen open hote hi products fetch karo is vendor ke liye
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      controller.fetchVendorProducts(vendor.id!);
-    });
+    final vendor = widget.vendor;
+
+    // Collect all images: profileImage first, then storePictures
+    final List<String> allImages = [];
+    if (vendor.profileImage != null && vendor.profileImage!.trim().isNotEmpty) {
+      allImages.add(vendor.profileImage!);
+    }
+    for (final pic in vendor.storePictures) {
+      if (pic.trim().isNotEmpty && !allImages.contains(pic)) {
+        allImages.add(pic);
+      }
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFF1E1E2C),
@@ -30,7 +67,7 @@ class VendorDetailScreen extends StatelessWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         title: Text(
-          vendor.storeName,
+          vendor.storeName.isNotEmpty ? vendor.storeName : 'Vendor Detail',
           style: GoogleFonts.orbitron(
             color: Colors.white,
             fontWeight: FontWeight.bold,
@@ -40,26 +77,86 @@ class VendorDetailScreen extends StatelessWidget {
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.edit, color: Colors.cyanAccent),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => AddVendorScreen(vendorToEdit: vendor),
-                ),
-              );
-            },
-          ),
-        ],
+        // actions: [
+        //   IconButton(
+        //     icon: const Icon(Icons.edit, color: Colors.cyanAccent),
+        //     onPressed: () {
+        //       Navigator.push(
+        //         context,
+        //         MaterialPageRoute(
+        //             builder: (_) => AddVendorScreen(vendorToEdit: vendor)),
+        //       );
+        //     },
+        //   ),
+        // ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 1. VENDOR DETAILS CARD
+            // ── IMAGES SECTION ────────────────────────────────────────────
+            if (allImages.isNotEmpty) ...[
+              Text(
+                allImages.length == 1 ? 'Store Image' : 'Store Images',
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                height: 130,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: allImages.length,
+                  itemBuilder: (ctx, i) {
+                    return GestureDetector(
+                      onTap: () => _showFullImage(context, allImages[i]),
+                      child: Container(
+                        width: 130,
+                        margin: const EdgeInsets.only(right: 10),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.white10),
+                          image: DecorationImage(
+                            image: MemoryImage(base64Decode(allImages[i])),
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                        child: i == 0 && vendor.profileImage != null
+                            ? Align(
+                                alignment: Alignment.topLeft,
+                                child: Container(
+                                  margin: const EdgeInsets.all(5),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black54,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Text(
+                                    'Profile',
+                                    style: TextStyle(
+                                      color: Colors.cyanAccent,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ),
+                              )
+                            : null,
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
+
+            // ── VENDOR DETAILS CARD ───────────────────────────────────────
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),
@@ -71,63 +168,217 @@ class VendorDetailScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Header row: avatar + store name + status
                   Row(
                     children: [
-                      CircleAvatar(
-                        radius: 30,
-                        backgroundColor: Colors.cyanAccent.withOpacity(0.2),
-                        child: Text(
-                          vendor.name.isNotEmpty
-                              ? vendor.name[0].toUpperCase()
-                              : "V",
-                          style: GoogleFonts.orbitron(
-                            color: Colors.cyanAccent,
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
+                      _buildAvatar(vendor, allImages),
                       const SizedBox(width: 15),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            vendor.name,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              vendor.storeName.isNotEmpty
+                                  ? vendor.storeName
+                                  : 'Unnamed Vendor',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
-                          ),
-                          Text(
-                            "Speciality: ${vendor.speciality}",
-                            style: const TextStyle(
-                              color: Colors.cyanAccent,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
+                            if (vendor.status.trim().isNotEmpty) ...[
+                              const SizedBox(height: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _statusColor(
+                                    vendor.status,
+                                  ).withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: _statusColor(vendor.status),
+                                    width: 0.8,
+                                  ),
+                                ),
+                                child: Text(
+                                  vendor.status.toUpperCase(),
+                                  style: TextStyle(
+                                    color: _statusColor(vendor.status),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 1,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
                     ],
                   ),
+
                   const Divider(color: Colors.white24, height: 30),
-                  _buildDetailRow(Icons.phone, "Phone", vendor.phone),
-                  const SizedBox(height: 15),
-                  _buildDetailRow(Icons.badge, "CNIC", vendor.cnic),
-                  const SizedBox(height: 15),
-                  _buildDetailRow(Icons.location_on, "Address", vendor.address),
+
+                  // ── All detail rows ──
+                  _detailRow(Icons.person, 'Owner Name', vendor.ownerName),
+                  _gap(),
+                  _detailRow(Icons.store, 'Store Name', vendor.storeName),
+                  _gap(),
+                  _detailRow(Icons.phone, 'Store Phone', vendor.storePhone),
+                  _gap(),
+                  _detailRow(
+                    Icons.phone_android,
+                    'Owner Mobile',
+                    vendor.ownerMobile,
+                  ),
+
+                  if (vendor.contactPersonName.trim().isNotEmpty) ...[
+                    _gap(),
+                    _detailRow(
+                      Icons.person_outline,
+                      'Contact Person',
+                      vendor.contactPersonName,
+                    ),
+                  ],
+                  if (vendor.contactPersonPhone.trim().isNotEmpty) ...[
+                    _gap(),
+                    _detailRow(
+                      Icons.call,
+                      'Contact Phone',
+                      vendor.contactPersonPhone,
+                    ),
+                  ],
+                  if (vendor.email.trim().isNotEmpty) ...[
+                    _gap(),
+                    _detailRow(Icons.email_outlined, 'Email', vendor.email),
+                  ],
+
+                  _gap(),
+                  _detailRow(Icons.location_on, 'Address', vendor.address),
+
+                  if (vendor.beginningBalance > 0) ...[
+                    _gap(),
+                    _detailRow(
+                      Icons.account_balance_wallet_outlined,
+                      'Beginning Balance',
+                      'Rs. ${vendor.beginningBalance.toStringAsFixed(0)}',
+                    ),
+                  ],
+
+                  // Categories
+                  if (vendor.categories.isNotEmpty) ...[
+                    _gap(),
+                    _chipRow(
+                      Icons.category_outlined,
+                      'Categories',
+                      vendor.categories,
+                      Colors.cyanAccent,
+                    ),
+                  ],
+
+                  // Sub-categories
+                  if (vendor.subCategories.isNotEmpty) ...[
+                    _gap(),
+                    _chipRow(
+                      Icons.subdirectory_arrow_right,
+                      'Sub-Categories',
+                      vendor.subCategories,
+                      Colors.purpleAccent,
+                    ),
+                  ],
+
+                  // Timestamps
+                  if (vendor.approvedAt != null) ...[
+                    _gap(),
+                    _detailRow(
+                      Icons.check_circle_outline,
+                      'Approved At',
+                      _formatDate(vendor.approvedAt),
+                    ),
+                  ],
+                  if (vendor.rejectedAt != null) ...[
+                    _gap(),
+                    _detailRow(
+                      Icons.cancel_outlined,
+                      'Rejected At',
+                      _formatDate(vendor.rejectedAt),
+                      valueColor: Colors.redAccent,
+                    ),
+                  ],
+                  if (vendor.rejectionReason.trim().isNotEmpty) ...[
+                    _gap(),
+                    _detailRow(
+                      Icons.info_outline,
+                      'Rejection Reason',
+                      vendor.rejectionReason,
+                      valueColor: Colors.orangeAccent,
+                    ),
+                  ],
+
+                  // Pending new categories
+                  if (vendor.pendingNewCategories.isNotEmpty) ...[
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Pending New Categories',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ...vendor.pendingNewCategories.map((cat) {
+                      final name = cat['name']?.toString() ?? cat.toString();
+                      return _pendingChip(
+                        name,
+                        Colors.orangeAccent,
+                        Icons.category_outlined,
+                      );
+                    }),
+                  ],
+
+                  // Pending new sub-categories
+                  if (vendor.pendingNewSubCategories.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Pending New Sub-Categories',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ...vendor.pendingNewSubCategories.map((sub) {
+                      final catName = sub['categoryName']?.toString() ?? '';
+                      final subName =
+                          sub['subName']?.toString() ?? sub.toString();
+                      final label = catName.isNotEmpty
+                          ? '$catName  →  $subName'
+                          : subName;
+                      return _pendingChip(
+                        label,
+                        Colors.purpleAccent,
+                        Icons.subdirectory_arrow_right,
+                      );
+                    }),
+                  ],
                 ],
               ),
             ),
 
             const SizedBox(height: 30),
 
-            // 2. VENDOR PRODUCTS SECTION HEADER
+            // ── PRODUCTS HEADER ──────────────────────────────────────────
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  "Vendor Products",
+                  'Vendor Products',
                   style: GoogleFonts.orbitron(
                     color: Colors.white,
                     fontSize: 20,
@@ -141,15 +392,11 @@ class VendorDetailScreen extends StatelessWidget {
                     ),
                   ),
                   onPressed: () {
-                    // Navigate to Add Product Screen
-                    // Pass vendor.id as preSelectedVendorId
-                    // Get.to(
-                    //   () => AddProductScreen(preSelectedVendorId: vendor.id),
-                    // );
+                    // Get.to(() => AddProductScreen(preSelectedVendorId: vendor.id));
                   },
                   icon: const Icon(Icons.add, color: Colors.black, size: 18),
                   label: const Text(
-                    "Add Product",
+                    'Add Product',
                     style: TextStyle(
                       color: Colors.black,
                       fontWeight: FontWeight.bold,
@@ -161,14 +408,13 @@ class VendorDetailScreen extends StatelessWidget {
 
             const SizedBox(height: 15),
 
-            // 3. PRODUCTS LIST
+            // ── PRODUCTS LIST ─────────────────────────────────────────────
             Obx(() {
               if (controller.isProductsLoading.value) {
                 return const Center(
                   child: CircularProgressIndicator(color: Colors.cyanAccent),
                 );
               }
-
               if (controller.vendorProducts.isEmpty) {
                 return Container(
                   width: double.infinity,
@@ -178,10 +424,10 @@ class VendorDetailScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: Colors.white10),
                   ),
-                  child: Center(
+                  child: const Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
-                      children: const [
+                      children: [
                         Icon(
                           Icons.inventory_2_outlined,
                           color: Colors.white24,
@@ -189,7 +435,7 @@ class VendorDetailScreen extends StatelessWidget {
                         ),
                         SizedBox(height: 10),
                         Text(
-                          "No products linked to this vendor yet.",
+                          'No products linked to this vendor yet.',
                           style: TextStyle(color: Colors.white54),
                         ),
                       ],
@@ -197,11 +443,9 @@ class VendorDetailScreen extends StatelessWidget {
                   ),
                 );
               }
-
               return ListView.builder(
-                shrinkWrap: true, // Needed inside SingleScrollView
-                physics:
-                    const NeverScrollableScrollPhysics(), // Scroll parent instead
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
                 itemCount: controller.vendorProducts.length,
                 itemBuilder: (context, index) {
                   final ProductModel product = controller.vendorProducts[index];
@@ -241,7 +485,7 @@ class VendorDetailScreen extends StatelessWidget {
                         ),
                       ),
                       subtitle: Text(
-                        "${product.modelNumber} • Stock: ${product.stockQuantity}",
+                        '${product.modelNumber} • Stock: ${product.stockQuantity}',
                         style: const TextStyle(
                           color: Colors.white54,
                           fontSize: 12,
@@ -256,15 +500,13 @@ class VendorDetailScreen extends StatelessWidget {
                               color: Colors.blueAccent,
                               size: 20,
                             ),
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      ProductDetailScreen(product: product),
-                                ),
-                              );
-                            },
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    ProductDetailScreen(product: product),
+                              ),
+                            ),
                           ),
                           IconButton(
                             icon: const Icon(
@@ -272,11 +514,9 @@ class VendorDetailScreen extends StatelessWidget {
                               color: Colors.orangeAccent,
                               size: 20,
                             ),
-                            onPressed: () {
-                              Get.to(
-                                () => AddProductScreen(productToEdit: product),
-                              );
-                            },
+                            onPressed: () => Get.to(
+                              () => AddProductScreen(productToEdit: product),
+                            ),
                           ),
                           IconButton(
                             icon: const Icon(
@@ -286,18 +526,18 @@ class VendorDetailScreen extends StatelessWidget {
                             ),
                             onPressed: () {
                               Get.defaultDialog(
-                                title: "Delete Product?",
+                                title: 'Delete Product?',
                                 titleStyle: GoogleFonts.orbitron(
                                   color: Colors.white,
                                 ),
                                 backgroundColor: const Color(0xFF2A2D3E),
                                 middleText:
-                                    "Are you sure you want to delete ${product.name}?",
+                                    'Are you sure you want to delete ${product.name}?',
                                 middleTextStyle: const TextStyle(
                                   color: Colors.white70,
                                 ),
-                                textConfirm: "Delete",
-                                textCancel: "Cancel",
+                                textConfirm: 'Delete',
+                                textCancel: 'Cancel',
                                 confirmTextColor: Colors.white,
                                 buttonColor: Colors.redAccent,
                                 onConfirm: () {
@@ -320,7 +560,35 @@ class VendorDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildDetailRow(IconData icon, String label, String value) {
+  // ── Helper Widgets ────────────────────────────────────────────────────────
+
+  Widget _buildAvatar(VendorModel vendor, List<String> allImages) {
+    if (allImages.isNotEmpty) {
+      return CircleAvatar(
+        radius: 30,
+        backgroundImage: MemoryImage(base64Decode(allImages.first)),
+      );
+    }
+    return CircleAvatar(
+      radius: 30,
+      backgroundColor: Colors.cyanAccent.withOpacity(0.2),
+      child: Text(
+        vendor.avatarLetter,
+        style: GoogleFonts.orbitron(
+          color: Colors.cyanAccent,
+          fontSize: 22,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
+  Widget _detailRow(
+    IconData icon,
+    String label,
+    String value, {
+    Color? valueColor,
+  }) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -336,13 +604,118 @@ class VendorDetailScreen extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                value.isEmpty ? "N/A" : value,
-                style: const TextStyle(color: Colors.white, fontSize: 16),
+                value.trim().isEmpty ? 'N/A' : value,
+                style: TextStyle(
+                  color: valueColor ?? Colors.white,
+                  fontSize: 15,
+                ),
               ),
             ],
           ),
         ),
       ],
+    );
+  }
+
+  Widget _chipRow(
+    IconData icon,
+    String label,
+    List<String> items,
+    Color color,
+  ) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: Colors.white54, size: 20),
+        const SizedBox(width: 15),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: items
+                    .map(
+                      (item) => Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: color.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: color.withOpacity(0.5),
+                            width: 0.7,
+                          ),
+                        ),
+                        child: Text(
+                          item,
+                          style: TextStyle(color: color, fontSize: 12),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _pendingChip(String label, Color color, IconData icon) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.4)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 16),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  SizedBox _gap() => const SizedBox(height: 14);
+
+  void _showFullImage(BuildContext context, String base64Img) {
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.black87,
+        insetPadding: const EdgeInsets.all(16),
+        child: Stack(
+          children: [
+            InteractiveViewer(child: Image.memory(base64Decode(base64Img))),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

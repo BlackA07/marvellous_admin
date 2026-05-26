@@ -6,22 +6,32 @@ class CustomersRepository {
 
   Future<List<CustomerModel>> getAllCustomers() async {
     try {
-      // ✅ FIX: Ab 'role' limit hata di hai. Sab fetch honge.
       QuerySnapshot snapshot = await _db.collection('users').get();
 
-      var list = snapshot.docs
+      // Pehle sab models banao
+      List<CustomerModel> list = snapshot.docs
           .map(
             (doc) => CustomerModel.fromMap(
               doc.data() as Map<String, dynamic>,
               doc.id,
             ),
           )
+          .where((c) => c.myReferralCode.isNotEmpty)
           .toList();
 
-      // ✅ FIX: Sirf unko list mein rakho jinka referral code mojood hai (Admins + Customers)
-      list = list.where((c) => c.myReferralCode.isNotEmpty).toList();
+      // Ab har user ki image resolve karo (subcollection fallback ke saath)
+      list = await Future.wait(
+        list.map((customer) async {
+          if (customer.faceImage.isNotEmpty && customer.faceImage != 'null') {
+            return customer; // Already hai, skip
+          }
+          // profile_data subcollection se try karo
+          final img = await _resolveImageFromSubcollection(customer.uid);
+          if (img.isEmpty) return customer;
+          return customer.copyWith(faceImage: img);
+        }),
+      );
 
-      // Default Sort by newest
       list.sort(
         (a, b) => (b.createdAt ?? DateTime.now()).compareTo(
           a.createdAt ?? DateTime.now(),
@@ -31,5 +41,20 @@ class CustomersRepository {
     } catch (e) {
       throw e.toString();
     }
+  }
+
+  Future<String> _resolveImageFromSubcollection(String uid) async {
+    try {
+      final doc = await _db
+          .collection('users')
+          .doc(uid)
+          .collection('profile_data')
+          .doc('image')
+          .get();
+      if (doc.exists && doc.data() != null) {
+        return doc.data()!['image']?.toString() ?? '';
+      }
+    } catch (_) {}
+    return '';
   }
 }

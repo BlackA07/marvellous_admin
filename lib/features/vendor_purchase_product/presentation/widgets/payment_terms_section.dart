@@ -238,7 +238,7 @@ class _PaymentTermsSectionState extends State<PaymentTermsSection> {
 
         // ✅ MODIFIED RADIO BUTTONS
         Row(
-          children: ["Cash", "Online", "Credit", "Both"]
+          children: ["Pay Now", "Online", "Credit", "Both"]
               .map(
                 (mode) => Expanded(
                   child: Row(

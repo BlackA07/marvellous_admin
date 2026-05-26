@@ -1,35 +1,31 @@
-import 'package:flutter/foundation.dart'; // kReleaseMode ke liye
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // Import Auth
-import 'package:get/get.dart'; // Import GetX
+import 'package:get/get.dart';
 import 'package:marvellous_admin/firebase_options.dart';
 
-import 'core/routes/app_router.dart'; // Import AppRouter
+import 'core/routes/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'migration_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Try-Catch to prevent crash if Firebase isn't ready
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
 
-    // --- FORCE LOGOUT ON EVERY START ---
-    // Yeh line ensure karegi ke jab bhi app dubara khule,
-    // to Firebase ka pichla session automatically khatam ho jaye.
-    await FirebaseAuth.instance.signOut();
+    // ✅ FORCE SIGNOUT HATA DIYA: Isse user baar-baar logout ho raha tha
+    // aur Controllers "null user" par crash ho rahe thay.
+
+    // ✅ Migration Service ko background mein chalayen taake app start hone mein rukawat na ho
+    //MigrationService().migratePackages();
   } catch (e) {
-    debugPrint("Firebase Error: $e");
+    debugPrint("Firebase Initialization Error: $e");
   }
 
-  runApp(
-    // ProviderScope abhi bhi chahiye state management ke liye
-    ProviderScope(child: MarvellousAdminApp()),
-  );
+  runApp(const ProviderScope(child: MarvellousAdminApp()));
 }
 
 class MarvellousAdminApp extends StatelessWidget {
@@ -37,15 +33,11 @@ class MarvellousAdminApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // MaterialApp -> GetMaterialApp for Routing
     return GetMaterialApp(
       title: 'Marvellous Admin',
       debugShowCheckedModeBanner: false,
-
       theme: AppTheme.darkTheme,
-
-      // ROUTING SETUP
-      // Hamesha login screen se start hoga
+      // Initial route Login rakhain, auth check screen ke andar handle karen
       initialRoute: AppRoutes.login,
       getPages: AppRoutes.routes,
     );

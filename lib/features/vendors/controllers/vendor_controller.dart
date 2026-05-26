@@ -2,15 +2,15 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../models/vendor_model.dart';
-import '../../products/models/product_model.dart'; // Import Product Model
+import '../../products/models/product_model.dart';
 
 class VendorController extends GetxController {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   var vendors = <VendorModel>[].obs;
-  var categoryNames = <String>[].obs; // Dropdown ke liye
+  var categoryNames = <String>[].obs;
   var isLoading = false.obs;
-  var isSaving = false.obs; // Save button loading state
+  var isSaving = false.obs;
 
   // Vendor Specific Products
   var vendorProducts = <ProductModel>[].obs;
@@ -37,7 +37,6 @@ class VendorController extends GetxController {
   // Fetch Products for Specific Vendor
   void fetchVendorProducts(String vendorId) {
     isProductsLoading.value = true;
-    // Listening to products where vendorId matches
     _firestore
         .collection('products')
         .where('vendorId', isEqualTo: vendorId)
@@ -57,25 +56,6 @@ class VendorController extends GetxController {
           .map((doc) => doc['name'] as String)
           .toList();
     });
-  }
-
-  // Add Vendor (Returns TRUE if successful)
-  Future<bool> addVendor(VendorModel vendor) async {
-    isSaving.value = true;
-    try {
-      await _firestore.collection('vendors').add(vendor.toMap());
-      isSaving.value = false;
-      return true; // Signal success
-    } catch (e) {
-      isSaving.value = false;
-      Get.snackbar(
-        "Error",
-        e.toString(),
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
-      return false; // Signal failure
-    }
   }
 
   // Update Vendor (Returns TRUE if successful)
@@ -100,23 +80,20 @@ class VendorController extends GetxController {
   // Delete Vendor with UNDO
   Future<void> deleteVendor(VendorModel vendor) async {
     try {
-      // 1. Delete Document
       await _firestore.collection('vendors').doc(vendor.id).delete();
 
-      // 2. Show Snackbar with Undo
       Get.snackbar(
         "Deleted",
-        "${vendor.name} has been removed.",
+        "${vendor.storeName.isNotEmpty ? vendor.storeName : vendor.ownerName} has been removed.",
         backgroundColor: Colors.orangeAccent,
         colorText: Colors.black,
         mainButton: TextButton(
           onPressed: () async {
-            // UNDO LOGIC: Re-set the document with same ID
             await _firestore
                 .collection('vendors')
                 .doc(vendor.id)
                 .set(vendor.toMap());
-            Get.back(); // Close snackbar
+            Get.back();
           },
           child: const Text(
             "UNDO",
@@ -145,7 +122,6 @@ class VendorController extends GetxController {
         colorText: Colors.white,
         mainButton: TextButton(
           onPressed: () async {
-            // UNDO Logic for Product
             await _firestore
                 .collection('products')
                 .doc(product.id)

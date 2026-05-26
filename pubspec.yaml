@@ -58,6 +58,7 @@ dependencies:
   image_cropper: ^11.0.0
   linked_scroll_controller: ^0.2.0
   google_maps_flutter: ^2.17.0
+  cloudinary_public: ^0.23.1
 
 dev_dependencies:
   flutter_test:

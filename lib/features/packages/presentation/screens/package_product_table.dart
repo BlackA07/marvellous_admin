@@ -1,5 +1,3 @@
-import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -32,13 +30,6 @@ class _PackageProductTableState extends State<PackageProductTable> {
   String _productSearchQuery = "";
   int? sortColumnIndex;
   bool ascending = true;
-
-  // Image cache to avoid repeated base64Decode
-  final Map<String, Uint8List> _imageCache = {};
-
-  Uint8List _getImage(String base64Str) {
-    return _imageCache.putIfAbsent(base64Str, () => base64Decode(base64Str));
-  }
 
   void _sortProducts(int columnIndex, bool asc) {
     setState(() {
@@ -321,7 +312,7 @@ class _PackageProductTableState extends State<PackageProductTable> {
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(6),
                         image: DecorationImage(
-                          image: MemoryImage(_getImage(product.images.first)),
+                          image: NetworkImage(product.images.first),
                           fit: BoxFit.cover,
                         ),
                       ),
