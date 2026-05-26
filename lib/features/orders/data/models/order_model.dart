@@ -1,3 +1,4 @@
+// Path: lib/data/models/order_model.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class OrderModel {
@@ -14,6 +15,7 @@ class OrderModel {
   final DateTime date;
   final String paymentMethod;
   final String trxId;
+  final List<Map<String, dynamic>> items; // ✅ NAYI CHEEZ: Order ke saare items
 
   OrderModel({
     required this.id,
@@ -29,9 +31,9 @@ class OrderModel {
     required this.date,
     this.paymentMethod = 'N/A',
     this.trxId = '',
+    this.items = const [], // ✅ Initialize
   });
 
-  /// ✅ NEW: Factory method for Firestore DocumentSnapshot
   factory OrderModel.fromFirestore(DocumentSnapshot doc) {
     try {
       var data = doc.data() as Map<String, dynamic>;
@@ -48,16 +50,30 @@ class OrderModel {
     print("🔍 Parsing order: $docId");
 
     try {
-      // Extract product name and image
       String extractedName = 'Unknown Product';
       String extractedImage = '';
+      List<Map<String, dynamic>> parsedItems = [];
 
-      // Try multiple possible field structures
-      if (data['items'] != null && (data['items'] as List).isNotEmpty) {
-        var firstItem = data['items'][0];
+      // ✅ FIX: Extracting ALL items
+      if (data['items'] != null && data['items'] is List) {
+        for (var i in data['items']) {
+          if (i is Map) {
+            parsedItems.add(Map<String, dynamic>.from(i));
+          }
+        }
+      }
+
+      if (parsedItems.isNotEmpty) {
+        var firstItem = parsedItems[0];
         extractedName =
             firstItem['name'] ?? firstItem['productName'] ?? 'Unknown Product';
         extractedImage = firstItem['image'] ?? firstItem['productImage'] ?? '';
+
+        // ✅ FIX: Dashboard pe "Bubble Gun + 1 more item" show hoga
+        if (parsedItems.length > 1) {
+          extractedName =
+              "$extractedName + ${parsedItems.length - 1} more items";
+        }
       } else if (data['productName'] != null) {
         extractedName = data['productName'];
         extractedImage = data['productImage'] ?? '';
@@ -66,7 +82,6 @@ class OrderModel {
         extractedImage = data['image'] ?? '';
       }
 
-      // Extract price - try multiple fields
       double extractedPrice = 0.0;
 
       if (data['grandTotal'] != null) {
@@ -81,7 +96,6 @@ class OrderModel {
         extractedPrice = _parseDouble(data['salePrice']);
       }
 
-      // Extract customer info with fallbacks
       String customerId =
           data['userId'] ??
           data['customerId'] ??
@@ -105,14 +119,10 @@ class OrderModel {
           data['shippingAddress'] ??
           'N/A';
 
-      // Extract status
       String status = data['status']?.toString().toLowerCase() ?? 'pending';
-
-      // Extract payment info
       String paymentMethod = data['paymentMethod'] ?? 'Cash on Delivery';
       String trxId = data['trxId'] ?? data['transactionId'] ?? '';
 
-      // Extract date
       DateTime date;
       if (data['createdAt'] != null) {
         if (data['createdAt'] is Timestamp) {
@@ -133,12 +143,6 @@ class OrderModel {
         date = DateTime.now();
       }
 
-      print("✅ Order parsed successfully:");
-      print("   Name: $extractedName");
-      print("   Price: $extractedPrice");
-      print("   Status: $status");
-      print("   Customer: $customerName");
-
       return OrderModel(
         id: docId,
         customerId: customerId,
@@ -153,6 +157,7 @@ class OrderModel {
         paymentMethod: paymentMethod,
         trxId: trxId,
         date: date,
+        items: parsedItems, // ✅ Saved in model
       );
     } catch (e, stack) {
       print("❌ Error parsing order $docId: $e");
@@ -162,20 +167,16 @@ class OrderModel {
     }
   }
 
-  // Helper method to safely parse double values
   static double _parseDouble(dynamic value) {
     if (value == null) return 0.0;
-
     if (value is double) return value;
     if (value is int) return value.toDouble();
     if (value is String) {
       return double.tryParse(value.replaceAll(',', '')) ?? 0.0;
     }
-
     return 0.0;
   }
 
-  // Convert to map for Firestore
   Map<String, dynamic> toMap() {
     return {
       'userId': customerId,
@@ -190,44 +191,7 @@ class OrderModel {
       'paymentMethod': paymentMethod,
       'trxId': trxId,
       'createdAt': Timestamp.fromDate(date),
+      'items': items,
     };
-  }
-
-  // Copy with method for updates
-  OrderModel copyWith({
-    String? id,
-    String? customerId,
-    String? customerName,
-    String? customerImage,
-    String? customerPhone,
-    String? customerAddress,
-    String? productName,
-    String? productImage,
-    double? price,
-    String? status,
-    DateTime? date,
-    String? paymentMethod,
-    String? trxId,
-  }) {
-    return OrderModel(
-      id: id ?? this.id,
-      customerId: customerId ?? this.customerId,
-      customerName: customerName ?? this.customerName,
-      customerImage: customerImage ?? this.customerImage,
-      customerPhone: customerPhone ?? this.customerPhone,
-      customerAddress: customerAddress ?? this.customerAddress,
-      productName: productName ?? this.productName,
-      productImage: productImage ?? this.productImage,
-      price: price ?? this.price,
-      status: status ?? this.status,
-      date: date ?? this.date,
-      paymentMethod: paymentMethod ?? this.paymentMethod,
-      trxId: trxId ?? this.trxId,
-    );
-  }
-
-  @override
-  String toString() {
-    return 'OrderModel(id: $id, customer: $customerName, product: $productName, price: $price, status: $status)';
   }
 }

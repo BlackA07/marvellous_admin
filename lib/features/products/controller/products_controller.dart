@@ -1,15 +1,21 @@
 // lib/controller/products_controller.dart
 
-import 'package:firebase_auth/firebase_auth.dart'; // ✅ Imported
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:cloudinary_public/cloudinary_public.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../models/product_model.dart';
 import '../repository/products_repository.dart';
 
 class ProductsController extends GetxController {
   final ProductsRepository _repository = ProductsRepository();
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final cloudinary = CloudinaryPublic('dzluvpc34', 'marvellous', cache: false);
 
   var isLoading = true.obs;
   var isMigrating = false.obs;
@@ -84,6 +90,45 @@ class ProductsController extends GetxController {
         colorText: Colors.white,
       );
     }
+  }
+
+  Future<List<String>> uploadImagesToCloudinary(
+    List<String> base64Images,
+  ) async {
+    final cloudinary = CloudinaryPublic(
+      'dzluvpc34',
+      'marvellous',
+      cache: false,
+    );
+
+    // Future.wait se saari images ek saath upload hongi (fast performance)
+    List<Future<String>> uploadTasks = base64Images.map((base64) async {
+      if (base64.startsWith('http'))
+        return base64; // Agar pehle se URL hai to skip karen
+
+      try {
+        Uint8List bytes = base64Decode(base64);
+        final byteData = ByteData.view(bytes.buffer);
+
+        CloudinaryResponse response = await cloudinary.uploadFile(
+          CloudinaryFile.fromByteData(
+            byteData,
+            identifier:
+                'prod_${DateTime.now().millisecondsSinceEpoch}_${base64.substring(0, 5)}.jpg',
+            resourceType: CloudinaryResourceType.Image,
+          ),
+        );
+        return response.secureUrl;
+      } catch (e) {
+        debugPrint("Error: $e");
+        return ""; // Error ki surat men empty string
+      }
+    }).toList();
+
+    List<String> results = await Future.wait(uploadTasks);
+    return results
+        .where((url) => url.isNotEmpty)
+        .toList(); // Sirf valid URLs wapas bhejen
   }
 
   // --- ✨ MIGRATION FUNCTION: Add averageRating & totalReviews to old products ---
@@ -301,6 +346,11 @@ class ProductsController extends GetxController {
         backgroundColor: Colors.green,
         colorText: Colors.white,
       );
+
+      // ✅ Ask admin which users to notify — show dialog after success snackbar
+      await Future.delayed(const Duration(milliseconds: 400));
+      _showNotificationAudienceDialog(product, isUpdate: false);
+
       return true;
     } catch (e) {
       print("❌ Controller Error: $e");
@@ -314,6 +364,770 @@ class ProductsController extends GetxController {
     } finally {
       isLoading(false);
     }
+  }
+
+  // ✅ NEW: Add Package with notification dialog
+  Future<bool> addNewPackage(ProductModel package) async {
+    try {
+      isLoading(true);
+
+      await fetchGlobalSettings();
+      package.showDecimalPoints = showDecimals.value;
+      package.averageRating = 0.0;
+      package.totalReviews = 0;
+      package.isPackage = true;
+
+      await _repository.addProduct(package);
+      productList.insert(0, package);
+
+      addToHistory(package.name);
+      addToHistory(package.brand);
+      addToSpecificHistory(package.name, 'product');
+      addToSpecificHistory(package.brand, 'brand');
+
+      Get.snackbar(
+        "Success",
+        "Package saved successfully with ID: ${package.id}",
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+
+      // ✅ Show notification dialog for new package
+      await Future.delayed(const Duration(milliseconds: 400));
+      _showNotificationAudienceDialog(
+        package,
+        isUpdate: false,
+        isPackage: true,
+      );
+
+      return true;
+    } catch (e) {
+      print("❌ Controller Error: $e");
+      Get.snackbar(
+        "Error",
+        "Failed to add package: $e",
+        backgroundColor: Colors.redAccent,
+        colorText: Colors.white,
+      );
+      return false;
+    } finally {
+      isLoading(false);
+    }
+  }
+
+  // ✅ MODIFIED: Updated notification dialog signature — isUpdate & isPackage params added
+  void _showNotificationAudienceDialog(
+    ProductModel product, {
+    bool isUpdate = false,
+    bool isPackage = false,
+  }) {
+    final isSending = false.obs;
+
+    // --- Audience selection (single select) ---
+    final selectedAudience = 'all'.obs;
+
+    // --- Location selection (multi-select) ---
+    final String prodLoc = product.deliveryLocation.toLowerCase();
+    final selectedLocations = <String>{}.obs;
+
+    if (prodLoc.contains('karachi')) {
+      selectedLocations.add('karachi');
+    } else if (prodLoc.contains('pakistan')) {
+      selectedLocations.add('karachi');
+      selectedLocations.add('pakistan');
+    } else {
+      selectedLocations.add('karachi');
+      selectedLocations.add('pakistan');
+      selectedLocations.add('worldwide');
+    }
+
+    // ── Labels based on context ─────────────────────────────────
+    final String itemType = isPackage ? 'Package' : 'Product';
+    final String dialogTitle = isUpdate
+        ? "Update Notification Bhejein?"
+        : "New Notification Bhejein?";
+    final String dialogSubtitle = isUpdate
+        ? "\"${product.name}\" update ho gaya."
+        : "\"${product.name}\" add ho gaya.";
+    final String notifTitlePrefix = isUpdate
+        ? (isPackage ? '📦 Package Updated: ' : '✏️ Product Updated: ')
+        : (isPackage ? '📦 New Package: ' : '🛍️ New Product: ');
+    final String notifType = isUpdate
+        ? (isPackage ? 'package_updated' : 'product_updated')
+        : (isPackage ? 'new_package' : 'new_product');
+
+    Get.dialog(
+      barrierDismissible: false,
+      Dialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: Colors.black, width: 1.5),
+        ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Header ──────────────────────────────────────────────
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: isUpdate
+                          ? Colors.orange.shade50
+                          : Colors.deepPurple.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      isUpdate
+                          ? Icons.edit_notifications_outlined
+                          : Icons.notifications_active_outlined,
+                      color: isUpdate ? Colors.orange : Colors.deepPurple,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      dialogTitle,
+                      style: GoogleFonts.orbitron(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              // ── Context badge (New / Updated | Product / Package) ──
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isUpdate
+                          ? Colors.orange.shade50
+                          : Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: isUpdate
+                            ? Colors.orange.shade200
+                            : Colors.green.shade200,
+                      ),
+                    ),
+                    child: Text(
+                      isUpdate ? "✏️ Updated" : "🆕 New",
+                      style: GoogleFonts.comicNeue(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        color: isUpdate
+                            ? Colors.orange.shade700
+                            : Colors.green.shade700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isPackage
+                          ? Colors.blue.shade50
+                          : Colors.purple.shade50,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: isPackage
+                            ? Colors.blue.shade200
+                            : Colors.purple.shade200,
+                      ),
+                    ),
+                    child: Text(
+                      isPackage ? "📦 Package" : "🛍️ Product",
+                      style: GoogleFonts.comicNeue(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        color: isPackage
+                            ? Colors.blue.shade700
+                            : Colors.purple.shade700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                dialogSubtitle,
+                style: GoogleFonts.comicNeue(
+                  fontSize: 14,
+                  color: Colors.black54,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // ── Section 1: Audience ──────────────────────────────────
+              Text(
+                "Audience",
+                style: GoogleFonts.orbitron(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black54,
+                ),
+              ),
+              const SizedBox(height: 10),
+
+              Obx(
+                () => _audienceOption(
+                  icon: Icons.people_alt_outlined,
+                  label: "Sab Users",
+                  sublabel: "All registered users",
+                  value: 'all',
+                  color: Colors.blue.shade700,
+                  bgColor: Colors.blue.shade50,
+                  selected: selectedAudience.value == 'all',
+                  onTap: () => selectedAudience.value = 'all',
+                ),
+              ),
+              const SizedBox(height: 8),
+              Obx(
+                () => _audienceOption(
+                  icon: Icons.check_circle_outline,
+                  label: "Sirf Active Members",
+                  sublabel: "isMLMActive = true",
+                  value: 'active',
+                  color: Colors.green.shade700,
+                  bgColor: Colors.green.shade50,
+                  selected: selectedAudience.value == 'active',
+                  onTap: () => selectedAudience.value = 'active',
+                ),
+              ),
+              const SizedBox(height: 8),
+              Obx(
+                () => _audienceOption(
+                  icon: Icons.cancel_outlined,
+                  label: "Sirf Inactive Members",
+                  sublabel: "isMLMActive = false",
+                  value: 'inactive',
+                  color: Colors.orange.shade700,
+                  bgColor: Colors.orange.shade50,
+                  selected: selectedAudience.value == 'inactive',
+                  onTap: () => selectedAudience.value = 'inactive',
+                ),
+              ),
+
+              const SizedBox(height: 20),
+              const Divider(thickness: 1, color: Colors.black12),
+              const SizedBox(height: 12),
+
+              // ── Section 2: Location (multi-select) ──────────────────
+              Row(
+                children: [
+                  Text(
+                    "Delivery Location",
+                    style: GoogleFonts.orbitron(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black54,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.deepPurple.shade50,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      "Multi-select",
+                      style: GoogleFonts.comicNeue(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.deepPurple,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                "$itemType location: ${product.deliveryLocation}",
+                style: GoogleFonts.comicNeue(
+                  fontSize: 12,
+                  color: Colors.black38,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 10),
+
+              Obx(
+                () => _locationCheckbox(
+                  icon: Icons.location_city_outlined,
+                  label: "Karachi Only",
+                  sublabel: "deliveryLocationPreference = Karachi",
+                  value: 'karachi',
+                  color: Colors.teal.shade700,
+                  bgColor: Colors.teal.shade50,
+                  isChecked: selectedLocations.contains('karachi'),
+                  onToggle: () {
+                    if (selectedLocations.contains('karachi')) {
+                      selectedLocations.remove('karachi');
+                    } else {
+                      selectedLocations.add('karachi');
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(height: 8),
+              Obx(
+                () => _locationCheckbox(
+                  icon: Icons.flag_outlined,
+                  label: "Whole Pakistan",
+                  sublabel: "deliveryLocationPreference = Outside Karachi",
+                  value: 'pakistan',
+                  color: Colors.indigo.shade700,
+                  bgColor: Colors.indigo.shade50,
+                  isChecked: selectedLocations.contains('pakistan'),
+                  onToggle: () {
+                    if (selectedLocations.contains('pakistan')) {
+                      selectedLocations.remove('pakistan');
+                    } else {
+                      selectedLocations.add('pakistan');
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(height: 8),
+              Obx(
+                () => _locationCheckbox(
+                  icon: Icons.language_outlined,
+                  label: "Worldwide",
+                  sublabel: "deliveryLocationPreference = Outside Pakistan",
+                  value: 'worldwide',
+                  color: Colors.purple.shade700,
+                  bgColor: Colors.purple.shade50,
+                  isChecked: selectedLocations.contains('worldwide'),
+                  onToggle: () {
+                    if (selectedLocations.contains('worldwide')) {
+                      selectedLocations.remove('worldwide');
+                    } else {
+                      selectedLocations.add('worldwide');
+                    }
+                  },
+                ),
+              ),
+
+              const SizedBox(height: 20),
+              const Divider(thickness: 1, color: Colors.black12),
+              const SizedBox(height: 14),
+
+              // ── Action Buttons ───────────────────────────────────────
+              Obx(
+                () => SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isSending.value
+                          ? Colors.grey.shade400
+                          : (isUpdate ? Colors.orange : Colors.deepPurple),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    icon: isSending.value
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Icon(
+                            Icons.send_rounded,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                    label: Text(
+                      isSending.value
+                          ? "Bhej raha hai..."
+                          : "Notification Bhejo",
+                      style: GoogleFonts.comicNeue(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 16,
+                      ),
+                    ),
+                    onPressed: isSending.value || selectedLocations.isEmpty
+                        ? null
+                        : () async {
+                            isSending.value = true;
+                            await _sendNotification(
+                              product: product,
+                              audienceFilter: selectedAudience.value,
+                              locationFilters: Set<String>.from(
+                                selectedLocations,
+                              ),
+                              notifTitlePrefix: notifTitlePrefix,
+                              notifType: notifType,
+                            );
+                            isSending.value = false;
+                            if (Get.isDialogOpen ?? false) Get.back();
+                            _showNotifSentSnackbar(
+                              selectedAudience.value,
+                              Set<String>.from(selectedLocations),
+                            );
+                          },
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+
+              SizedBox(
+                width: double.infinity,
+                height: 46,
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.black26),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  icon: const Icon(
+                    Icons.notifications_off_outlined,
+                    color: Colors.black45,
+                    size: 18,
+                  ),
+                  label: Text(
+                    "Kisi Ko Na Bhejo",
+                    style: GoogleFonts.comicNeue(
+                      color: Colors.black45,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 15,
+                    ),
+                  ),
+                  onPressed: () {
+                    if (Get.isDialogOpen ?? false) Get.back();
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ✅ Single-select audience option tile
+  Widget _audienceOption({
+    required IconData icon,
+    required String label,
+    required String sublabel,
+    required String value,
+    required Color color,
+    required Color bgColor,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        decoration: BoxDecoration(
+          color: selected ? bgColor : Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected ? color.withOpacity(0.6) : Colors.black12,
+            width: selected ? 1.8 : 1.0,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: selected ? color : Colors.black38, size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: GoogleFonts.comicNeue(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                      color: selected ? color : Colors.black54,
+                    ),
+                  ),
+                  Text(
+                    sublabel,
+                    style: GoogleFonts.comicNeue(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: selected ? color.withOpacity(0.7) : Colors.black38,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Radio indicator
+            Container(
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: selected ? color : Colors.black26,
+                  width: 2,
+                ),
+                color: selected ? color : Colors.transparent,
+              ),
+              child: selected
+                  ? const Icon(Icons.check, color: Colors.white, size: 13)
+                  : null,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ✅ Multi-select location checkbox tile
+  Widget _locationCheckbox({
+    required IconData icon,
+    required String label,
+    required String sublabel,
+    required String value,
+    required Color color,
+    required Color bgColor,
+    required bool isChecked,
+    required VoidCallback onToggle,
+  }) {
+    return GestureDetector(
+      onTap: onToggle,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        decoration: BoxDecoration(
+          color: isChecked ? bgColor : Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isChecked ? color.withOpacity(0.6) : Colors.black12,
+            width: isChecked ? 1.8 : 1.0,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: isChecked ? color : Colors.black38, size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: GoogleFonts.comicNeue(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                      color: isChecked ? color : Colors.black54,
+                    ),
+                  ),
+                  Text(
+                    sublabel,
+                    style: GoogleFonts.comicNeue(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: isChecked
+                          ? color.withOpacity(0.7)
+                          : Colors.black38,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Checkbox indicator
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              width: 22,
+              height: 22,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: isChecked ? color : Colors.black26,
+                  width: 2,
+                ),
+                color: isChecked ? color : Colors.transparent,
+              ),
+              child: isChecked
+                  ? const Icon(Icons.check, color: Colors.white, size: 14)
+                  : null,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showNotifSentSnackbar(String audience, Set<String> locations) {
+    final String audienceLabel = audience == 'all'
+        ? 'Sab users'
+        : audience == 'active'
+        ? 'Active members'
+        : 'Inactive members';
+
+    final List<String> locLabels = [];
+    if (locations.contains('karachi')) locLabels.add('Karachi');
+    if (locations.contains('pakistan')) locLabels.add('Pakistan');
+    if (locations.contains('worldwide')) locLabels.add('Worldwide');
+
+    Get.snackbar(
+      "Notification Sent ✅",
+      "$audienceLabel ko bheja gaya — ${locLabels.join(', ')}",
+      backgroundColor: Colors.green,
+      colorText: Colors.white,
+      snackPosition: SnackPosition.BOTTOM,
+      duration: const Duration(seconds: 4),
+    );
+  }
+
+  // ✅ UNIFIED: Core notification sender
+  // Works for: new product, updated product, new package, updated package
+  // notifTitlePrefix controls the emoji+label in title
+  // notifType controls the 'type' field in Firestore
+  Future<void> _sendNotification({
+    required ProductModel product,
+    required String audienceFilter,
+    required Set<String> locationFilters,
+    required String notifTitlePrefix,
+    required String notifType,
+  }) async {
+    try {
+      final usersSnap = await _db.collection('users').get();
+
+      final String firstImage = product.images.isNotEmpty
+          ? product.images[0]
+          : '';
+      final String priceText = "Rs. ${product.salePrice.toStringAsFixed(0)}";
+      final String notifBody =
+          "${product.brand.isNotEmpty ? product.brand : 'New'} · $priceText"
+          "${product.modelNumber.isNotEmpty ? ' · ${product.modelNumber}' : ''}";
+
+      final List<QueryDocumentSnapshot> targetUsers = [];
+
+      for (final userDoc in usersSnap.docs) {
+        final data = userDoc.data() as Map<String, dynamic>;
+        final bool isMLMActive = data['isMLMActive'] == true;
+
+        // ── Audience filter ──────────────────────────────────────────
+        final bool passesAudience =
+            audienceFilter == 'all' ||
+            (audienceFilter == 'active' && isMLMActive) ||
+            (audienceFilter == 'inactive' && !isMLMActive);
+
+        if (!passesAudience) continue;
+
+        // ── Location filter ──────────────────────────────────────────
+        final String userLocPref = (data['deliveryLocationPreference'] ?? '')
+            .toString()
+            .trim();
+
+        bool passesLocation;
+
+        if (userLocPref.isEmpty) {
+          passesLocation = true;
+        } else if (userLocPref == 'Karachi') {
+          passesLocation = locationFilters.contains('karachi');
+        } else if (userLocPref.contains('Pakistan')) {
+          passesLocation = locationFilters.contains('pakistan');
+        } else if (userLocPref.contains('Worldwide') ||
+            userLocPref.contains('Outside Pakistan')) {
+          passesLocation = locationFilters.contains('worldwide');
+        } else {
+          passesLocation = true;
+        }
+
+        if (!passesLocation) continue;
+
+        targetUsers.add(userDoc);
+      }
+
+      // ── Send in batches of 500 (Firestore limit) ─────────────────
+      for (int i = 0; i < targetUsers.length; i += 500) {
+        final chunk = targetUsers.sublist(
+          i,
+          (i + 500) > targetUsers.length ? targetUsers.length : (i + 500),
+        );
+        final WriteBatch batch = _db.batch();
+
+        for (final userDoc in chunk) {
+          final notifRef = _db
+              .collection('users')
+              .doc(userDoc.id)
+              .collection('notifications')
+              .doc();
+
+          batch.set(notifRef, {
+            'title': '$notifTitlePrefix${product.name}',
+            'body': notifBody,
+            'type': notifType,
+            'isRead': false,
+            'timestamp': FieldValue.serverTimestamp(),
+            'data': {
+              'productId': product.id,
+              'productName': product.name,
+              'productImage': firstImage,
+              'salePrice': product.salePrice,
+              'originalPrice': product.originalPrice,
+              'modelNumber': product.modelNumber,
+              'brand': product.brand,
+              'isPackage': product.isPackage,
+            },
+          });
+        }
+
+        await batch.commit();
+      }
+
+      debugPrint(
+        "✅ Notifications sent to ${targetUsers.length} users"
+        " (type: $notifType, audience: $audienceFilter, locations: $locationFilters)",
+      );
+    } catch (e) {
+      debugPrint("❌ Failed to send notifications: $e");
+      Get.snackbar(
+        "Notification Error",
+        "Could not send notifications: $e",
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
+  }
+
+  // ✅ KEPT for backward compatibility — delegates to unified sender
+  Future<void> _sendNewProductNotification({
+    required ProductModel product,
+    required String audienceFilter,
+    required Set<String> locationFilters,
+  }) async {
+    await _sendNotification(
+      product: product,
+      audienceFilter: audienceFilter,
+      locationFilters: locationFilters,
+      notifTitlePrefix: '🛍️ New Product: ',
+      notifType: 'new_product',
+    );
   }
 
   Future<bool> updateProduct(ProductModel product) async {
@@ -346,8 +1160,9 @@ class ProductsController extends GetxController {
           backgroundColor: Colors.green,
           colorText: Colors.white,
         );
+        // NOTE: No notification dialog for vendor approval flow (intentional)
       } else {
-        // Normal Update Flow for existing products
+        // ── Normal Edit/Update Flow ───────────────────────────────
         await _repository.updateProduct(product);
         int index = productList.indexWhere((p) => p.id == product.id);
         if (index != -1) {
@@ -359,6 +1174,14 @@ class ProductsController extends GetxController {
           "Updated Successfully",
           backgroundColor: Colors.green,
           colorText: Colors.white,
+        );
+
+        // ✅ Show notification dialog on edit — with isUpdate:true
+        await Future.delayed(const Duration(milliseconds: 400));
+        _showNotificationAudienceDialog(
+          product,
+          isUpdate: true,
+          isPackage: product.isPackage,
         );
       }
 
@@ -423,8 +1246,23 @@ class ProductsController extends GetxController {
   }
 
   void fetchHistory() async {
-    var history = await _repository.fetchSearchHistory();
-    searchHistoryList.assignAll(history);
+    try {
+      // ✅ FIX: Permission check aur try-catch
+      if (FirebaseAuth.instance.currentUser == null) return;
+
+      // Check karen ke kya user admin hai, agar nahi to request na bhejain
+      var userDoc = await _db
+          .collection('users')
+          .doc(FirebaseAuth.instance.currentUser!.uid)
+          .get();
+      if (userDoc.exists && userDoc.data()?['role'] == 'admin') {
+        var history = await _repository.fetchSearchHistory();
+        searchHistoryList.assignAll(history);
+      }
+    } catch (e) {
+      // Agar permission denied ho, to silent rahein, app crash na hone dein
+      debugPrint("Search history access denied or failed: $e");
+    }
   }
 
   // --- Helper to populate autocomplete lists from existing data ---

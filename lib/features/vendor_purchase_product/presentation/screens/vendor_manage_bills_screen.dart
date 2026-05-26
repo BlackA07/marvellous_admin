@@ -26,10 +26,22 @@ class _VendorManageBillsScreenState extends State<VendorManageBillsScreen> {
   String? selectedVendorId;
   String? selectedVendorName;
 
+  // ── Search & Filter ──
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _searchQuery = '';
+  String _statusFilter = 'All'; // All, Paid, Partial, Unpaid
+  String _sortMode = 'Latest First'; // Latest First, Oldest First
+
   @override
   void initState() {
     super.initState();
     _fetchVendors();
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
   }
 
   void _fetchVendors() async {
@@ -68,14 +80,121 @@ class _VendorManageBillsScreenState extends State<VendorManageBillsScreen> {
     return rem > 0 ? rem : 0.0;
   }
 
-  // ✅ DOUBLE CONFIRMATION LOGIC
+  // ── Bill Status Helper ──
+  String _getBillStatus(double total, double paid, double remaining) {
+    if (remaining <= 0) return 'Paid';
+    if (paid <= 0) return 'Unpaid';
+    return 'Partial';
+  }
+
+  // ── Color scheme per status ──
+  Color _cardBg(String status) {
+    switch (status) {
+      case 'Paid':
+        return const Color(0xFFE8F5E9); // light green
+      case 'Partial':
+        return const Color(0xFFE3F2FD); // light blue
+      default:
+        return const Color(0xFFFFEBEE); // light red
+    }
+  }
+
+  Color _cardBorder(String status) {
+    switch (status) {
+      case 'Paid':
+        return Colors.green.shade800;
+      case 'Partial':
+        return Colors.blue.shade800;
+      default:
+        return Colors.red.shade800;
+    }
+  }
+
+  Color _statusBadgeBg(String status) {
+    switch (status) {
+      case 'Paid':
+        return Colors.green.shade800;
+      case 'Partial':
+        return Colors.blue.shade800;
+      default:
+        return Colors.red.shade800;
+    }
+  }
+
+  String _statusLabel(String status) {
+    switch (status) {
+      case 'Paid':
+        return '✓ FULLY PAID';
+      case 'Partial':
+        return '◑ PARTIALLY PAID';
+      default:
+        return '✗ UNPAID';
+    }
+  }
+
+  // ── Filter bills list ──
+  List<DocumentSnapshot> _applyFilters(List<DocumentSnapshot> allBills) {
+    // 1. Sort
+    allBills.sort((a, b) {
+      DateTime dA = _parseDate((a.data() as Map)['date']);
+      DateTime dB = _parseDate((b.data() as Map)['date']);
+      return _sortMode == 'Latest First' ? dB.compareTo(dA) : dA.compareTo(dB);
+    });
+
+    // 2. Status filter
+    if (_statusFilter != 'All') {
+      allBills = allBills.where((doc) {
+        var d = doc.data() as Map<String, dynamic>;
+        double total =
+            double.tryParse(
+              d['totalBillAmount']?.toString() ??
+                  d['totalPrice']?.toString() ??
+                  '0',
+            ) ??
+            0.0;
+        double paid = double.tryParse(d['cashPaid']?.toString() ?? '0') ?? 0.0;
+        double remaining = _getCalculatedRemaining(d);
+        String status = _getBillStatus(total, paid, remaining);
+        return status == _statusFilter;
+      }).toList();
+    }
+
+    // 3. Search filter
+    if (_searchQuery.trim().isNotEmpty) {
+      String q = _searchQuery.toLowerCase();
+      allBills = allBills.where((doc) {
+        var d = doc.data() as Map<String, dynamic>;
+        String billNum = (d['billNumber'] ?? '').toString().toLowerCase();
+        double total =
+            double.tryParse(
+              d['totalBillAmount']?.toString() ??
+                  d['totalPrice']?.toString() ??
+                  '0',
+            ) ??
+            0.0;
+        List items = d['items'] ?? [];
+        String products = items
+            .map((e) => (e['productName'] ?? ''))
+            .join(' ')
+            .toLowerCase();
+
+        return billNum.contains(q) ||
+            products.contains(q) ||
+            total.toStringAsFixed(0).contains(q);
+      }).toList();
+    }
+
+    return allBills;
+  }
+
+  // ── Double-confirm delete ──
   void _confirmDeleteStep1(String purchaseId, String billNumber) {
     Get.defaultDialog(
       title: "Delete Bill?",
       titlePadding: const EdgeInsets.only(top: 20, bottom: 10),
       titleStyle: GoogleFonts.comicNeue(
         fontWeight: FontWeight.w900,
-        color: const Color.fromARGB(255, 255, 255, 255),
+        color: Colors.white,
         fontSize: 26,
       ),
       content: Padding(
@@ -97,7 +216,7 @@ class _VendorManageBillsScreenState extends State<VendorManageBillsScreen> {
         child: Text(
           "Cancel",
           style: GoogleFonts.comicNeue(
-            color: const Color.fromARGB(255, 255, 255, 255),
+            color: Colors.white,
             fontWeight: FontWeight.bold,
             fontSize: 16,
           ),
@@ -106,8 +225,8 @@ class _VendorManageBillsScreenState extends State<VendorManageBillsScreen> {
       confirm: ElevatedButton(
         style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade900),
         onPressed: () {
-          Get.back(); // Close first popup
-          _confirmDeleteStep2(purchaseId, billNumber); // Open second popup
+          Get.back();
+          _confirmDeleteStep2(purchaseId, billNumber);
         },
         child: Text(
           "Yes, Proceed",
@@ -178,7 +297,7 @@ class _VendorManageBillsScreenState extends State<VendorManageBillsScreen> {
                   child: Text(
                     "Cancel",
                     style: GoogleFonts.comicNeue(
-                      color: const Color.fromARGB(255, 255, 255, 255),
+                      color: Colors.white,
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
                     ),
@@ -190,7 +309,7 @@ class _VendorManageBillsScreenState extends State<VendorManageBillsScreen> {
                   ),
                   onPressed: () async {
                     if (deleteCtrl.text.trim() == 'DELETE') {
-                      Get.back(); // Close dialog
+                      Get.back();
                       await _controller.deleteBillTransaction(
                         purchaseId: purchaseId,
                         vendorId: selectedVendorId!,
@@ -243,7 +362,7 @@ class _VendorManageBillsScreenState extends State<VendorManageBillsScreen> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // Vendor Selection Area
+            // ── TOP PANEL: Vendor + Search + Filter + Sort ──
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
               decoration: const BoxDecoration(
@@ -252,27 +371,168 @@ class _VendorManageBillsScreenState extends State<VendorManageBillsScreen> {
                   bottom: BorderSide(color: Colors.black, width: 2.5),
                 ),
               ),
-              child: cachedVendorList.isEmpty
-                  ? const LinearProgressIndicator(color: Colors.black)
-                  : SearchableSelectionField(
-                      label: "Select Vendor to Load Bills",
-                      hint: "Search Store or Owner...",
-                      selectedValue: selectedVendorName,
-                      items: cachedVendorList,
-                      onSelected: (val) {
-                        var v = cachedVendorDocs.firstWhere((e) {
-                          var d = e.data() as Map<String, dynamic>;
-                          return "${d['storeName'] ?? ''} (${d['ownerName'] ?? ''})" ==
-                              val;
-                        });
-                        setState(() {
-                          selectedVendorName = val;
-                          selectedVendorId = v.id;
-                        });
-                      },
+              child: Column(
+                children: [
+                  // Vendor selector
+                  cachedVendorList.isEmpty
+                      ? const LinearProgressIndicator(color: Colors.black)
+                      : SearchableSelectionField(
+                          label: "Select Vendor to Load Bills",
+                          hint: "Search Store or Owner...",
+                          selectedValue: selectedVendorName,
+                          items: cachedVendorList,
+                          onSelected: (val) {
+                            var v = cachedVendorDocs.firstWhere((e) {
+                              var d = e.data() as Map<String, dynamic>;
+                              return "${d['storeName'] ?? ''} (${d['ownerName'] ?? ''})" ==
+                                  val;
+                            });
+                            setState(() {
+                              selectedVendorName = val;
+                              selectedVendorId = v.id;
+                              _searchQuery = '';
+                              _searchCtrl.clear();
+                              _statusFilter = 'All';
+                              _sortMode = 'Latest First';
+                            });
+                          },
+                        ),
+
+                  if (selectedVendorId != null) ...[
+                    const SizedBox(height: 16),
+
+                    // ── SEARCH BAR ──
+                    TextField(
+                      controller: _searchCtrl,
+                      onChanged: (val) => setState(() => _searchQuery = val),
+                      style: GoogleFonts.comicNeue(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: "Search by Bill No, Product, or Amount...",
+                        hintStyle: GoogleFonts.comicNeue(
+                          color: Colors.black45,
+                          fontSize: 15,
+                        ),
+                        prefixIcon: const Icon(
+                          Icons.search,
+                          color: Colors.black,
+                          size: 26,
+                        ),
+                        suffixIcon: _searchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(
+                                  Icons.close,
+                                  color: Colors.black,
+                                ),
+                                onPressed: () => setState(() {
+                                  _searchQuery = '';
+                                  _searchCtrl.clear();
+                                }),
+                              )
+                            : null,
+                        filled: true,
+                        fillColor: const Color(0xFFF1F3F5),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(
+                            color: Colors.black,
+                            width: 2,
+                          ),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(
+                            color: Colors.black,
+                            width: 2,
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(
+                            color: Colors.black,
+                            width: 2.5,
+                          ),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 14,
+                          horizontal: 14,
+                        ),
+                      ),
                     ),
+
+                    const SizedBox(height: 14),
+
+                    // ── STATUS FILTER CHIPS ──
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          for (final label in [
+                            'All',
+                            'Paid',
+                            'Partial',
+                            'Unpaid',
+                          ])
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: _filterChip(label),
+                            ),
+                          const SizedBox(width: 6),
+                          Container(
+                            height: 36,
+                            width: 1.5,
+                            color: Colors.black26,
+                          ),
+                          const SizedBox(width: 14),
+                          // ── SORT DROPDOWN ──
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value: _sortMode,
+                                dropdownColor: Colors.black87,
+                                iconEnabledColor: Colors.white,
+                                style: GoogleFonts.comicNeue(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                                items: const [
+                                  DropdownMenuItem(
+                                    value: 'Latest First',
+                                    child: Text('Latest First'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'Oldest First',
+                                    child: Text('Oldest First'),
+                                  ),
+                                ],
+                                onChanged: (val) {
+                                  if (val != null)
+                                    setState(() => _sortMode = val);
+                                },
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
 
+            // ── BILLS LIST ──
             if (selectedVendorId == null)
               Padding(
                 padding: const EdgeInsets.only(top: 100),
@@ -312,27 +572,34 @@ class _VendorManageBillsScreenState extends State<VendorManageBillsScreen> {
                       child: CircularProgressIndicator(color: Colors.black),
                     );
 
-                  var allBills = snapshot.data!.docs;
+                  var allBills = List<DocumentSnapshot>.from(
+                    snapshot.data!.docs,
+                  );
+                  allBills = _applyFilters(allBills);
 
                   if (allBills.isEmpty) {
                     return Padding(
-                      padding: const EdgeInsets.only(top: 50, bottom: 50),
-                      child: Text(
-                        "No Bills Found for this Vendor.",
-                        style: GoogleFonts.comicNeue(
-                          fontSize: 26,
-                          fontWeight: FontWeight.w900,
-                          color: Colors.black,
-                        ),
+                      padding: const EdgeInsets.only(top: 60, bottom: 50),
+                      child: Column(
+                        children: [
+                          Icon(
+                            Icons.inbox_rounded,
+                            size: 60,
+                            color: Colors.black26,
+                          ),
+                          const SizedBox(height: 14),
+                          Text(
+                            "No Bills Found.",
+                            style: GoogleFonts.comicNeue(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.black45,
+                            ),
+                          ),
+                        ],
                       ),
                     );
                   }
-
-                  allBills.sort((a, b) {
-                    DateTime dA = _parseDate((a.data() as Map)['date']);
-                    DateTime dB = _parseDate((b.data() as Map)['date']);
-                    return dB.compareTo(dA); // Show newest bills first
-                  });
 
                   return ListView.builder(
                     padding: const EdgeInsets.all(15),
@@ -364,15 +631,21 @@ class _VendorManageBillsScreenState extends State<VendorManageBillsScreen> {
                           ? items.map((e) => e['productName']).join(", ")
                           : "N/A";
 
+                      String status = _getBillStatus(
+                        totalAmount,
+                        paidAmount,
+                        remaining,
+                      );
+
                       return Obx(() {
                         return Card(
-                          color: Colors.white,
-                          elevation: 4,
-                          margin: const EdgeInsets.only(bottom: 20),
+                          color: _cardBg(status),
+                          elevation: 3,
+                          margin: const EdgeInsets.only(bottom: 18),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
-                            side: const BorderSide(
-                              color: Colors.black,
+                            side: BorderSide(
+                              color: _cardBorder(status),
                               width: 2.5,
                             ),
                           ),
@@ -381,6 +654,7 @@ class _VendorManageBillsScreenState extends State<VendorManageBillsScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
+                                // ── Header Row ──
                                 Row(
                                   mainAxisAlignment:
                                       MainAxisAlignment.spaceBetween,
@@ -401,7 +675,7 @@ class _VendorManageBillsScreenState extends State<VendorManageBillsScreen> {
                                           Text(
                                             "Date: ${DateFormat('dd MMM, yyyy').format(billDate)}",
                                             style: GoogleFonts.comicNeue(
-                                              fontSize: 16,
+                                              fontSize: 15,
                                               fontWeight: FontWeight.bold,
                                               color: Colors.black54,
                                             ),
@@ -409,6 +683,27 @@ class _VendorManageBillsScreenState extends State<VendorManageBillsScreen> {
                                         ],
                                       ),
                                     ),
+                                    // Status Badge
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 5,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: _statusBadgeBg(status),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        _statusLabel(status),
+                                        style: GoogleFonts.comicNeue(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    // Delete icon
                                     IconButton(
                                       icon: _controller.isDeleting.value
                                           ? const SizedBox(
@@ -422,7 +717,7 @@ class _VendorManageBillsScreenState extends State<VendorManageBillsScreen> {
                                           : const Icon(
                                               Icons.delete_forever,
                                               color: Colors.red,
-                                              size: 35,
+                                              size: 32,
                                             ),
                                       onPressed: _controller.isDeleting.value
                                           ? null
@@ -433,90 +728,47 @@ class _VendorManageBillsScreenState extends State<VendorManageBillsScreen> {
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 10),
+
+                                const SizedBox(height: 8),
+
                                 Text(
                                   "Products: $productsStr",
                                   style: GoogleFonts.comicNeue(
-                                    fontSize: 16,
+                                    fontSize: 15,
                                     fontWeight: FontWeight.w900,
                                     color: Colors.black87,
                                   ),
                                 ),
-                                const Divider(
-                                  color: Colors.black,
+
+                                Divider(
+                                  color: _cardBorder(status),
                                   thickness: 1.5,
                                   height: 20,
                                 ),
 
+                                // ── Amount Row ──
                                 Row(
                                   mainAxisAlignment:
                                       MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          "Total Amount",
-                                          style: GoogleFonts.comicNeue(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.black54,
-                                          ),
-                                        ),
-                                        Text(
-                                          "PKR ${totalAmount.toStringAsFixed(0)}",
-                                          style: GoogleFonts.comicNeue(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.w900,
-                                            color: Colors.black,
-                                          ),
-                                        ),
-                                      ],
+                                    _amountCell(
+                                      "Total Amount",
+                                      "PKR ${totalAmount.toStringAsFixed(0)}",
+                                      Colors.black,
                                     ),
-                                    Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.center,
-                                      children: [
-                                        Text(
-                                          "Total Paid",
-                                          style: GoogleFonts.comicNeue(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.black54,
-                                          ),
-                                        ),
-                                        Text(
-                                          "PKR ${paidAmount.toStringAsFixed(0)}",
-                                          style: GoogleFonts.comicNeue(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.w900,
-                                            color: Colors.green.shade900,
-                                          ),
-                                        ),
-                                      ],
+                                    _amountCell(
+                                      "Total Paid",
+                                      "PKR ${paidAmount.toStringAsFixed(0)}",
+                                      Colors.green.shade800,
+                                      align: CrossAxisAlignment.center,
                                     ),
-                                    Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.end,
-                                      children: [
-                                        Text(
-                                          "Remaining",
-                                          style: GoogleFonts.comicNeue(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.black54,
-                                          ),
-                                        ),
-                                        Text(
-                                          "PKR ${remaining.toStringAsFixed(0)}",
-                                          style: GoogleFonts.comicNeue(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.w900,
-                                            color: Colors.red.shade900,
-                                          ),
-                                        ),
-                                      ],
+                                    _amountCell(
+                                      "Remaining",
+                                      "PKR ${remaining.toStringAsFixed(0)}",
+                                      remaining > 0
+                                          ? Colors.red.shade800
+                                          : Colors.green.shade800,
+                                      align: CrossAxisAlignment.end,
                                     ),
                                   ],
                                 ),
@@ -532,6 +784,76 @@ class _VendorManageBillsScreenState extends State<VendorManageBillsScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  // ── Filter Chip Widget ──
+  Widget _filterChip(String label) {
+    final bool selected = _statusFilter == label;
+    Color chipColor;
+    switch (label) {
+      case 'Paid':
+        chipColor = Colors.green.shade800;
+        break;
+      case 'Partial':
+        chipColor = Colors.blue.shade800;
+        break;
+      case 'Unpaid':
+        chipColor = Colors.red.shade800;
+        break;
+      default:
+        chipColor = Colors.black;
+    }
+
+    return GestureDetector(
+      onTap: () => setState(() => _statusFilter = label),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? chipColor : Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: chipColor, width: 2),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.comicNeue(
+            color: selected ? Colors.white : chipColor,
+            fontWeight: FontWeight.w900,
+            fontSize: 14,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Amount Cell Widget ──
+  Widget _amountCell(
+    String label,
+    String value,
+    Color valueColor, {
+    CrossAxisAlignment align = CrossAxisAlignment.start,
+  }) {
+    return Column(
+      crossAxisAlignment: align,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.comicNeue(
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+            color: Colors.black54,
+          ),
+        ),
+        Text(
+          value,
+          style: GoogleFonts.comicNeue(
+            fontSize: 17,
+            fontWeight: FontWeight.w900,
+            color: valueColor,
+          ),
+        ),
+      ],
     );
   }
 }

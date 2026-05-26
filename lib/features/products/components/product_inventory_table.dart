@@ -38,6 +38,8 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
   bool ascending = true;
   int? sortColumnIndex;
 
+  int inOutSortState = 0;
+
   // --- PAGINATION STATE ---
   int _currentPage = 1;
   final int _itemsPerPage = 11;
@@ -80,6 +82,7 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
     int columnIndex,
   ) {
     setState(() {
+      inOutSortState = 0; // ✅ Reset In/Out state when other columns are clicked
       if (sortColumnIndex == columnIndex) {
         ascending = !ascending;
       } else {
@@ -93,6 +96,38 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
             ? Comparable.compare(aValue, bValue)
             : Comparable.compare(bValue, aValue);
       });
+    });
+  }
+
+  // ✅ NEW: Custom Sort for In/Out Column (Only Descending Toggle)
+  void _sortInOut(int columnIndex) {
+    setState(() {
+      sortColumnIndex = columnIndex;
+      ascending = false; // Always show descending arrow for this logic
+
+      if (inOutSortState == 0 || inOutSortState == 2) {
+        inOutSortState = 1; // Sort by IN Descending
+        widget.filteredList.sort(
+          (a, b) => b.stockQuantity.compareTo(a.stockQuantity),
+        );
+        Get.snackbar(
+          "Sorting Applied",
+          "Sorted by IN (Available Stock) - Highest to Lowest",
+          backgroundColor: Colors.blueAccent,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 1),
+        );
+      } else {
+        inOutSortState = 2; // Sort by OUT Descending
+        widget.filteredList.sort((a, b) => b.stockOut.compareTo(a.stockOut));
+        Get.snackbar(
+          "Sorting Applied",
+          "Sorted by OUT (Sold Stock) - Highest to Lowest",
+          backgroundColor: Colors.orangeAccent,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 1),
+        );
+      }
     });
   }
 
@@ -211,6 +246,32 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
         );
       },
     );
+  }
+
+  // ✅ NEW: Smart Image Loader for fixing the crash
+  Widget _buildSmartImage(String data) {
+    if (data.isEmpty) {
+      return const Icon(Icons.image, color: Colors.white24);
+    }
+    try {
+      if (data.startsWith('http')) {
+        return Image.network(
+          data,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) =>
+              const Icon(Icons.broken_image, color: Colors.white24),
+        );
+      } else {
+        return Image.memory(
+          base64Decode(data),
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) =>
+              const Icon(Icons.broken_image, color: Colors.white24),
+        );
+      }
+    } catch (e) {
+      return const Icon(Icons.broken_image, color: Colors.white24);
+    }
   }
 
   @override
@@ -543,8 +604,8 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                                         textColor,
                                         _fontSize,
                                       ),
-                                      onSort: (index, _) =>
-                                          _sort((p) => p.stockQuantity, index),
+                                      // ✅ FIX: Call our custom sorting function
+                                      onSort: (index, _) => _sortInOut(index),
                                     ),
                                     DataColumn(
                                       label: _tableHeader(
@@ -636,13 +697,16 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                                                         BorderRadius.circular(
                                                           4,
                                                         ),
-                                                    image: DecorationImage(
-                                                      image: MemoryImage(
-                                                        base64Decode(
-                                                          product.images.first,
+                                                    color: Colors.black12,
+                                                  ),
+                                                  // ✅ FIX: Replaced MemoryImage with _buildSmartImage
+                                                  child: ClipRRect(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          4,
                                                         ),
-                                                      ),
-                                                      fit: BoxFit.cover,
+                                                    child: _buildSmartImage(
+                                                      product.images.first,
                                                     ),
                                                   ),
                                                 ),
@@ -682,6 +746,21 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                                                                   _fontSize - 2,
                                                             ),
                                                       ),
+                                                    // ✅ NEW: Product ID Added Here
+                                                    Text(
+                                                      "ID: ${product.id ?? 'Unknown'}",
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style: GoogleFonts.comicNeue(
+                                                        color: Colors
+                                                            .black87, // Dark and visible
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        fontSize:
+                                                            _fontSize -
+                                                            3, // Slightly smaller than model number
+                                                      ),
+                                                    ),
                                                   ],
                                                 ),
                                               ),

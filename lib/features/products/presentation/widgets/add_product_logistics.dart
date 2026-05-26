@@ -1,6 +1,10 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
+import '../../../vendors/controllers/vendor_controller.dart';
+import '../../../products/models/product_model.dart';
 import '../../../../features/categories/controllers/category_controller.dart';
 import '../../../categories/models/category_model.dart';
 
@@ -60,6 +64,7 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
   @override
   void didUpdateWidget(covariant AddProductLogistics oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // Jab bhi props change honge (e.g., Edit mode load hoga), sync ho jayega
     if (widget.initialDeliveryFees != oldWidget.initialDeliveryFees ||
         widget.initialCodFee != oldWidget.initialCodFee ||
         widget.selectedLocation != oldWidget.selectedLocation) {
@@ -101,21 +106,21 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
       deliveryTimes[k] = time;
 
       if (feeControllers.containsKey(k)) {
-        double currentFeeVal = double.tryParse(feeControllers[k]!.text) ?? 0.0;
-        if (currentFeeVal != fee) {
-          feeControllers[k]!.text = fee == 0 ? "" : fee.toString();
+        String feeText = fee == 0 ? "" : fee.toInt().toString();
+        if (feeControllers[k]!.text != feeText) {
+          feeControllers[k]!.text = feeText;
         }
-
         if (timeControllers[k]!.text != time) {
           timeControllers[k]!.text = time;
         }
       }
     }
     codFee = widget.initialCodFee ?? 0.0;
-    double currentCodVal = double.tryParse(codController.text) ?? 0.0;
-    if (currentCodVal != codFee) {
-      codController.text = codFee == 0 ? "" : codFee.toString();
+    String codText = codFee == 0 ? "" : codFee.toInt().toString();
+    if (codController.text != codText) {
+      codController.text = codText;
     }
+    setState(() {});
   }
 
   @override
@@ -203,7 +208,6 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
         ),
         const SizedBox(height: 30),
         _buildHeader("Shipping Logistics"),
-
         _buildDropdown(
           "Main Shipping Scope",
           widget.selectedLocation,
@@ -214,29 +218,24 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
           },
         ),
         const SizedBox(height: 15),
-
         _buildRegionInputs(
           "Karachi",
           "Karachi Shipping Fee",
           "Karachi Delivery Time",
         ),
-
         if (widget.selectedLocation != "Karachi Only")
           _buildRegionInputs(
             "Pakistan",
             "Outside Karachi (Pakistan) Fee",
             "Pakistan Delivery Time",
           ),
-
         if (widget.selectedLocation == "Worldwide")
           _buildRegionInputs(
             "Worldwide",
             "International Shipping Fee",
             "International Delivery Time",
           ),
-
         const SizedBox(height: 15),
-
         _buildSimpleInput("Cash on Delivery (COD) Fee", codController, (val) {
           codFee = double.tryParse(val) ?? 0.0;
           _updateParent();
@@ -312,16 +311,13 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
     Function(String?) onChanged, {
     bool isOptional = false,
   }) {
-    // ✅ AUTO SELECT LOGIC: Safely inserts the newly added item instantly
     List<String> safeItems = List.from(items);
     if (value != null && value.isNotEmpty && !safeItems.contains(value)) {
       safeItems.add(value);
     }
-
     String? safeValue = safeItems.contains(value)
         ? value
         : (safeItems.isNotEmpty ? safeItems.first : null);
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -410,7 +406,6 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
   }
 }
 
-// ✅ Aapka Design Kiya Hua Dialog
 class AddCategoryDialog extends StatelessWidget {
   final String title;
   final Function(String) onSave;

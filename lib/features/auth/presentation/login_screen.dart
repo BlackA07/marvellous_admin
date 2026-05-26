@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart'; // Riverpod Import
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:marvellous_admin/core/common/widgets/metallic_button.dart';
 import 'package:marvellous_admin/core/common/widgets/metallic_textfield.dart';
 import 'package:marvellous_admin/core/common/widgets/trapezoid_button.dart';
 import 'package:marvellous_admin/features/auth/presentation/signup_screen.dart';
 import '../../../../core/theme/pallete.dart';
-import '../controller/auth_controller.dart'; // Controller Import
+import '../controller/auth_controller.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -16,9 +16,11 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  // Text Controllers
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+
+  // ✅ Show/Hide password toggle
+  bool _obscurePassword = true;
 
   @override
   void dispose() {
@@ -28,7 +30,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   void login() {
-    // Basic Validation
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
       ScaffoldMessenger.of(
         context,
@@ -36,7 +37,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       return;
     }
 
-    // Call Auth Controller via Riverpod
     ref
         .read(authControllerProvider)
         .login(
@@ -47,7 +47,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Watch Loading State
     final isLoading = ref.watch(authLoadingProvider);
 
     final size = MediaQuery.of(context).size;
@@ -165,15 +164,39 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   MetallicTextField(
                     hintText: "Email / Username",
                     icon: Icons.person,
-                    controller: _emailController, // Controller attached
+                    controller: _emailController,
                   ),
-                  MetallicTextField(
-                    hintText: "Password",
-                    icon: Icons.lock,
-                    isPassword: true,
-                    height: 65,
-                    width: 700,
-                    controller: _passwordController, // Controller attached
+
+                  // ✅ Password field with show/hide suffix icon
+                  Stack(
+                    alignment: Alignment.centerRight,
+                    children: [
+                      MetallicTextField(
+                        hintText: "Password",
+                        icon: Icons.lock,
+                        isPassword: _obscurePassword,
+                        height: 65,
+                        width: 700,
+                        controller: _passwordController,
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(right: 12),
+                        child: IconButton(
+                          onPressed: () {
+                            setState(() {
+                              _obscurePassword = !_obscurePassword;
+                            });
+                          },
+                          icon: Icon(
+                            _obscurePassword
+                                ? Icons.visibility_off
+                                : Icons.visibility,
+                            color: Colors.grey.shade400,
+                            size: 22,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
 
                   const SizedBox(height: 25),
@@ -186,19 +209,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       hasGlowingAura: true,
                       height: 90,
                       width: 300,
-                      onTap: login, // Call login function
+                      onTap: login,
                     ),
-
-                  const SizedBox(height: 20),
-
-                  // --- TEXT LINKS ---
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      _textBtn("Remember Me"),
-                      _textBtn("Forgot Password?"),
-                    ],
-                  ),
 
                   const SizedBox(height: 30),
                   Divider(color: Colors.black.withOpacity(0.3), thickness: 1),
@@ -228,24 +240,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _textBtn(String text) {
-    return Text(
-      text,
-      style: GoogleFonts.orbitron(
-        color: Colors.grey.shade300,
-        fontWeight: FontWeight.bold,
-        fontSize: 12,
-        shadows: [
-          const Shadow(
-            color: Colors.black,
-            blurRadius: 3,
-            offset: Offset(1.5, 1.5),
-          ),
-        ],
       ),
     );
   }

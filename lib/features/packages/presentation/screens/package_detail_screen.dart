@@ -146,9 +146,20 @@ class _PackageDetailScreenState extends State<PackageDetailScreen> {
                       child: Container(
                         width: double.infinity,
                         height: double.infinity,
-                        child: Image.memory(
-                          base64Decode(widget.package.images[dialogIndex]),
+                        child: Image.network(
+                          widget.package.images[dialogIndex],
                           fit: BoxFit.contain,
+                          loadingBuilder: (_, child, progress) =>
+                              progress == null
+                              ? child
+                              : const Center(
+                                  child: CircularProgressIndicator(),
+                                ),
+                          errorBuilder: (_, __, ___) => const Icon(
+                            Icons.broken_image,
+                            color: Colors.white54,
+                            size: 80,
+                          ),
                         ),
                       ),
                     ),
@@ -492,9 +503,7 @@ class _PackageDetailScreenState extends State<PackageDetailScreen> {
                         borderRadius: BorderRadius.circular(8),
                         image: item.images.isNotEmpty
                             ? DecorationImage(
-                                image: MemoryImage(
-                                  base64Decode(item.images.first),
-                                ),
+                                image: NetworkImage(item.images.first),
                                 fit: BoxFit.cover,
                               )
                             : null,
@@ -591,9 +600,20 @@ class _PackageDetailScreenState extends State<PackageDetailScreen> {
                         itemBuilder: (context, index) {
                           return ClipRRect(
                             borderRadius: BorderRadius.circular(16),
-                            child: Image.memory(
-                              base64Decode(widget.package.images[index]),
+                            child: Image.network(
+                              widget.package.images[index],
                               fit: BoxFit.contain,
+                              loadingBuilder: (_, child, progress) =>
+                                  progress == null
+                                  ? child
+                                  : const Center(
+                                      child: CircularProgressIndicator(),
+                                    ),
+                              errorBuilder: (_, __, ___) => const Icon(
+                                Icons.broken_image,
+                                color: Colors.grey,
+                                size: 60,
+                              ),
                             ),
                           );
                         },

@@ -1219,22 +1219,30 @@ class CustomerDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildBase64Image(String base64String) {
-    if (base64String.isEmpty)
-      return const Icon(Icons.person, color: Colors.grey, size: 80);
-    try {
-      final clean = base64String.contains(',')
-          ? base64String.split(',').last
-          : base64String;
-      return Image.memory(
-        base64Decode(clean),
+  // NAYA — yeh lagao
+  Widget _buildBase64Image(String imageData) {
+    if (imageData.startsWith('http')) {
+      return Image.network(
+        imageData,
         fit: BoxFit.cover,
         errorBuilder: (_, __, ___) =>
             const Icon(Icons.person, color: Colors.grey, size: 80),
       );
-    } catch (_) {
-      return const Icon(Icons.person, color: Colors.grey, size: 80);
     }
+    if (imageData.isNotEmpty) {
+      try {
+        final clean = imageData.contains(',')
+            ? imageData.split(',').last
+            : imageData;
+        return Image.memory(
+          base64Decode(clean),
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) =>
+              const Icon(Icons.person, color: Colors.grey, size: 80),
+        );
+      } catch (_) {}
+    }
+    return const Icon(Icons.person, color: Colors.grey, size: 80);
   }
 
   Widget _datePickerBtn(

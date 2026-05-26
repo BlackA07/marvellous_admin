@@ -189,6 +189,15 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
                             codFee = cod;
                           });
                         },
+                        initialDeliveryFees: widget.packageToEdit != null
+                            ? deliveryFeesMap
+                            : null,
+                        initialDeliveryTimes: widget.packageToEdit != null
+                            ? deliveryTimeMap
+                            : null,
+                        initialCodFee: widget.packageToEdit != null
+                            ? codFee
+                            : null,
                       ),
                       const SizedBox(height: 30),
                       PackagePricingSection(
@@ -234,6 +243,11 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
         return;
       }
 
+      // ✅ CLOUDINARY UPLOAD: Package ki images ko bhi URL mein badalna hai
+      // productController aapka wahi controller hai jisme uploadImagesToCloudinary hai
+      List<String> uploadedUrls = await productController
+          .uploadImagesToCloudinary(selectedImagesBase64);
+
       double sell = double.tryParse(salePriceCtrl.text) ?? 0;
       double points = productController.calculatePoints(totalBuy, sell);
 
@@ -250,7 +264,9 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
         originalPrice: double.tryParse(originalPriceCtrl.text) ?? 0,
         stockQuantity: int.tryParse(stockCtrl.text) ?? 0,
         vendorId: selectedVendorId!,
-        images: selectedImagesBase64,
+        vendorName: "Marvellous Official Store", // Update if needed
+        status: "approved",
+        images: uploadedUrls, // ✅ Yahan URLs aa gaye
         dateAdded: DateTime.now(),
         deliveryLocation: selectedLocation ?? 'Worldwide',
         warranty: "See Items",
@@ -265,8 +281,9 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
         totalReviews: widget.packageToEdit?.totalReviews ?? 0,
       );
 
+      // Save call
       bool success = widget.packageToEdit == null
-          ? await productController.addNewProduct(newPackage)
+          ? await productController.addNewPackage(newPackage)
           : await productController.updateProduct(newPackage);
 
       if (success) setState(() => _isSuccess = true);
@@ -279,7 +296,7 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
       child: Center(
         child: Container(
           width: 300,
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(25), // Thodi zyada padding
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(20),
@@ -287,15 +304,21 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.check_circle, color: Colors.green, size: 60),
+              const Icon(
+                Icons.check_circle,
+                color: Colors.green,
+                size: 70,
+              ), // Icon size thoda bada kiya
               const SizedBox(height: 20),
               Text(
                 widget.packageToEdit == null
                     ? "Package Created!"
                     : "Package Updated!",
+                textAlign: TextAlign.center, // Text center align kiya
                 style: GoogleFonts.orbitron(
+                  color: Colors.black, // Color explicit set kiya
                   fontWeight: FontWeight.bold,
-                  fontSize: 18,
+                  fontSize: 20,
                 ),
               ),
               const SizedBox(height: 30),
@@ -305,6 +328,7 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
                   onPressed: () => Get.offAll(() => MainLayoutScreen()),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.deepPurple,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
                   child: const Text(
                     "Go to Dashboard",

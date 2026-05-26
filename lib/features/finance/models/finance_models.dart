@@ -88,15 +88,20 @@ class BankTransactionModel {
     'date': date,
     'description': description,
   };
-  factory BankTransactionModel.fromMap(Map<String, dynamic> map, String id) =>
-      BankTransactionModel(
-        id: id,
-        bankId: map['bankId'] ?? '',
-        type: map['type'] ?? '',
-        amount: (map['amount'] ?? 0).toDouble(),
-        date: (map['date'] as Timestamp).toDate(),
-        description: map['description'] ?? '',
-      );
+  factory BankTransactionModel.fromMap(
+    Map<String, dynamic> map,
+    String id,
+  ) => BankTransactionModel(
+    id: id,
+    bankId: map['bankId'] ?? '',
+    type: map['type'] ?? '',
+    amount: (map['amount'] ?? 0).toDouble(),
+    // ✅ CRASH FIX: FieldValue.serverTimestamp() sometimes returns null locally before sync
+    date: map['date'] is Timestamp
+        ? (map['date'] as Timestamp).toDate()
+        : DateTime.now(),
+    description: map['description'] ?? '',
+  );
 }
 
 class ExpenseCategoryModel {
@@ -152,7 +157,9 @@ class ExpenseModel {
         subcategory: map['subcategory'] ?? '',
         description: map['description'] ?? '',
         amount: (map['amount'] ?? 0).toDouble(),
-        date: (map['date'] as Timestamp).toDate(),
+        date: map['date'] is Timestamp
+            ? (map['date'] as Timestamp).toDate()
+            : DateTime.now(),
         bankId: map['bankId'] ?? '',
       );
 }

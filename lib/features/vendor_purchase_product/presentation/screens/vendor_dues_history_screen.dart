@@ -366,27 +366,47 @@ class _VendorPaymentsScreenState extends State<VendorPaymentsScreen> {
             return true;
           }).toList();
 
-          // ✅ EXACT SORTING LOGIC FOR ASCENDING/DESCENDING
+          // ✅ EXACT SORTING LOGIC ADDED
           List<String> sortOptions = [
             'Closest First (Today -> Future)',
             'Farthest First (Future -> Today)',
+            'Highest to Lowest Amount',
+            'Lowest to Highest Amount',
           ];
+
           if (!sortOptions.contains(sortBy)) {
-            sortBy = sortOptions.first; // Safety check in case of hot reload
+            sortBy = sortOptions.first;
           }
 
           filteredList.sort((a, b) {
             var dataA = a.data() as Map<String, dynamic>;
             var dataB = b.data() as Map<String, dynamic>;
-            Timestamp? tsA = dataA['dueDate'] as Timestamp?;
-            Timestamp? tsB = dataB['dueDate'] as Timestamp?;
-            DateTime dateA = tsA?.toDate() ?? DateTime.now();
-            DateTime dateB = tsB?.toDate() ?? DateTime.now();
 
-            if (sortBy == 'Closest First (Today -> Future)') {
-              return dateA.compareTo(dateB); // Aaj Pehle, Kal Baad Mein
-            } else {
-              return dateB.compareTo(dateA); // Future Pehle, Aaj Baad mein
+            // Naye Amount filters ki sorting logic
+            if (sortBy == 'Highest to Lowest Amount' ||
+                sortBy == 'Lowest to Highest Amount') {
+              double amtA =
+                  double.tryParse(dataA['amountDue']?.toString() ?? '0') ?? 0.0;
+              double amtB =
+                  double.tryParse(dataB['amountDue']?.toString() ?? '0') ?? 0.0;
+              if (sortBy == 'Highest to Lowest Amount') {
+                return amtB.compareTo(amtA);
+              } else {
+                return amtA.compareTo(amtB);
+              }
+            }
+            // Purani Date filters ki sorting logic
+            else {
+              Timestamp? tsA = dataA['dueDate'] as Timestamp?;
+              Timestamp? tsB = dataB['dueDate'] as Timestamp?;
+              DateTime dateA = tsA?.toDate() ?? DateTime.now();
+              DateTime dateB = tsB?.toDate() ?? DateTime.now();
+
+              if (sortBy == 'Closest First (Today -> Future)') {
+                return dateA.compareTo(dateB);
+              } else {
+                return dateB.compareTo(dateA);
+              }
             }
           });
 
@@ -449,7 +469,7 @@ class _VendorPaymentsScreenState extends State<VendorPaymentsScreen> {
                             ],
                           ),
                           const SizedBox(height: 15),
-                          // ✅ ONLY 2 SORTING OPTIONS
+                          // ✅ ONLY 4 SORTING OPTIONS
                           _buildDropdown(
                             "Sort By",
                             sortBy,

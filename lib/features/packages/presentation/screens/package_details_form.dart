@@ -20,6 +20,11 @@ class PackageDetailsForm extends StatefulWidget {
   final Function(Map<String, double>, Map<String, String>, double)
   onLogisticsChanged;
 
+  // Edit mode ke liye initial values
+  final Map<String, double>? initialDeliveryFees;
+  final Map<String, String>? initialDeliveryTimes;
+  final double? initialCodFee;
+
   const PackageDetailsForm({
     Key? key,
     required this.nameCtrl,
@@ -33,6 +38,9 @@ class PackageDetailsForm extends StatefulWidget {
     required this.onVendorChanged,
     required this.onLocationChanged,
     required this.onLogisticsChanged,
+    this.initialDeliveryFees,
+    this.initialDeliveryTimes,
+    this.initialCodFee,
   }) : super(key: key);
 
   @override
@@ -40,18 +48,62 @@ class PackageDetailsForm extends StatefulWidget {
 }
 
 class _PackageDetailsFormState extends State<PackageDetailsForm> {
-  // Local state for flexible logistics
-  Map<String, double> deliveryFees = {
-    "Karachi": 0,
-    "Pakistan": 0,
-    "Worldwide": 0,
-  };
-  Map<String, String> deliveryTimes = {
-    "Karachi": "1-2 Days",
-    "Pakistan": "3-5 Days",
-    "Worldwide": "7-15 Days",
-  };
-  double codFee = 0.0;
+  late Map<String, double> deliveryFees;
+  late Map<String, String> deliveryTimes;
+  late double codFee;
+
+  // Controllers for text fields taake edit mode mein values show hon
+  final Map<String, TextEditingController> _feeControllers = {};
+  final Map<String, TextEditingController> _timeControllers = {};
+  late TextEditingController _codController;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Edit mode mein parent ki values use karo, warna defaults
+    deliveryFees = widget.initialDeliveryFees != null
+        ? Map<String, double>.from(widget.initialDeliveryFees!)
+        : {"Karachi": 0, "Pakistan": 0, "Worldwide": 0};
+
+    deliveryTimes = widget.initialDeliveryTimes != null
+        ? Map<String, String>.from(widget.initialDeliveryTimes!)
+        : {
+            "Karachi": "1-2 Days",
+            "Pakistan": "3-5 Days",
+            "Worldwide": "7-15 Days",
+          };
+
+    codFee = widget.initialCodFee ?? 0.0;
+
+    // Controllers initialize karo existing values ke saath
+    for (final key in ["Karachi", "Pakistan", "Worldwide"]) {
+      _feeControllers[key] = TextEditingController(
+        text: (deliveryFees[key] ?? 0) == 0
+            ? ""
+            : (deliveryFees[key]!).toStringAsFixed(0),
+      );
+      _timeControllers[key] = TextEditingController(
+        text: deliveryTimes[key] ?? "",
+      );
+    }
+
+    _codController = TextEditingController(
+      text: codFee == 0 ? "" : codFee.toStringAsFixed(0),
+    );
+  }
+
+  @override
+  void dispose() {
+    for (final c in _feeControllers.values) {
+      c.dispose();
+    }
+    for (final c in _timeControllers.values) {
+      c.dispose();
+    }
+    _codController.dispose();
+    super.dispose();
+  }
 
   void _notifyParent() {
     widget.onLogisticsChanged(deliveryFees, deliveryTimes, codFee);
@@ -172,7 +224,7 @@ class _PackageDetailsFormState extends State<PackageDetailsForm> {
         ),
         const SizedBox(height: 10),
 
-        // KARACHI SECTION
+        // KARACHI SECTION — hamesha show
         _buildRegionInput("Karachi", "Karachi Fee", "Karachi Time"),
 
         // PAKISTAN SECTION
@@ -192,10 +244,17 @@ class _PackageDetailsFormState extends State<PackageDetailsForm> {
           ),
 
         const SizedBox(height: 15),
-        _buildNumberInput("Cash on Delivery (COD) Fee", (val) {
-          codFee = double.tryParse(val) ?? 0.0;
-          _notifyParent();
-        }),
+        // COD field with controller
+        TextFormField(
+          controller: _codController,
+          keyboardType: TextInputType.number,
+          style: const TextStyle(color: Colors.black, fontSize: 13),
+          decoration: _deco("Cash on Delivery (COD) Fee"),
+          onChanged: (val) {
+            codFee = double.tryParse(val) ?? 0.0;
+            _notifyParent();
+          },
+        ),
       ],
     );
   }
@@ -206,37 +265,31 @@ class _PackageDetailsFormState extends State<PackageDetailsForm> {
       child: Row(
         children: [
           Expanded(
-            child: _buildNumberInput(feeLabel, (v) {
-              deliveryFees[key] = double.tryParse(v) ?? 0;
-              _notifyParent();
-            }),
+            child: TextFormField(
+              controller: _feeControllers[key],
+              keyboardType: TextInputType.number,
+              style: const TextStyle(color: Colors.black, fontSize: 13),
+              decoration: _deco(feeLabel),
+              onChanged: (v) {
+                deliveryFees[key] = double.tryParse(v) ?? 0;
+                _notifyParent();
+              },
+            ),
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: _buildTextInput(timeLabel, (v) {
-              deliveryTimes[key] = v;
-              _notifyParent();
-            }),
+            child: TextFormField(
+              controller: _timeControllers[key],
+              style: const TextStyle(color: Colors.black, fontSize: 13),
+              decoration: _deco(timeLabel),
+              onChanged: (v) {
+                deliveryTimes[key] = v;
+                _notifyParent();
+              },
+            ),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildNumberInput(String label, Function(String) onChange) {
-    return TextFormField(
-      keyboardType: TextInputType.number,
-      style: const TextStyle(color: Colors.black, fontSize: 13),
-      decoration: _deco(label),
-      onChanged: onChange,
-    );
-  }
-
-  Widget _buildTextInput(String label, Function(String) onChange) {
-    return TextFormField(
-      style: const TextStyle(color: Colors.black, fontSize: 13),
-      decoration: _deco(label),
-      onChanged: onChange,
     );
   }
 

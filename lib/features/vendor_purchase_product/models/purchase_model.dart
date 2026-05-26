@@ -8,11 +8,10 @@ class PurchaseModel {
   String vendorName;
 
   List<Map<String, dynamic>> items;
-
   double totalBillAmount;
 
   // Payment Status
-  String paymentMode; // 'Cash', 'Credit', 'Both'
+  String paymentMode; // 'Cash', 'Online', 'Credit', 'Both'
   double cashPaid;
   double remainingBalance;
 
@@ -22,7 +21,15 @@ class PurchaseModel {
   DateTime? firstPaymentDate;
   DateTime? startingDate;
   double? perInstallmentAmount;
-  int? customDaysLimit; // ✅ NAYA: Custom mode ke liye days limit
+  int? customDaysLimit;
+
+  // ✅ NEW FIELDS FOR INITIAL PAYMENT TRACKING & BANK DEDUCTIONS
+  String? initialTransactionMode; // 'Cash', 'Bank Transfer', 'Cheque'
+  String? initialBankId;
+  String? initialBankName;
+  String? initialScreenshot;
+  String? initialChequeNumber;
+  DateTime? initialChequeDate;
 
   PurchaseModel({
     this.id,
@@ -40,7 +47,13 @@ class PurchaseModel {
     this.firstPaymentDate,
     this.startingDate,
     this.perInstallmentAmount,
-    this.customDaysLimit, // ✅ NAYA
+    this.customDaysLimit,
+    this.initialTransactionMode,
+    this.initialBankId,
+    this.initialBankName,
+    this.initialScreenshot,
+    this.initialChequeNumber,
+    this.initialChequeDate,
   });
 
   Map<String, dynamic> toMap() {
@@ -63,7 +76,15 @@ class PurchaseModel {
           ? Timestamp.fromDate(startingDate!)
           : null,
       'perInstallmentAmount': perInstallmentAmount,
-      'customDaysLimit': customDaysLimit, // ✅ NAYA
+      'customDaysLimit': customDaysLimit,
+      'initialTransactionMode': initialTransactionMode,
+      'initialBankId': initialBankId,
+      'initialBankName': initialBankName,
+      'initialScreenshot': initialScreenshot,
+      'initialChequeNumber': initialChequeNumber,
+      'initialChequeDate': initialChequeDate != null
+          ? Timestamp.fromDate(initialChequeDate!)
+          : null,
     };
   }
 }

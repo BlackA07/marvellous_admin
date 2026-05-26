@@ -546,22 +546,32 @@ class CustomersScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildBase64Image(String base64String) {
-    if (base64String.isEmpty)
-      return const Icon(Icons.person, color: Colors.black, size: 30);
-    try {
-      String cleanBase64 = base64String.contains(',')
-          ? base64String.split(',').last
-          : base64String;
-      return Image.memory(
-        base64Decode(cleanBase64),
+  // NAYA — yeh lagao
+  Widget _buildBase64Image(String imageData) {
+    // ── URL hai to seedha Network ─────────────────────────────
+    if (imageData.startsWith('http')) {
+      return Image.network(
+        imageData,
         fit: BoxFit.cover,
         errorBuilder: (_, __, ___) =>
-            const Icon(Icons.person, color: Colors.black),
+            const Icon(Icons.person, color: Colors.black, size: 30),
       );
-    } catch (e) {
-      return const Icon(Icons.person, color: Colors.black, size: 30);
     }
+    // ── Base64 hai ────────────────────────────────────────────
+    if (imageData.isNotEmpty) {
+      try {
+        final clean = imageData.contains(',')
+            ? imageData.split(',').last
+            : imageData;
+        return Image.memory(
+          base64Decode(clean),
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) =>
+              const Icon(Icons.person, color: Colors.black, size: 30),
+        );
+      } catch (_) {}
+    }
+    return const Icon(Icons.person, color: Colors.black, size: 30);
   }
 
   // ── Broadcast Dialog — fixed text colors ─────────────────────────────

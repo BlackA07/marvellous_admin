@@ -82,7 +82,9 @@ class AddProductMedia extends StatelessWidget {
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(color: accentColor),
                         image: DecorationImage(
-                          image: MemoryImage(base64Decode(images[index])),
+                          image: images[index].startsWith('http')
+                              ? NetworkImage(images[index]) as ImageProvider
+                              : MemoryImage(base64Decode(images[index])),
                           fit: BoxFit.cover,
                         ),
                       ),

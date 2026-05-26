@@ -170,6 +170,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
     });
   }
 
+  // ... (rest of the file stays exactly same, just update _loadProductData)
+
   void _loadProductData(ProductModel product) {
     nameCtrl.text = product.name;
     _currentName = product.name;
@@ -183,12 +185,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
         ? ""
         : product.originalPrice.toString();
 
-    // Handle Vendor Info & Status
     _vendorId = product.vendorId;
     _vendorName = product.vendorName;
     _productStatus = product.status;
 
-    // Warranty Logic
     String w = product.warranty;
     hasCompanyWarranty = w.contains("Company");
     hasShopWarranty = w.contains("Shop");
@@ -218,18 +218,23 @@ class _AddProductScreenState extends State<AddProductScreen> {
     selectedDate = product.dateAdded;
     calculatedPoints = product.productPoints;
 
-    deliveryFeesMap = {
-      "Karachi": product.deliveryFeesMap["Karachi"] ?? 0.0,
-      "Pakistan": product.deliveryFeesMap["Pakistan"] ?? 0.0,
-      "Worldwide": product.deliveryFeesMap["Worldwide"] ?? 0.0,
-    };
-    deliveryTimeMap = {
-      "Karachi": product.deliveryTimeMap["Karachi"] ?? "1-2 Days",
-      "Pakistan": product.deliveryTimeMap["Pakistan"] ?? "3-5 Days",
-      "Worldwide": product.deliveryTimeMap["Worldwide"] ?? "7-15 Days",
-    };
-    codFee = product.codFee;
+    // ✅ State update wrap karke setState mein daal diya
+    setState(() {
+      deliveryFeesMap = {
+        "Karachi": product.deliveryFeesMap["Karachi"] ?? 0.0,
+        "Pakistan": product.deliveryFeesMap["Pakistan"] ?? 0.0,
+        "Worldwide": product.deliveryFeesMap["Worldwide"] ?? 0.0,
+      };
+      deliveryTimeMap = {
+        "Karachi": product.deliveryTimeMap["Karachi"] ?? "1-2 Days",
+        "Pakistan": product.deliveryTimeMap["Pakistan"] ?? "3-5 Days",
+        "Worldwide": product.deliveryTimeMap["Worldwide"] ?? "7-15 Days",
+      };
+      codFee = product.codFee;
+    });
   }
+
+  // ... (rest of the file stays same)
 
   Future<void> _handleImagePicker() async {
     if (selectedImagesBase64.length >= 3) {
@@ -381,6 +386,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
   void _saveProduct() async {
     if (_formKey.currentState!.validate()) {
+      List<String> uploadedUrls = await productController
+          .uploadImagesToCloudinary(selectedImagesBase64);
       if (selectedCategory == null) {
         Get.snackbar(
           "Required",
@@ -408,7 +415,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
         vendorId: _vendorId,
         vendorName: _vendorName,
         status: _productStatus,
-        images: selectedImagesBase64,
+        images: uploadedUrls,
         dateAdded: selectedDate,
         deliveryLocation: selectedLocation,
         warranty: _getCombinedWarranty(),

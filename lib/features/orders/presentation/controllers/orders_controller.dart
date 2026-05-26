@@ -12,22 +12,17 @@ class OrdersController extends GetxController {
 
   var isLoading = true.obs;
 
-  // Orders
   var pendingOrders = <OrderModel>[].obs;
   var historyOrders = <OrderModel>[].obs;
 
-  // Vendor Requests
   var pendingRequests = <VendorRequestModel>[].obs;
   var historyRequests = <VendorRequestModel>[].obs;
-  // --- NEW: Vendor Account Signups ---
   var pendingVendorAccounts = <Map<String, dynamic>>[].obs;
 
-  // Finance Requests
   var withdrawalRequests = <Map<String, dynamic>>[].obs;
   var depositRequests = <Map<String, dynamic>>[].obs;
   var orderPaymentRequests = <Map<String, dynamic>>[].obs;
 
-  // Old Fee Requests
   var feeRequests = <Map<String, dynamic>>[].obs;
 
   @override
@@ -353,6 +348,46 @@ class OrdersController extends GetxController {
               title = "Order Rejected ❌";
               body =
                   "Your order #$orderId has been rejected.\nReason: ${reason.isNotEmpty ? reason : 'Not specified'}\n\nNeed help? Tap the WhatsApp icon on the Home Screen and quote your Order ID.";
+
+              // Refund logic
+              String src = data['paymentSource'] ?? '';
+              double deduction = (data['actualDeduction'] ?? 0.0).toDouble();
+
+              if (deduction > 0) {
+                if (src == 'main_wallet') {
+                  await _db.collection('users').doc(userId).update({
+                    'walletBalance': FieldValue.increment(deduction),
+                  });
+                  await _db
+                      .collection('users')
+                      .doc(userId)
+                      .collection('wallet_history')
+                      .add({
+                        'amount': deduction,
+                        'type': 'order_refund_wallet',
+                        'description':
+                            'Order #$orderId rejected — Rs.${deduction.toStringAsFixed(0)} refunded to wallet',
+                        'orderId': orderId,
+                        'timestamp': FieldValue.serverTimestamp(),
+                      });
+                } else if (src == 'shopping_wallet') {
+                  await _db.collection('users').doc(userId).update({
+                    'shoppingWalletBalance': FieldValue.increment(deduction),
+                  });
+                  await _db
+                      .collection('users')
+                      .doc(userId)
+                      .collection('wallet_history')
+                      .add({
+                        'amount': deduction,
+                        'type': 'order_refund_shopping_wallet',
+                        'description':
+                            'Order #$orderId rejected — Rs.${deduction.toStringAsFixed(0)} refunded to shopping wallet',
+                        'orderId': orderId,
+                        'timestamp': FieldValue.serverTimestamp(),
+                      });
+                }
+              }
               break;
           }
 
@@ -375,10 +410,10 @@ class OrdersController extends GetxController {
         colorText: Colors.white,
       );
     } on FirebaseException catch (e) {
-      if (Get.isDialogOpen ?? false) Get.back();
+      if (Get.isDialogOpen == true) Get.back();
       _handleOrderUpdateError(e.message ?? e.code);
     } catch (e) {
-      if (Get.isDialogOpen ?? false) Get.back();
+      if (Get.isDialogOpen == true) Get.back();
       _handleOrderUpdateError(e.toString());
     }
   }
@@ -482,24 +517,80 @@ class OrdersController extends GetxController {
     return updatedData;
   }
 
+  // ✅ FULL AUTOMATED PROCESS WITH SKIP LOGIC FOR DOUBLE COMMISSIONS
   Future<bool> _processInstantRewardsAtomically(
     String orderId,
     Map<String, dynamic> orderData,
   ) async {
-    // ✅ FIX: .toString().trim() add kiya gaya hai taake kisi surat mein bhi empty error crash na kare
     String buyerUid = (orderData['userId'] ?? '').toString().trim();
     if (buyerUid.isEmpty) return false;
-
-    double grossProfit = (orderData['grossProfit'] ?? 0.0).toDouble();
-
-    if (grossProfit <= 0) {
-      return true;
-    }
 
     WriteBatch batch = _db.batch();
     double totalCompanyShare = 0.0;
 
     try {
+      String paymentMethod = orderData['paymentMethod'] ?? '';
+      double grandTotal =
+          (orderData['grandTotal'] ?? orderData['totalAmount'] ?? 0.0)
+              .toDouble();
+
+      if (paymentMethod == 'Cash on Delivery' && grandTotal > 0) {
+        var banksRef = _db
+            .collection('company_finances')
+            .doc('main_finances')
+            .collection('banks');
+
+        DocumentSnapshot? codBank;
+
+        try {
+          var cashSnap = await banksRef
+              .where('name', isEqualTo: 'Cash')
+              .limit(1)
+              .get();
+          if (cashSnap.docs.isNotEmpty) {
+            codBank = cashSnap.docs.first;
+          }
+        } catch (_) {}
+
+        if (codBank == null) {
+          try {
+            var sysSnap = await banksRef
+                .where('isSystem', isEqualTo: true)
+                .limit(1)
+                .get();
+            if (sysSnap.docs.isNotEmpty) {
+              codBank = sysSnap.docs.first;
+            }
+          } catch (_) {}
+        }
+
+        if (codBank != null) {
+          batch.update(codBank.reference, {
+            'balance': FieldValue.increment(grandTotal),
+          });
+
+          DocumentReference txRef = _db
+              .collection('company_finances')
+              .doc('main_finances')
+              .collection('transactions')
+              .doc();
+          batch.set(txRef, {
+            'bankId': codBank.id,
+            'type': 'in',
+            'amount': grandTotal,
+            'date': FieldValue.serverTimestamp(),
+            'description': 'COD Payment added for Order #$orderId',
+          });
+        }
+      }
+
+      double grossProfit = (orderData['grossProfit'] ?? 0.0).toDouble();
+
+      if (grossProfit <= 0) {
+        await batch.commit();
+        return true;
+      }
+
       DocumentSnapshot buyerDoc = await _db
           .collection('users')
           .doc(buyerUid)
@@ -577,13 +668,14 @@ class OrdersController extends GetxController {
       );
       totalCompanyShare += (maxCashback - finalCashback);
 
-      _addWalletTransactionToBatch(
+      await _addWalletTransactionToBatch(
         batch: batch,
         uid: buyerUid,
         memStatus: buyerMemStatus,
         amount: finalCashback,
         type: 'cashback',
-        description: 'Order cashback #$orderId',
+        isCashback: true,
+        description: 'Order cashback\nOrder No: $orderId',
         extraData: {
           'orderId': orderId,
           'points': pointsEarned,
@@ -595,7 +687,6 @@ class OrdersController extends GetxController {
 
       batch.update(_db.collection('users').doc(buyerUid), {
         'totalPoints': FieldValue.increment(pointsEarned.toDouble()),
-        'totalCashbackEarned': FieldValue.increment(finalCashback),
       });
 
       final String rankLabel = _rankLabelFromMultiplier(buyerRankMultiplier);
@@ -619,6 +710,29 @@ class OrdersController extends GetxController {
           'status': 'delivered',
         },
       );
+
+      // ✅ FIX 1: Admin app will now send SEPARATE Review notifications for each item
+      final List items = orderData['items'] ?? [];
+      for (var rawItem in items) {
+        final itemMap = Map<String, dynamic>.from(rawItem as Map);
+        final pid = itemMap['productId']?.toString() ?? '';
+        final pName = itemMap['name']?.toString() ?? 'Product';
+
+        if (pid.isNotEmpty) {
+          _addNotificationToBatch(
+            batch,
+            buyerUid,
+            'How was your $pName? 🌟',
+            'Please take a moment to review $pName. Your feedback helps us improve!',
+            'review',
+            {
+              'orderId': orderId,
+              'showReviewButton': true,
+              'items': [itemMap], // Individual item for review
+            },
+          );
+        }
+      }
 
       double poolForUplines = mlmPool - maxCashback;
       double totalBaseUsed = 0.0;
@@ -648,14 +762,15 @@ class OrdersController extends GetxController {
             double companyShare = refBaseComm - finalComm;
 
             if (finalComm > 0) {
-              _addWalletTransactionToBatch(
+              await _addWalletTransactionToBatch(
                 batch: batch,
                 uid: referrerUid,
                 memStatus: refMemStatus,
                 amount: finalComm,
                 type: 'commission',
+                isCashback: false,
                 description:
-                    'Direct Sale Bonus (Level 1) from $buyerName\'s order #$orderId',
+                    'Direct Sale Bonus (Level 1)\nFrom: $buyerName\nOrder No: $orderId',
                 extraData: {
                   'orderId': orderId,
                   'level': 1,
@@ -671,7 +786,7 @@ class OrdersController extends GetxController {
                 batch,
                 referrerUid,
                 "Direct Sale Bonus! 🚀",
-                'Rs.${finalComm.toStringAsFixed(0)} Direct Sale Bonus credited! 💰\nFrom: $buyerName\'s order #$orderId\nRank: $refRankLabel',
+                'Rs.${finalComm.toStringAsFixed(0)} Direct Sale Bonus credited! 💰\nFrom: $buyerName\nOrder No: $orderId\nRank: $refRankLabel',
                 'finance',
                 {
                   'orderId': orderId,
@@ -693,6 +808,7 @@ class OrdersController extends GetxController {
                 'baseAmount': refBaseComm,
                 'rankMultiplier': rankMulti,
                 'level': 1,
+                'depth': 1, // Physical depth added
                 'fromUser': buyerName,
                 'fromUid': buyerUid,
                 'orderId': orderId,
@@ -707,26 +823,11 @@ class OrdersController extends GetxController {
       }
 
       String currentUplineUid = buyerParentUid.trim();
+      int physicalDepth = 1;
+      int level =
+          2; // ✅ FIX: Use while loop to properly control skipped referrer
 
-      if (currentUplineUid.isNotEmpty && currentUplineUid == referrerUid) {
-        DocumentSnapshot tDoc = await _db
-            .collection('users')
-            .doc(currentUplineUid)
-            .get();
-        if (tDoc.exists) {
-          currentUplineUid =
-              (tDoc.data() as Map<String, dynamic>)['mlmParentUid']
-                  ?.toString()
-                  .trim() ??
-              '';
-        } else {
-          currentUplineUid = '';
-        }
-      }
-
-      for (int level = 2; level <= maxLevels; level++) {
-        if (currentUplineUid.isEmpty) break;
-
+      while (currentUplineUid.isNotEmpty && level <= maxLevels) {
         DocumentSnapshot uDoc = await _db
             .collection('users')
             .doc(currentUplineUid)
@@ -735,10 +836,27 @@ class OrdersController extends GetxController {
 
         Map<String, dynamic> uData = uDoc.data() as Map<String, dynamic>;
         String nextParent = (uData['mlmParentUid'] ?? '').toString().trim();
-        bool isMLMActive = uData['isMLMActive'] ?? false;
 
+        // ✅ FIX: Referrer skip without incrementing the level
+        if (currentUplineUid == referrerUid) {
+          double levelPercent = commPercentages['level_$level'] ?? 0.0;
+          if (levelPercent > 0) {
+            double baseComm = mlmPool * (levelPercent / 100);
+            if (baseComm > 0) {
+              totalCompanyShare += baseComm;
+              totalBaseUsed += baseComm;
+            }
+          }
+          currentUplineUid = nextParent;
+          physicalDepth++;
+          continue;
+        }
+
+        bool isMLMActive = uData['isMLMActive'] ?? false;
         if (!isMLMActive) {
           currentUplineUid = nextParent;
+          physicalDepth++;
+          level++;
           continue;
         }
 
@@ -758,14 +876,15 @@ class OrdersController extends GetxController {
           totalBaseUsed += baseComm;
 
           if (finalComm > 0) {
-            _addWalletTransactionToBatch(
+            await _addWalletTransactionToBatch(
               batch: batch,
               uid: currentUplineUid,
               memStatus: uMemStatus,
               amount: finalComm,
               type: 'commission',
+              isCashback: false,
               description:
-                  'Level $level Commission from $buyerName\'s order #$orderId',
+                  'Level $level Commission\nFrom: $buyerName\nOrder No: $orderId',
               extraData: {
                 'orderId': orderId,
                 'level': level,
@@ -781,7 +900,7 @@ class OrdersController extends GetxController {
               batch,
               currentUplineUid,
               "Commission Earned! 💰",
-              'Rs.${finalComm.toStringAsFixed(0)} commission credited! 💰\nLevel $level • From: $buyerName\'s order\nRank: $uRankLabel',
+              'Rs.${finalComm.toStringAsFixed(0)} commission credited! 💰\nLevel $level\nFrom: $buyerName\nOrder No: $orderId\nRank: $uRankLabel',
               'finance',
               {
                 'orderId': orderId,
@@ -802,7 +921,8 @@ class OrdersController extends GetxController {
               'amount': finalComm,
               'baseAmount': baseComm,
               'rankMultiplier': rankMulti,
-              'level': level,
+              'level': level, // Matrix table level mapped exactly
+              'depth': physicalDepth, // Physical UI box depth
               'fromUser': buyerName,
               'fromUid': buyerUid,
               'orderId': orderId,
@@ -812,6 +932,8 @@ class OrdersController extends GetxController {
           }
         }
         currentUplineUid = nextParent;
+        physicalDepth++;
+        level++;
       }
 
       double unallocated = poolForUplines - totalBaseUsed;
@@ -837,68 +959,8 @@ class OrdersController extends GetxController {
         });
       }
 
-      // ✅ FIX: Process COD Payments to Internal Cash Ledger
-      String paymentMethod = orderData['paymentMethod'] ?? '';
-      double grandTotal =
-          (orderData['grandTotal'] ?? orderData['totalAmount'] ?? 0.0)
-              .toDouble();
-
-      if (paymentMethod == 'Cash on Delivery' && grandTotal > 0) {
-        var sysBankSnap = await _db
-            .collection('company_finances')
-            .doc('main_finances')
-            .collection('banks')
-            .where('isSystem', isEqualTo: true)
-            .limit(1)
-            .get();
-
-        if (sysBankSnap.docs.isNotEmpty) {
-          var sysBank = sysBankSnap.docs.first;
-          batch.update(sysBank.reference, {
-            'balance': FieldValue.increment(grandTotal),
-          });
-
-          DocumentReference txRef = _db
-              .collection('company_finances')
-              .doc('main_finances')
-              .collection('transactions')
-              .doc();
-          batch.set(txRef, {
-            'bankId': sysBank.id,
-            'type': 'in',
-            'amount': grandTotal,
-            'date': FieldValue.serverTimestamp(),
-            'description': 'COD Payment added for Order #$orderId',
-          });
-        }
-      }
-
       await batch.commit();
 
-      // ✅ FIX: Moved Review Notification here so it only fires if commit is successful!
-      Future.delayed(const Duration(seconds: 3), () async {
-        try {
-          await _db
-              .collection('users')
-              .doc(buyerUid)
-              .collection('notifications')
-              .add({
-                'title': 'How was your order? 🌟',
-                'body':
-                    'Please take a moment to review your order #$orderId. Your feedback helps us improve!',
-                'type': 'review',
-                'isRead': false,
-                'timestamp': FieldValue.serverTimestamp(),
-                'data': {
-                  'orderId': orderId,
-                  'showReviewButton': true,
-                  'items': orderData['items'] ?? [],
-                },
-              });
-        } catch (e) {}
-      });
-
-      final List items = orderData['items'] ?? [];
       for (final item in items) {
         final pid = (item['productId'] ?? '').toString().trim();
         if (pid.isNotEmpty) {
@@ -935,33 +997,301 @@ class OrdersController extends GetxController {
     return 100.0;
   }
 
-  void _addWalletTransactionToBatch({
+  Future<void> _addWalletTransactionToBatch({
     required WriteBatch batch,
     required String uid,
     required String memStatus,
     required double amount,
     required String type,
+    required bool isCashback,
     required String description,
     required Map<String, dynamic> extraData,
-  }) {
+  }) async {
     if (amount <= 0) return;
 
-    double toShopping = 0.0;
-    double toMain = amount;
+    double actualDeduction = 0.0;
+    double newGiven = 0.0;
+    double newRemaining = 0.0;
+    bool isDone = false;
 
-    if (memStatus == 'approved') {
-      toShopping = double.parse((amount * 0.25).toStringAsFixed(2));
-      toMain = double.parse((amount - toShopping).toStringAsFixed(2));
+    try {
+      var lockSnap = await _db
+          .collection('sponsor_locks')
+          .where('userUid', isEqualTo: uid)
+          .where('active', isEqualTo: true)
+          .limit(1)
+          .get();
+
+      if (lockSnap.docs.isNotEmpty) {
+        var lockDoc = lockSnap.docs.first;
+        var lockData = lockDoc.data();
+        double remaining = (lockData['remaining'] ?? 0.0).toDouble();
+
+        if (remaining > 0) {
+          double percent = (lockData['percent'] ?? 0.0).toDouble();
+          String sponsorUidVal = lockData['sponsorUid'] ?? '';
+          String sponsorNameVal = lockData['sponsorName'] ?? 'Sponsor';
+          double totalAmount = (lockData['totalAmount'] ?? 0.0).toDouble();
+          double given = (lockData['given'] ?? 0.0).toDouble();
+
+          if (sponsorUidVal.isNotEmpty && percent > 0) {
+            double rawDeduction = amount * (percent / 100);
+            actualDeduction = rawDeduction > remaining
+                ? remaining
+                : rawDeduction;
+            actualDeduction = double.parse(actualDeduction.toStringAsFixed(2));
+
+            if (actualDeduction > 0) {
+              newGiven = double.parse(
+                (given + actualDeduction).toStringAsFixed(2),
+              );
+              newRemaining = double.parse(
+                (totalAmount - newGiven).toStringAsFixed(2),
+              );
+              if (newRemaining < 0) newRemaining = 0.0;
+              isDone = newRemaining <= 0;
+              String userName = lockData['userName'] ?? 'User';
+
+              batch.update(lockDoc.reference, {
+                'given': newGiven,
+                'remaining': newRemaining,
+                'active': !isDone,
+                if (isDone) 'completedAt': FieldValue.serverTimestamp(),
+              });
+
+              batch.update(_db.collection('users').doc(sponsorUidVal), {
+                'walletBalance': FieldValue.increment(actualDeduction),
+                'totalCommissionEarned': FieldValue.increment(actualDeduction),
+              });
+
+              DocumentReference spUserHist = _db
+                  .collection('users')
+                  .doc(uid)
+                  .collection('wallet_history')
+                  .doc();
+              batch.set(spUserHist, {
+                'amount': -actualDeduction,
+                'type': 'sponsor_deduction',
+                'description':
+                    'Sponsor deduction (${percent.toStringAsFixed(0)}%) → $sponsorNameVal — Rs.${actualDeduction.toStringAsFixed(0)}${isDone ? " [Lock Complete ✅]" : ""}',
+                'sponsorUid': sponsorUidVal,
+                'sponsorName': sponsorNameVal,
+                'percent': percent,
+                'givenSoFar': newGiven,
+                'remaining': newRemaining,
+                'totalAmount': totalAmount,
+                'timestamp': FieldValue.serverTimestamp(),
+              });
+
+              DocumentReference spHist = _db
+                  .collection('users')
+                  .doc(sponsorUidVal)
+                  .collection('wallet_history')
+                  .doc();
+              batch.set(spHist, {
+                'amount': actualDeduction,
+                'type': 'sponsor_income',
+                'description':
+                    'Sponsor income from $userName (${percent.toStringAsFixed(0)}%) — Rs.${actualDeduction.toStringAsFixed(0)}${isDone ? " [Lock Complete ✅]" : ""}',
+                'fromUid': uid,
+                'fromName': userName,
+                'percent': percent,
+                'givenSoFar': newGiven,
+                'remaining': newRemaining,
+                'totalAmount': totalAmount,
+                'timestamp': FieldValue.serverTimestamp(),
+              });
+
+              DocumentReference sponsoredSubRef = _db
+                  .collection('users')
+                  .doc(sponsorUidVal)
+                  .collection('sponsored_users')
+                  .doc(uid);
+              batch.set(sponsoredSubRef, {
+                'given': newGiven,
+                'remaining': newRemaining,
+                'active': !isDone,
+                if (isDone) 'completedAt': FieldValue.serverTimestamp(),
+              }, SetOptions(merge: true));
+
+              _addNotificationToBatch(
+                batch,
+                sponsorUidVal,
+                'Sponsor Income 💰',
+                'Rs.${actualDeduction.toStringAsFixed(0)} added to your wallet from $userName (${percent.toStringAsFixed(0)}%)',
+                'sponsor_income',
+                {},
+              );
+
+              _addNotificationToBatch(
+                batch,
+                uid,
+                'Sponsor Deduction 💸',
+                'Rs.${actualDeduction.toStringAsFixed(0)} sent to sponsor ($sponsorNameVal). Remaining: Rs.${newRemaining.toStringAsFixed(0)}',
+                'sponsor_deduction',
+                {},
+              );
+            }
+          }
+        } else {
+          batch.update(lockDoc.reference, {'active': false});
+        }
+      }
+    } catch (e) {
+      debugPrint("❌ Admin Sponsor Deduction Error: $e");
     }
 
-    Map<String, dynamic> updates = {
+    double afterSponsor = amount - actualDeduction;
+    if (afterSponsor < 0) afterSponsor = 0;
+
+    double heDeductedAmount = 0.0;
+    Map<String, dynamic> heLock = {};
+
+    if (afterSponsor > 0) {
+      DocumentSnapshot vars = await _db
+          .collection('admin_settings')
+          .doc('mlm_variables')
+          .get();
+      double hThreshold = 25000.0;
+      double hDeduction = 2500.0;
+      if (vars.exists && vars.data() != null) {
+        var vData = vars.data() as Map<String, dynamic>;
+        hThreshold = (vData['highEarnerThreshold'] ?? 25000.0).toDouble();
+        hDeduction = (vData['highEarnerDeduction'] ?? 2500.0).toDouble();
+      }
+
+      DocumentSnapshot userDoc = await _db.collection('users').doc(uid).get();
+      var userData = userDoc.data() as Map<String, dynamic>? ?? {};
+
+      if (userData['highEarnerLock'] != null) {
+        try {
+          heLock = Map<String, dynamic>.from(userData['highEarnerLock']);
+        } catch (_) {
+          heLock = {
+            'active': false,
+            'given': 0.0,
+            'target': hDeduction,
+            'earningsSinceLastLock': 0.0,
+          };
+        }
+      } else {
+        heLock = {
+          'active': false,
+          'given': 0.0,
+          'target': hDeduction,
+          'earningsSinceLastLock': 0.0,
+        };
+      }
+
+      bool isHeActive = heLock['active'] ?? false;
+      double heGiven = (heLock['given'] ?? 0.0).toDouble();
+      double heTarget = (heLock['target'] ?? hDeduction).toDouble();
+      double heEarningsSince = (heLock['earningsSinceLastLock'] ?? 0.0)
+          .toDouble();
+
+      if (!isHeActive) {
+        heEarningsSince +=
+            amount; // ✅ FIX: Use 'amount' (Gross) instead of 'afterSponsor' for total earnings metric calculations
+        if (heEarningsSince >= hThreshold) {
+          isHeActive = true;
+          heTarget = hDeduction;
+          heGiven = 0.0;
+          heEarningsSince = heEarningsSince - hThreshold;
+        }
+      }
+
+      if (isHeActive) {
+        double remainingLock = heTarget - heGiven;
+        if (afterSponsor > remainingLock) {
+          heDeductedAmount = remainingLock;
+        } else {
+          heDeductedAmount = afterSponsor;
+        }
+
+        heGiven += heDeductedAmount;
+        if (heGiven >= heTarget) {
+          isHeActive = false;
+        }
+      }
+
+      heLock['active'] = isHeActive;
+      heLock['given'] = heGiven;
+      heLock['target'] = heTarget;
+      heLock['earningsSinceLastLock'] = heEarningsSince;
+    }
+
+    double netAmount = afterSponsor - heDeductedAmount;
+    if (netAmount < 0) netAmount = 0;
+
+    double toShopping = 0.0;
+    double toMain = netAmount;
+
+    if (memStatus == 'approved' && netAmount > 0) {
+      toShopping = double.parse((netAmount * 0.25).toStringAsFixed(2));
+      toMain = double.parse((netAmount - toShopping).toStringAsFixed(2));
+    }
+
+    Map<String, dynamic> userUpdates = {
       'totalCommissionEarned': FieldValue.increment(amount),
     };
-    if (toMain > 0) updates['walletBalance'] = FieldValue.increment(toMain);
-    if (toShopping > 0)
-      updates['shoppingWalletBalance'] = FieldValue.increment(toShopping);
 
-    batch.update(_db.collection('users').doc(uid), updates);
+    if (isCashback) {
+      userUpdates['totalCashbackEarned'] = FieldValue.increment(amount);
+    }
+
+    if (heLock.isNotEmpty) {
+      userUpdates['highEarnerLock'] = heLock;
+    }
+    if (toMain > 0) userUpdates['walletBalance'] = FieldValue.increment(toMain);
+    if (toShopping > 0)
+      userUpdates['shoppingWalletBalance'] = FieldValue.increment(toShopping);
+
+    if (actualDeduction > 0) {
+      userUpdates['sponsorLock.given'] = newGiven;
+      userUpdates['sponsorLock.remaining'] = newRemaining;
+      userUpdates['sponsorLock.active'] = !isDone;
+    }
+
+    if (userUpdates.isNotEmpty) {
+      batch.update(_db.collection('users').doc(uid), userUpdates);
+    }
+
+    if (heDeductedAmount > 0) {
+      batch.set(_db.collection('company_finances').doc('balance'), {
+        'totalCompanyBalance': FieldValue.increment(heDeductedAmount),
+      }, SetOptions(merge: true));
+
+      DocumentReference histRef = _db
+          .collection('company_finances')
+          .doc('balance')
+          .collection('history')
+          .doc();
+      batch.set(histRef, {
+        'orderId': extraData['orderId'] ?? 'N/A',
+        'amount': heDeductedAmount,
+        'source': 'Milestone Fee Deduction',
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+
+      DocumentReference mileHist = _db
+          .collection('users')
+          .doc(uid)
+          .collection('wallet_history')
+          .doc();
+      batch.set(mileHist, {
+        'amount': -heDeductedAmount,
+        'type': 'milestone_deduction',
+        'description':
+            'Milestone Fee Deduction (Rs.${heLock['target']?.toStringAsFixed(0) ?? 2500}) — Target reached.',
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+    }
+
+    String finalDescription = description;
+    if (actualDeduction > 0) {
+      finalDescription +=
+          '\n(Sponsor Rs.${actualDeduction.toStringAsFixed(0)} deducted)';
+    }
 
     if (toMain > 0) {
       DocumentReference mainHist = _db
@@ -972,7 +1302,7 @@ class OrdersController extends GetxController {
       batch.set(mainHist, {
         'type': type,
         'amount': toMain,
-        'description': description,
+        'description': finalDescription,
         'timestamp': FieldValue.serverTimestamp(),
         ...extraData,
       });
@@ -1321,11 +1651,80 @@ class OrdersController extends GetxController {
       var data = depositDoc.data()!;
       double amount = (data['amount'] ?? 0.0).toDouble();
       String purpose = data['purpose'] ?? '';
+      String paymentMethod = data['method'] ?? '';
+      String bankId = data['bankId'] ?? '';
 
       await _db.collection('finances').doc(requestId).update({
         'status': 'approved',
         'processedAt': FieldValue.serverTimestamp(),
       });
+
+      if (bankId.isNotEmpty || paymentMethod.isNotEmpty) {
+        try {
+          var banksRef = _db
+              .collection('company_finances')
+              .doc('main_finances')
+              .collection('banks');
+          DocumentSnapshot? targetBank;
+
+          if (bankId.isNotEmpty) {
+            var b = await banksRef.doc(bankId).get();
+            if (b.exists) targetBank = b;
+          }
+
+          if (targetBank == null && paymentMethod.isNotEmpty) {
+            var bankSnap = await banksRef
+                .where('name', isEqualTo: paymentMethod)
+                .limit(1)
+                .get();
+            if (bankSnap.docs.isNotEmpty) {
+              targetBank = bankSnap.docs.first;
+            } else {
+              var allBanks = await banksRef.get();
+              for (var b in allBanks.docs) {
+                if (b.data()['name'].toString().trim().toLowerCase() ==
+                    paymentMethod.trim().toLowerCase()) {
+                  targetBank = b;
+                  break;
+                }
+              }
+            }
+          }
+
+          if (targetBank != null) {
+            await _db.runTransaction((transaction) async {
+              DocumentSnapshot freshSnap = await transaction.get(
+                targetBank!.reference,
+              );
+              if (freshSnap.exists) {
+                double currentBal =
+                    (freshSnap.data() as Map<String, dynamic>)['balance']
+                        ?.toDouble() ??
+                    0.0;
+                transaction.update(targetBank.reference, {
+                  'balance': currentBal + amount,
+                });
+              }
+            });
+
+            await _db
+                .collection('company_finances')
+                .doc('main_finances')
+                .collection('transactions')
+                .add({
+                  'bankId': targetBank.id,
+                  'type': 'in',
+                  'amount': amount,
+                  'date': FieldValue.serverTimestamp(),
+                  'description': purpose == 'membership_fee'
+                      ? 'Fee Deposit Approved'
+                      : 'Wallet Deposit Approved',
+                });
+          }
+        } catch (e) {
+          debugPrint("Error updating bank balance for deposit: $e");
+        }
+      }
 
       if (purpose == 'membership_fee') {
         var userDoc = await _db.collection('users').doc(userId).get();
@@ -1499,6 +1898,7 @@ class OrdersController extends GetxController {
       double grandTotal = (data['totalAmount'] ?? 0.0).toDouble();
       String paymentMethod = data['method'] ?? 'Online Payment';
       String customerAddress = data['customerAddress'] ?? '';
+      String bankId = data['bankId'] ?? '';
 
       await _db.collection('orders').doc(orderId).set({
         'orderId': orderId,
@@ -1529,11 +1929,76 @@ class OrdersController extends GetxController {
         'processedAt': FieldValue.serverTimestamp(),
       });
 
+      if (bankId.isNotEmpty || paymentMethod.isNotEmpty) {
+        try {
+          var banksRef = _db
+              .collection('company_finances')
+              .doc('main_finances')
+              .collection('banks');
+          DocumentSnapshot? targetBank;
+
+          if (bankId.isNotEmpty) {
+            var b = await banksRef.doc(bankId).get();
+            if (b.exists) targetBank = b;
+          }
+
+          if (targetBank == null && paymentMethod.isNotEmpty) {
+            var bankSnap = await banksRef
+                .where('name', isEqualTo: paymentMethod)
+                .limit(1)
+                .get();
+            if (bankSnap.docs.isNotEmpty) {
+              targetBank = bankSnap.docs.first;
+            } else {
+              var allBanks = await banksRef.get();
+              for (var b in allBanks.docs) {
+                if (b.data()['name'].toString().trim().toLowerCase() ==
+                    paymentMethod.trim().toLowerCase()) {
+                  targetBank = b;
+                  break;
+                }
+              }
+            }
+          }
+
+          if (targetBank != null) {
+            await _db.runTransaction((transaction) async {
+              DocumentSnapshot freshSnap = await transaction.get(
+                targetBank!.reference,
+              );
+              if (freshSnap.exists) {
+                double currentBal =
+                    (freshSnap.data() as Map<String, dynamic>)['balance']
+                        ?.toDouble() ??
+                    0.0;
+                transaction.update(targetBank.reference, {
+                  'balance': currentBal + grandTotal,
+                });
+              }
+            });
+
+            await _db
+                .collection('company_finances')
+                .doc('main_finances')
+                .collection('transactions')
+                .add({
+                  'bankId': targetBank.id,
+                  'type': 'in',
+                  'amount': grandTotal,
+                  'date': FieldValue.serverTimestamp(),
+                  'description': 'Order Payment received for Order #$orderId',
+                });
+          }
+        } catch (e) {
+          debugPrint("Error updating bank balance: $e");
+        }
+      }
+
       await _sendNotification(
         userId: userId,
         title: "Payment Confirmed! ✅",
         body:
-            "Your payment of Rs.${grandTotal.toStringAsFixed(0)} has been verified. Your order #$orderId is now pending processing. We'll update you once it's confirmed.",
+            "Your payment of Rs.${grandTotal.toStringAsFixed(0)} has been verified. Your order #$orderId is now pending processing.",
         type: 'order',
         extraData: {
           'orderId': orderId,
@@ -1550,7 +2015,7 @@ class OrdersController extends GetxController {
       Get.back();
       Get.snackbar(
         "Success ✅",
-        "Payment approved — Order #$orderId created (pending)",
+        "Payment approved — Order #$orderId created",
         backgroundColor: Colors.green,
         colorText: Colors.white,
       );
@@ -1582,7 +2047,6 @@ class OrdersController extends GetxController {
         'processedAt': FieldValue.serverTimestamp(),
       });
 
-      // ✅ FIX: Added Reference ID (financeId) for customer support
       await _sendNotification(
         userId: userId,
         title: "Payment Rejected ❌",

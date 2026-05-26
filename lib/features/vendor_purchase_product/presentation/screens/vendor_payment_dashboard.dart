@@ -1,8 +1,11 @@
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:image_cropper/image_cropper.dart';
 import '../../controller/vendor_payment_controller.dart';
 import '../widgets/searchable_selection_field.dart';
 
@@ -29,16 +32,12 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
   String? selectedVendorName;
   String? selectedStoreName;
   String? selectedOwnerName;
+  String? selectedVendorImage; // Already there
+  List<dynamic> selectedCategories = []; // ✅ NEW: For categories
+  String? selectedContactPhone; // ✅ NEW: For contact person phone
   double globalTotalRemaining = 0.0;
 
-  String? selectedPurchaseIdForPayment;
-  String? selectedBillNumberForPayment;
-  double selectedBillRemainingForPayment = 0.0;
-
-  final amountCtrl = TextEditingController();
-  final noteCtrl = TextEditingController();
-  DateTime paymentDate = DateTime.now();
-  String paymentMode = 'Cash';
+  bool isFullScreen = false;
 
   @override
   void initState() {
@@ -86,7 +85,73 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
     return rem > 0 ? rem : 0.0;
   }
 
-  // ✅ FIX: Vendor ka koi bill nahi to proper popup dikhao
+  // ✅ Bill type ka full label banata hai — e.g. "CREDIT • MONTHLY", "CASH BILL", etc.
+  String _getBillTypeLabel(Map<String, dynamic> data) {
+    String pMode = data['paymentMode'] ?? '';
+    String cType = data['creditType'] ?? '';
+    if (pMode == 'Cash') return 'CASH BILL';
+    if (pMode == 'Both') {
+      if (cType.isNotEmpty) return 'BOTH • ${cType.toUpperCase()}';
+      return 'BOTH';
+    }
+    if (pMode == 'Credit') {
+      if (cType.isNotEmpty) return 'CREDIT • ${cType.toUpperCase()}';
+      return 'CREDIT';
+    }
+    return pMode.toUpperCase();
+  }
+
+  // ✅ Bill number prefix (e.g. BD-1234, BW-1234, M-1234, CA-1234)
+  String _getBillPrefix(Map<String, dynamic> data) {
+    String pMode = data['paymentMode'] ?? '';
+    String cType = data['creditType'] ?? '';
+    if (pMode == 'Cash') return 'CA';
+    if (pMode == 'Both') {
+      if (cType == 'Daily') return 'BD';
+      if (cType == 'Weekly') return 'BW';
+      if (cType == 'Monthly') return 'BM';
+      return 'BC';
+    }
+    if (pMode == 'Credit') {
+      if (cType == 'Daily') return 'D';
+      if (cType == 'Weekly') return 'W';
+      if (cType == 'Monthly') return 'M';
+      return 'C';
+    }
+    return 'B';
+  }
+
+  Color _getBillTypeColor(Map<String, dynamic> data) {
+    String pMode = data['paymentMode'] ?? '';
+    if (pMode == 'Cash') return Colors.green.shade800;
+    if (pMode == 'Both') return Colors.purple.shade800;
+    return Colors.blue.shade800;
+  }
+
+  Color _getBillTypeBgColor(Map<String, dynamic> data) {
+    String pMode = data['paymentMode'] ?? '';
+    if (pMode == 'Cash') return Colors.green.shade100;
+    if (pMode == 'Both') return Colors.purple.shade100;
+    return Colors.blue.shade100;
+  }
+
+  Future<void> _pickImage(
+    void Function(void Function()) setModalState,
+    Function(String) onImagePicked,
+  ) async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 70,
+    );
+    if (pickedFile != null) {
+      final bytes = await pickedFile.readAsBytes();
+      setModalState(() {
+        onImagePicked(base64Encode(bytes));
+      });
+    }
+  }
+
   void _openPaymentDialog(List<QueryDocumentSnapshot> activeBills) {
     if (activeBills.isEmpty) {
       showDialog(
@@ -143,13 +208,22 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
       return;
     }
 
-    selectedPurchaseIdForPayment = activeBills.first.id;
+    String selectedPurchaseIdForPayment = activeBills.first.id;
     var firstData = activeBills.first.data() as Map<String, dynamic>;
-
     String bNum = firstData['billNumber']?.toString() ?? 'N/A';
-    selectedBillNumberForPayment = bNum == 'null' ? 'N/A' : bNum;
-    selectedBillRemainingForPayment = _getCalculatedRemaining(firstData);
-    paymentMode = 'Cash';
+    String selectedBillNumberForPayment = bNum == 'null' ? 'N/A' : bNum;
+    double selectedBillRemainingForPayment = _getCalculatedRemaining(firstData);
+
+    final amountCtrl = TextEditingController();
+    final noteCtrl = TextEditingController();
+    DateTime paymentDate = DateTime.now();
+    String paymentMode = 'Cash';
+
+    String? selectedBankId;
+    String? selectedBankName;
+    String? bankScreenshotBase64;
+    final chequeNumberCtrl = TextEditingController();
+    DateTime? chequeDate;
 
     Get.bottomSheet(
       Theme(
@@ -236,14 +310,17 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                                 data['billNumber']?.toString() ?? 'N/A';
                             if (dropBNum == 'null') dropBNum = 'N/A';
                             double rem = _getCalculatedRemaining(data);
+                            String prefix = _getBillPrefix(data);
+                            String typeLabel = _getBillTypeLabel(data);
                             return DropdownMenuItem(
                               value: doc.id,
                               child: Text(
-                                "Bill #$dropBNum (Rem: PKR $rem)",
+                                "[$prefix] Bill #$dropBNum • $typeLabel (Rem: PKR ${rem.toStringAsFixed(0)})",
                                 style: const TextStyle(
                                   color: Colors.black,
                                   fontWeight: FontWeight.w900,
                                 ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             );
                           }).toList(),
@@ -254,7 +331,7 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                             var data =
                                 selectedDoc.data() as Map<String, dynamic>;
                             setModalState(() {
-                              selectedPurchaseIdForPayment = val;
+                              selectedPurchaseIdForPayment = val!;
                               String n =
                                   data['billNumber']?.toString() ?? 'N/A';
                               selectedBillNumberForPayment = n == 'null'
@@ -271,7 +348,7 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
 
                     const SizedBox(height: 15),
                     Text(
-                      "Payment Amount (Max: PKR $selectedBillRemainingForPayment):",
+                      "Payment Amount (Max: PKR ${selectedBillRemainingForPayment.toStringAsFixed(0)}):",
                       style: GoogleFonts.comicNeue(
                         fontSize: 18,
                         fontWeight: FontWeight.w900,
@@ -444,8 +521,14 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                                           ),
                                         )
                                         .toList(),
-                                    onChanged: (v) =>
-                                        setModalState(() => paymentMode = v!),
+                                    onChanged: (v) => setModalState(() {
+                                      paymentMode = v!;
+                                      selectedBankId = null;
+                                      selectedBankName = null;
+                                      bankScreenshotBase64 = null;
+                                      chequeDate = null;
+                                      chequeNumberCtrl.clear();
+                                    }),
                                   ),
                                 ),
                               ),
@@ -454,6 +537,252 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                         ),
                       ],
                     ),
+
+                    if (paymentMode == 'Bank Transfer') ...[
+                      const SizedBox(height: 15),
+                      Container(
+                        padding: const EdgeInsets.all(15),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.blue.shade900),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "Select Bank",
+                              style: GoogleFonts.comicNeue(
+                                color: Colors.black,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            const SizedBox(height: 5),
+                            FutureBuilder<QuerySnapshot>(
+                              future: _db
+                                  .collection('company_finances')
+                                  .doc('main_finances')
+                                  .collection('banks')
+                                  .get(),
+                              builder: (context, snapshot) {
+                                if (snapshot.connectionState ==
+                                    ConnectionState.waiting)
+                                  return const LinearProgressIndicator(
+                                    color: Colors.black,
+                                  );
+                                if (snapshot.hasError)
+                                  return Text(
+                                    "Error: ${snapshot.error}",
+                                    style: const TextStyle(
+                                      color: Colors.red,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  );
+                                if (!snapshot.hasData ||
+                                    snapshot.data!.docs.isEmpty)
+                                  return const Text(
+                                    "No Banks Found. Please add a bank first.",
+                                    style: TextStyle(
+                                      color: Colors.red,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  );
+                                var bankDocs = snapshot.data!.docs;
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    border: Border.all(color: Colors.black45),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: DropdownButtonHideUnderline(
+                                    child: DropdownButton<String>(
+                                      isExpanded: true,
+                                      hint: Text(
+                                        "Choose a Bank...",
+                                        style: GoogleFonts.comicNeue(
+                                          color: Colors.black54,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      value: selectedBankId,
+                                      items: bankDocs.map((doc) {
+                                        var d =
+                                            doc.data() as Map<String, dynamic>;
+                                        String name =
+                                            d['name'] ?? 'Unknown Bank';
+                                        if (d['accountTitle'] != null &&
+                                            d['accountTitle']
+                                                .toString()
+                                                .isNotEmpty) {
+                                          name = "$name - ${d['accountTitle']}";
+                                        }
+                                        return DropdownMenuItem(
+                                          value: doc.id,
+                                          child: Text(
+                                            name,
+                                            style: GoogleFonts.comicNeue(
+                                              color: Colors.black,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        );
+                                      }).toList(),
+                                      onChanged: (v) {
+                                        setModalState(() {
+                                          selectedBankId = v;
+                                          var bDoc = bankDocs.firstWhere(
+                                            (doc) => doc.id == v,
+                                          );
+                                          var d =
+                                              bDoc.data()
+                                                  as Map<String, dynamic>;
+                                          selectedBankName =
+                                              "${d['name']} - ${d['accountTitle']}";
+                                        });
+                                      },
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 15),
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.black,
+                              ),
+                              onPressed: () => _pickImage(
+                                setModalState,
+                                (img) => bankScreenshotBase64 = img,
+                              ),
+                              icon: const Icon(
+                                Icons.image,
+                                color: Colors.white,
+                              ),
+                              label: Text(
+                                bankScreenshotBase64 == null
+                                    ? "Attach Screenshot"
+                                    : "Change Screenshot",
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                            ),
+                            if (bankScreenshotBase64 != null) ...[
+                              const SizedBox(height: 10),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.memory(
+                                  base64Decode(bankScreenshotBase64!),
+                                  height: 100,
+                                  width: double.infinity,
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ] else if (paymentMode == 'Cheque') ...[
+                      const SizedBox(height: 15),
+                      Container(
+                        padding: const EdgeInsets.all(15),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.orange.shade900),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "Cheque Number",
+                              style: GoogleFonts.comicNeue(
+                                fontWeight: FontWeight.bold,
+                                color: Colors
+                                    .black, // ✅ Ensure color is explicitly black
+                                fontSize: 16,
+                              ),
+                            ),
+                            const SizedBox(height: 5),
+                            TextField(
+                              controller: chequeNumberCtrl,
+                              style: const TextStyle(
+                                color: Colors.black,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              decoration: InputDecoration(
+                                filled: true,
+                                fillColor: Colors.white,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 15,
+                                  vertical: 10,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 15),
+                            Text(
+                              "Cheque Date",
+                              style: GoogleFonts.comicNeue(
+                                fontWeight: FontWeight.bold,
+                                color: Colors
+                                    .black, // ✅ Ensure color is explicitly black
+                                fontSize: 16,
+                              ),
+                            ),
+                            const SizedBox(height: 5),
+                            InkWell(
+                              onTap: () async {
+                                DateTime? picked = await showDatePicker(
+                                  context: context,
+                                  initialDate: chequeDate ?? DateTime.now(),
+                                  firstDate: DateTime(2000),
+                                  lastDate: DateTime(2100),
+                                );
+                                if (picked != null)
+                                  setModalState(() => chequeDate = picked);
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 14,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: Colors.black45),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      chequeDate == null
+                                          ? "Select Date"
+                                          : DateFormat(
+                                              'dd MMM, yyyy',
+                                            ).format(chequeDate!),
+                                      style: const TextStyle(
+                                        color: Colors.black,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const Icon(
+                                      Icons.calendar_month,
+                                      color: Colors.black,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
 
                     const SizedBox(height: 15),
                     Text(
@@ -520,12 +849,32 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                               : () async {
                                   double amount =
                                       double.tryParse(amountCtrl.text) ?? 0.0;
+                                  if (paymentMode == 'Bank Transfer' &&
+                                      selectedBankId == null) {
+                                    Get.snackbar(
+                                      "Required",
+                                      "Please select a bank.",
+                                      backgroundColor: Colors.red,
+                                      colorText: Colors.white,
+                                    );
+                                    return;
+                                  }
+                                  if (paymentMode == 'Cheque' &&
+                                      chequeNumberCtrl.text.isEmpty) {
+                                    Get.snackbar(
+                                      "Required",
+                                      "Please enter cheque number.",
+                                      backgroundColor: Colors.red,
+                                      colorText: Colors.white,
+                                    );
+                                    return;
+                                  }
                                   bool
                                   success = await _paymentController.processPayment(
-                                    purchaseId: selectedPurchaseIdForPayment!,
+                                    purchaseId: selectedPurchaseIdForPayment,
                                     vendorId: selectedVendorId!,
                                     vendorName: selectedVendorName!,
-                                    billNumber: selectedBillNumberForPayment!,
+                                    billNumber: selectedBillNumberForPayment,
                                     totalBillRemaining:
                                         selectedBillRemainingForPayment,
                                     payingAmount: amount,
@@ -534,6 +883,11 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                                     note: noteCtrl.text.isEmpty
                                         ? "Payment towards Bill #$selectedBillNumberForPayment"
                                         : noteCtrl.text,
+                                    bankId: selectedBankId,
+                                    bankName: selectedBankName,
+                                    screenshotBase64: bankScreenshotBase64,
+                                    chequeNumber: chequeNumberCtrl.text,
+                                    chequeDate: chequeDate,
                                   );
                                   if (success) {
                                     amountCtrl.clear();
@@ -568,202 +922,944 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    // ✅ FIX: Scaffold mein body ko Column + Expanded se wrap karo
-    // Taake dono tabs ek hi screen pe fit ho, bahar scroll na ho
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        title: Text(
-          "Vendor Ledger & Payments",
-          style: GoogleFonts.comicNeue(
-            fontSize: 22,
-            fontWeight: FontWeight.w900,
-            color: Colors.black,
-          ),
-        ),
-        backgroundColor: Colors.white,
-        elevation: 2,
-        centerTitle: true,
-        iconTheme: const IconThemeData(color: Colors.black),
-      ),
-      bottomNavigationBar: selectedVendorId != null
-          ? _buildMakePaymentFixedButton()
-          : null,
-      body: Column(
-        children: [
-          // ── Vendor Selection (fixed at top, never scrolls) ──
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              border: Border(
-                bottom: BorderSide(color: Colors.black12, width: 1),
+  void _openEditPaymentDialog(
+    Map<String, dynamic> payData,
+    String docId,
+    String billNum,
+    String purchaseId,
+  ) {
+    TextEditingController editAmountCtrl = TextEditingController(
+      text: payData['paidAmount'].toString(),
+    );
+    TextEditingController editNoteCtrl = TextEditingController(
+      text: payData['note'] ?? '',
+    );
+    DateTime editDate = _parseDate(payData['paymentDate']);
+    String editMode = payData['paymentMode'] ?? 'Cash';
+
+    if (!["Cash", "Bank Transfer", "Cheque"].contains(editMode)) {
+      editMode = "Cash";
+    }
+
+    String? selectedBankId = payData['bankId'];
+    String? selectedBankName = payData['bankName'];
+    String? bankScreenshotBase64 = payData['screenshot'];
+    TextEditingController chequeNumberCtrl = TextEditingController(
+      text: payData['chequeNumber'] ?? '',
+    );
+    DateTime? chequeDate = payData['chequeDate'] != null
+        ? _parseDate(payData['chequeDate'])
+        : null;
+
+    double originalAmount =
+        double.tryParse(payData['paidAmount'].toString()) ?? 0.0;
+
+    Get.bottomSheet(
+      Theme(
+        data: ThemeData.light().copyWith(canvasColor: Colors.white),
+        child: StatefulBuilder(
+          builder: (context, setModalState) {
+            return Container(
+              padding: const EdgeInsets.all(25),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border.all(color: Colors.black, width: 3),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(20),
+                  topRight: Radius.circular(20),
+                ),
               ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (cachedVendorList.isEmpty)
-                  const LinearProgressIndicator(color: Colors.black)
-                else
-                  SearchableSelectionField(
-                    label: "Select Vendor to Load Account",
-                    hint: "Search Store or Owner...",
-                    selectedValue: selectedVendorName,
-                    items: cachedVendorList,
-                    onSelected: (val) {
-                      var v = cachedVendorDocs.firstWhere((e) {
-                        var d = e.data() as Map<String, dynamic>;
-                        return "${d['storeName'] ?? ''} (${d['ownerName'] ?? ''})" ==
-                            val;
-                      });
-                      var data = v.data() as Map<String, dynamic>;
-                      setState(() {
-                        selectedVendorName = val;
-                        selectedVendorId = v.id;
-                        selectedStoreName = data['storeName'] ?? 'Unknown';
-                        selectedOwnerName = data['ownerName'] ?? 'Unknown';
-                      });
-                    },
-                  ),
-                if (selectedVendorId != null) ...[
-                  const SizedBox(height: 10),
-                  // Vendor Info Card (compact)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.shade50,
-                      border: Border.all(
-                        color: Colors.blue.shade900,
-                        width: 1.5,
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 60,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: Colors.black,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                       ),
-                      borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    const SizedBox(height: 20),
+                    Text(
+                      "EDIT PAYMENT",
+                      style: GoogleFonts.comicNeue(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.blue.shade900,
+                      ),
+                    ),
+                    Text(
+                      "Bill #: $billNum",
+                      style: GoogleFonts.comicNeue(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black54,
+                      ),
+                    ),
+                    const Divider(
+                      color: Colors.black,
+                      thickness: 2,
+                      height: 20,
+                    ),
+
+                    Text(
+                      "Payment Amount:",
+                      style: GoogleFonts.comicNeue(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.black,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    TextField(
+                      controller: editAmountCtrl,
+                      keyboardType: TextInputType.number,
+                      style: const TextStyle(
+                        color: Colors.black,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      decoration: InputDecoration(
+                        prefixText: "PKR ",
+                        prefixStyle: const TextStyle(
+                          color: Colors.black,
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        filled: true,
+                        fillColor: Colors.white,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 15,
+                          vertical: 12,
+                        ),
+                        border: OutlineInputBorder(
+                          borderSide: const BorderSide(
+                            color: Colors.black,
+                            width: 2.5,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 15),
+
+                    Row(
                       children: [
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                "$selectedStoreName",
+                                "Date:",
                                 style: GoogleFonts.comicNeue(
-                                  fontSize: 15,
+                                  fontSize: 18,
                                   fontWeight: FontWeight.w900,
-                                  color: Colors.blue.shade900,
+                                  color: Colors.black,
                                 ),
                               ),
-                              Text(
-                                "$selectedOwnerName",
-                                style: GoogleFonts.comicNeue(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.blue.shade700,
+                              const SizedBox(height: 5),
+                              InkWell(
+                                onTap: () async {
+                                  DateTime? picked = await showDatePicker(
+                                    context: context,
+                                    initialDate: editDate,
+                                    firstDate: DateTime(2000),
+                                    lastDate: DateTime(2100),
+                                  );
+                                  if (picked != null)
+                                    setModalState(() => editDate = picked);
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 14,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    border: Border.all(
+                                      color: Colors.black,
+                                      width: 2.5,
+                                    ),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        DateFormat(
+                                          'dd MMM, yyyy',
+                                        ).format(editDate),
+                                        style: const TextStyle(
+                                          color: Colors.black,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                      const Icon(
+                                        Icons.calendar_month,
+                                        color: Colors.black,
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        StreamBuilder<DocumentSnapshot>(
-                          stream: _db
-                              .collection('vendors')
-                              .doc(selectedVendorId)
-                              .snapshots(),
-                          builder: (context, snapshot) {
-                            if (!snapshot.hasData) return const SizedBox();
-                            var data =
-                                snapshot.data!.data() as Map<String, dynamic>?;
-                            globalTotalRemaining =
-                                (data?['beginningBalance'] ?? 0.0).toDouble();
-                            return Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: globalTotalRemaining > 0
-                                    ? Colors.red.shade50
-                                    : Colors.green.shade50,
-                                border: Border.all(
-                                  color: globalTotalRemaining > 0
-                                      ? Colors.red.shade900
-                                      : Colors.green.shade900,
-                                  width: 1.5,
-                                ),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                "PAYABLE: PKR ${globalTotalRemaining.toStringAsFixed(0)}",
+                        const SizedBox(width: 15),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Mode:",
                                 style: GoogleFonts.comicNeue(
-                                  color: globalTotalRemaining > 0
-                                      ? Colors.red.shade900
-                                      : Colors.green.shade900,
-                                  fontSize: 14,
+                                  fontSize: 18,
                                   fontWeight: FontWeight.w900,
+                                  color: Colors.black,
                                 ),
                               ),
-                            );
-                          },
+                              const SizedBox(height: 5),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  border: Border.all(
+                                    color: Colors.black,
+                                    width: 2.5,
+                                  ),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: DropdownButtonHideUnderline(
+                                  child: DropdownButton<String>(
+                                    dropdownColor: Colors.white,
+                                    isExpanded: true,
+                                    value: editMode,
+                                    style: const TextStyle(
+                                      color: Colors.black,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                    icon: const Icon(
+                                      Icons.arrow_drop_down,
+                                      color: Colors.black,
+                                    ),
+                                    items: ["Cash", "Bank Transfer", "Cheque"]
+                                        .map(
+                                          (e) => DropdownMenuItem(
+                                            value: e,
+                                            child: Text(
+                                              e,
+                                              style: const TextStyle(
+                                                color: Colors.black,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                        )
+                                        .toList(),
+                                    onChanged: (v) => setModalState(() {
+                                      editMode = v!;
+                                      if (editMode != 'Bank Transfer') {
+                                        selectedBankId = null;
+                                        selectedBankName = null;
+                                        bankScreenshotBase64 = null;
+                                      }
+                                      if (editMode != 'Cheque') {
+                                        chequeDate = null;
+                                        chequeNumberCtrl.clear();
+                                      }
+                                    }),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
-                  ),
-                ],
-              ],
-            ),
-          ),
 
-          // ── Tab Bar (only when vendor selected) ──
-          if (selectedVendorId != null)
-            Container(
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                border: Border(
-                  bottom: BorderSide(color: Colors.black, width: 2),
-                ),
-              ),
-              child: TabBar(
-                controller: _tabController,
-                labelColor: Colors.black,
-                unselectedLabelColor: Colors.grey,
-                labelStyle: GoogleFonts.comicNeue(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w900,
-                ),
-                indicatorColor: Colors.black,
-                indicatorWeight: 3,
-                tabs: const [
-                  Tab(text: "PENDING BILLS"),
-                  Tab(text: "LEDGER HISTORY"),
-                ],
-              ),
-            ),
+                    if (editMode == 'Bank Transfer') ...[
+                      const SizedBox(height: 15),
+                      Container(
+                        padding: const EdgeInsets.all(15),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.blue.shade900),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "Select Bank",
+                              style: GoogleFonts.comicNeue(
+                                color: Colors.black,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            const SizedBox(height: 5),
+                            FutureBuilder<QuerySnapshot>(
+                              future: _db
+                                  .collection('company_finances')
+                                  .doc('main_finances')
+                                  .collection('banks')
+                                  .get(),
+                              builder: (context, snapshot) {
+                                if (snapshot.connectionState ==
+                                    ConnectionState.waiting)
+                                  return const LinearProgressIndicator(
+                                    color: Colors.black,
+                                  );
+                                if (snapshot.hasError)
+                                  return Text(
+                                    "Error: ${snapshot.error}",
+                                    style: const TextStyle(
+                                      color: Colors.red,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  );
+                                if (!snapshot.hasData ||
+                                    snapshot.data!.docs.isEmpty)
+                                  return const Text(
+                                    "No Banks Found. Please add a bank first.",
+                                    style: TextStyle(
+                                      color: Colors.red,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  );
+                                var bankDocs = snapshot.data!.docs;
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    border: Border.all(color: Colors.black45),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: DropdownButtonHideUnderline(
+                                    child: DropdownButton<String>(
+                                      isExpanded: true,
+                                      hint: Text(
+                                        "Choose a Bank...",
+                                        style: GoogleFonts.comicNeue(
+                                          color: Colors.black54,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      value: selectedBankId,
+                                      items: bankDocs.map((doc) {
+                                        var d =
+                                            doc.data() as Map<String, dynamic>;
+                                        String name =
+                                            d['name'] ?? 'Unknown Bank';
+                                        if (d['accountTitle'] != null &&
+                                            d['accountTitle']
+                                                .toString()
+                                                .isNotEmpty) {
+                                          name = "$name - ${d['accountTitle']}";
+                                        }
+                                        return DropdownMenuItem(
+                                          value: doc.id,
+                                          child: Text(
+                                            name,
+                                            style: GoogleFonts.comicNeue(
+                                              color: Colors.black,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        );
+                                      }).toList(),
+                                      onChanged: (v) {
+                                        setModalState(() {
+                                          selectedBankId = v;
+                                          var bDoc = bankDocs.firstWhere(
+                                            (doc) => doc.id == v,
+                                          );
+                                          var d =
+                                              bDoc.data()
+                                                  as Map<String, dynamic>;
+                                          selectedBankName =
+                                              "${d['name']} - ${d['accountTitle']}";
+                                        });
+                                      },
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 15),
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.black,
+                              ),
+                              onPressed: () => _pickImage(
+                                setModalState,
+                                (img) => bankScreenshotBase64 = img,
+                              ),
+                              icon: const Icon(
+                                Icons.image,
+                                color: Colors.white,
+                              ),
+                              label: Text(
+                                bankScreenshotBase64 == null
+                                    ? "Attach Screenshot"
+                                    : "Change Screenshot",
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                            ),
+                            if (bankScreenshotBase64 != null) ...[
+                              const SizedBox(height: 10),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.memory(
+                                  base64Decode(bankScreenshotBase64!),
+                                  height: 100,
+                                  width: double.infinity,
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ] else if (editMode == 'Cheque') ...[
+                      const SizedBox(height: 15),
+                      Container(
+                        padding: const EdgeInsets.all(15),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.orange.shade900),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "Cheque Number",
+                              style: GoogleFonts.comicNeue(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            const SizedBox(height: 5),
+                            TextField(
+                              controller: chequeNumberCtrl,
+                              style: const TextStyle(
+                                color: Colors.black,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              decoration: InputDecoration(
+                                filled: true,
+                                fillColor: Colors.white,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 15,
+                                  vertical: 10,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 15),
+                            Text(
+                              "Cheque Date",
+                              style: GoogleFonts.comicNeue(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            const SizedBox(height: 5),
+                            InkWell(
+                              onTap: () async {
+                                DateTime? picked = await showDatePicker(
+                                  context: context,
+                                  initialDate: chequeDate ?? DateTime.now(),
+                                  firstDate: DateTime(2000),
+                                  lastDate: DateTime(2100),
+                                );
+                                if (picked != null)
+                                  setModalState(() => chequeDate = picked);
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 14,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: Colors.black45),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      chequeDate == null
+                                          ? "Select Date"
+                                          : DateFormat(
+                                              'dd MMM, yyyy',
+                                            ).format(chequeDate!),
+                                      style: const TextStyle(
+                                        color: Colors.black,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const Icon(
+                                      Icons.calendar_month,
+                                      color: Colors.black,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
 
-          // ── Tab Content fills remaining screen space ──
-          Expanded(
-            child: selectedVendorId == null
-                ? Center(
-                    child: Text(
-                      "Please select a vendor first.",
+                    const SizedBox(height: 15),
+                    Text(
+                      "Note:",
                       style: GoogleFonts.comicNeue(
-                        fontSize: 22,
+                        fontSize: 18,
                         fontWeight: FontWeight.w900,
-                        color: Colors.black54,
+                        color: Colors.black,
                       ),
                     ),
-                  )
-                : _tabController.index == 0
-                ? _buildPendingBillsTab()
-                : _buildLedgerTab(),
-          ),
-        ],
+                    const SizedBox(height: 5),
+                    TextField(
+                      controller: editNoteCtrl,
+                      style: const TextStyle(
+                        color: Colors.black,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor: Colors.white,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 15,
+                          vertical: 12,
+                        ),
+                        border: OutlineInputBorder(
+                          borderSide: const BorderSide(
+                            color: Colors.black,
+                            width: 2.5,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 25),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 55,
+                      child: Obx(
+                        () => ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue.shade900,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          onPressed: _paymentController.isLoading.value
+                              ? null
+                              : () async {
+                                  double newAmt =
+                                      double.tryParse(editAmountCtrl.text) ??
+                                      0.0;
+                                  if (newAmt <= 0) {
+                                    Get.snackbar(
+                                      "Invalid",
+                                      "Amount must be greater than zero.",
+                                      backgroundColor: Colors.red,
+                                      colorText: Colors.white,
+                                    );
+                                    return;
+                                  }
+                                  if (editMode == 'Bank Transfer' &&
+                                      selectedBankId == null) {
+                                    Get.snackbar(
+                                      "Required",
+                                      "Please select a bank.",
+                                      backgroundColor: Colors.red,
+                                      colorText: Colors.white,
+                                    );
+                                    return;
+                                  }
+                                  if (editMode == 'Cheque' &&
+                                      chequeNumberCtrl.text.isEmpty) {
+                                    Get.snackbar(
+                                      "Required",
+                                      "Please enter cheque number.",
+                                      backgroundColor: Colors.red,
+                                      colorText: Colors.white,
+                                    );
+                                    return;
+                                  }
+                                  bool success = await _paymentController
+                                      .editPaymentTransaction(
+                                        paymentDocId: docId,
+                                        purchaseId: purchaseId,
+                                        vendorId: selectedVendorId!,
+                                        vendorName: selectedVendorName!,
+                                        billNumber: billNum,
+                                        oldAmount: originalAmount,
+                                        newAmount: newAmt,
+                                        paymentDate: editDate,
+                                        paymentMode: editMode,
+                                        note: editNoteCtrl.text,
+                                        bankId: selectedBankId,
+                                        bankName: selectedBankName,
+                                        screenshotBase64: bankScreenshotBase64,
+                                        chequeNumber: chequeNumberCtrl.text,
+                                        chequeDate: chequeDate,
+                                      );
+                                  if (success) {
+                                    Navigator.of(context).pop();
+                                  }
+                                },
+                          child: _paymentController.isLoading.value
+                              ? const CircularProgressIndicator(
+                                  color: Colors.white,
+                                )
+                              : Text(
+                                  "UPDATE PAYMENT",
+                                  style: GoogleFonts.comicNeue(
+                                    color: Colors.white,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
       ),
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return WillPopScope(
+      onWillPop: () async {
+        if (isFullScreen) {
+          setState(() => isFullScreen = false);
+          return false;
+        }
+        return true;
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF8FAFC),
+        appBar: isFullScreen
+            ? AppBar(
+                leading: IconButton(
+                  icon: const Icon(Icons.arrow_back_ios, color: Colors.black),
+                  onPressed: () => setState(() => isFullScreen = false),
+                ),
+                title: Text(
+                  "Full Screen Ledger",
+                  style: GoogleFonts.comicNeue(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.black,
+                  ),
+                ),
+                backgroundColor: Colors.white,
+                elevation: 2,
+                centerTitle: true,
+              )
+            : AppBar(
+                title: Text(
+                  "Vendor Ledger & Payments",
+                  style: GoogleFonts.comicNeue(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.black,
+                  ),
+                ),
+                backgroundColor: Colors.white,
+                elevation: 2,
+                centerTitle: true,
+                iconTheme: const IconThemeData(color: Colors.black),
+              ),
+        bottomNavigationBar: selectedVendorId != null
+            ? _buildMakePaymentFixedButton()
+            : null,
+        body: Column(
+          children: [
+            // ── Vendor Selection ──
+            if (!isFullScreen)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  border: Border(
+                    bottom: BorderSide(color: Colors.black12, width: 1),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (cachedVendorList.isEmpty)
+                      const LinearProgressIndicator(color: Colors.black)
+                    else
+                      SearchableSelectionField(
+                        label: "Select Vendor to Load Account",
+                        hint: "Search Store or Owner...",
+                        selectedValue: selectedVendorName,
+                        items: cachedVendorList,
+                        onSelected: (val) {
+                          var v = cachedVendorDocs.firstWhere((e) {
+                            var d = e.data() as Map<String, dynamic>;
+                            return "${d['storeName'] ?? ''} (${d['ownerName'] ?? ''})" ==
+                                val;
+                          });
+                          var data = v.data() as Map<String, dynamic>;
+                          setState(() {
+                            selectedVendorName = val;
+                            selectedVendorId = v.id;
+                            selectedStoreName = data['storeName'] ?? 'Unknown';
+                            selectedOwnerName = data['ownerName'] ?? 'Unknown';
+                            selectedVendorImage =
+                                data['image'] ??
+                                data['imageUrl'] ??
+                                data['profileImage'] ??
+                                '';
+
+                            // ✅ NEW: Extracting categories and phone number
+                            selectedCategories = data['categories'] ?? [];
+                            selectedContactPhone =
+                                data['contactPersonPhone'] ?? 'N/A';
+                          });
+                        },
+                      ),
+                    if (selectedVendorId != null) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          border: Border.all(
+                            color: Colors.blue.shade900,
+                            width: 1.5,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            // ✅ Vendor Image
+                            _buildVendorAvatar(),
+                            const SizedBox(width: 10),
+                            // ... existing code ...
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    "$selectedStoreName",
+                                    style: GoogleFonts.comicNeue(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w900,
+                                      color: Colors.blue.shade900,
+                                    ),
+                                  ),
+                                  Text(
+                                    "$selectedOwnerName | 📞 $selectedContactPhone", // ✅ Updated to show Phone
+                                    style: GoogleFonts.comicNeue(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.blue.shade700,
+                                    ),
+                                  ),
+                                  if (selectedCategories
+                                      .isNotEmpty) // ✅ NEW: Showing categories
+                                    Text(
+                                      "Categories: ${selectedCategories.join(', ')}",
+                                      style: GoogleFonts.comicNeue(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.black54,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            StreamBuilder<DocumentSnapshot>(
+                              stream: _db
+                                  .collection('vendors')
+                                  .doc(selectedVendorId)
+                                  .snapshots(),
+                              builder: (context, snapshot) {
+                                if (!snapshot.hasData) return const SizedBox();
+                                var data =
+                                    snapshot.data!.data()
+                                        as Map<String, dynamic>?;
+                                globalTotalRemaining =
+                                    (data?['beginningBalance'] ?? 0.0)
+                                        .toDouble();
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: globalTotalRemaining > 0
+                                        ? Colors.red.shade50
+                                        : Colors.green.shade50,
+                                    border: Border.all(
+                                      color: globalTotalRemaining > 0
+                                          ? Colors.red.shade900
+                                          : Colors.green.shade900,
+                                      width: 1.5,
+                                    ),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    "PAYABLE:\nPKR ${globalTotalRemaining.toStringAsFixed(0)}",
+                                    style: GoogleFonts.comicNeue(
+                                      color: globalTotalRemaining > 0
+                                          ? Colors.red.shade900
+                                          : Colors.green.shade900,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+
+            // ── Tab Bar ──
+            if (selectedVendorId != null)
+              Container(
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  border: Border(
+                    bottom: BorderSide(color: Colors.black, width: 2),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TabBar(
+                        controller: _tabController,
+                        labelColor: Colors.black,
+                        unselectedLabelColor: Colors.grey,
+                        labelStyle: GoogleFonts.comicNeue(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                        ),
+                        indicatorColor: Colors.black,
+                        indicatorWeight: 3,
+                        tabs: const [
+                          Tab(text: "PENDING BILLS"),
+                          Tab(text: "LEDGER HISTORY"),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        isFullScreen ? Icons.fullscreen_exit : Icons.fullscreen,
+                        color: Colors.black,
+                        size: 30,
+                      ),
+                      onPressed: () {
+                        setState(() => isFullScreen = !isFullScreen);
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                ),
+              ),
+
+            // ── Tab Content ──
+            Expanded(
+              child: selectedVendorId == null
+                  ? Center(
+                      child: Text(
+                        "Please select a vendor first.",
+                        style: GoogleFonts.comicNeue(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.black54,
+                        ),
+                      ),
+                    )
+                  : _tabController.index == 0
+                  ? _buildPendingBillsTab()
+                  : _buildLedgerTab(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ✅ Vendor Avatar widget
+  // ✅ Vendor Avatar widget (Updated for Base64 Profile Images)
+  Widget _buildVendorAvatar() {
+    bool hasImage =
+        selectedVendorImage != null && selectedVendorImage!.isNotEmpty;
+
+    ImageProvider? imageProvider;
+    if (hasImage) {
+      if (!selectedVendorImage!.startsWith('http')) {
+        // Base64 image
+        imageProvider = MemoryImage(base64Decode(selectedVendorImage!));
+      } else {
+        // URL image fallback
+        imageProvider = NetworkImage(selectedVendorImage!);
+      }
+    }
+
+    return CircleAvatar(
+      radius: 26,
+      backgroundColor: Colors.blue.shade200,
+      backgroundImage: imageProvider,
+      child: !hasImage
+          ? Text(
+              (selectedStoreName ?? 'V').substring(0, 1).toUpperCase(),
+              style: GoogleFonts.comicNeue(
+                fontSize: 20,
+                fontWeight: FontWeight.w900,
+                color: Colors.white,
+              ),
+            )
+          : null,
     );
   }
 
@@ -797,12 +1893,10 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
               return dA.compareTo(dB);
             });
           }
-          // ✅ FIX: active.isEmpty ho to bhi button enabled rakho,
-          // taake popup dikhe. Disabled mat karo silently.
           return ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.green.shade900,
-              padding: const EdgeInsets.symmetric(vertical: 16),
+              minimumSize: const Size(double.infinity, 55),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
                 side: const BorderSide(color: Colors.black, width: 2),
@@ -854,7 +1948,6 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
           );
 
         var allBills = snapshot.data!.docs.toList();
-
         if (allBills.isEmpty) {
           return Center(
             child: Text(
@@ -966,8 +2059,19 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
         ? items.map((e) => e['productName']).join(", ")
         : "N/A";
 
+    // ✅ Product images (first item's image)
+    String firstProductImage = '';
+    if (items.isNotEmpty && items[0]['image'] != null) {
+      firstProductImage = items[0]['image'].toString();
+    }
+
     String storeName = billData['storeName'] ?? selectedStoreName ?? 'N/A';
     String ownerName = billData['ownerName'] ?? selectedOwnerName ?? 'N/A';
+
+    String typeLabel = _getBillTypeLabel(billData);
+    String prefix = _getBillPrefix(billData);
+    Color typeColor = _getBillTypeColor(billData);
+    Color typeBgColor = _getBillTypeBgColor(billData);
 
     return Card(
       color: isPaid ? Colors.green.shade50 : Colors.white,
@@ -987,8 +2091,31 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
           children: [
             // Bill Header
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // ✅ Product image thumbnail
+                if (firstProductImage.isNotEmpty)
+                  Container(
+                    width: 56,
+                    height: 56,
+                    margin: const EdgeInsets.only(right: 10),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.black26),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(7),
+                      child: Image.network(
+                        firstProductImage,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const Icon(
+                          Icons.inventory_2_outlined,
+                          size: 28,
+                          color: Colors.black38,
+                        ),
+                      ),
+                    ),
+                  ),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -999,6 +2126,27 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                           fontSize: 20,
                           fontWeight: FontWeight.w900,
                           color: Colors.black,
+                        ),
+                      ),
+                      // ✅ Type badge with prefix
+                      Container(
+                        margin: const EdgeInsets.only(top: 2, bottom: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: typeBgColor,
+                          border: Border.all(color: typeColor),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          "[$prefix] $typeLabel",
+                          style: GoogleFonts.comicNeue(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w900,
+                            color: typeColor,
+                          ),
                         ),
                       ),
                       Text(
@@ -1083,7 +2231,6 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
             ),
             const SizedBox(height: 6),
 
-            // ✅ FIX: Dues table — properly show actual paid per row
             StreamBuilder<QuerySnapshot>(
               stream: _db
                   .collection('vendor_dues')
@@ -1091,7 +2238,6 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                   .snapshots(),
               builder: (context, duesSnap) {
                 if (!duesSnap.hasData) return const SizedBox();
-
                 var dues = duesSnap.data!.docs.toList();
                 dues.sort((a, b) {
                   DateTime dA = _parseDate((a.data() as Map)['dueDate']);
@@ -1101,30 +2247,19 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
 
                 if (dues.isEmpty) return const SizedBox();
 
-                // ✅ FIX: originalAmountDue = 0 wali row ko advance row treat karo
-                // Actual paidAmount jo Firestore mein stored hai wahi directly dikhao
-                // (controller ne already correct distribute kiya hai)
                 double totalRemainingFromDues = 0.0;
                 List<Map<String, dynamic>> dueRows = [];
 
                 for (var doc in dues) {
                   var d = doc.data() as Map<String, dynamic>;
-
-                  // ✅ originalAmountDue prefer karo, fallback amountDue
                   double original =
                       (d['originalAmountDue'] ?? d['amountDue'] ?? 0.0)
                           .toDouble();
-
-                  // ✅ paidAmount directly from Firestore — controller ne sahi store kiya hai
                   double paid = (d['paidAmount'] ?? 0.0).toDouble();
-
-                  // ✅ Agar original = 0 (advance row), to remaining = 0
                   double remainingDue = original <= 0
                       ? 0.0
                       : (original - paid).clamp(0.0, double.infinity);
-
                   totalRemainingFromDues += remainingDue;
-
                   dueRows.add({
                     'date': _parseDate(d['dueDate']),
                     'original': original,
@@ -1137,13 +2272,9 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
 
                 return Column(
                   children: [
-                    // ✅ FIX: Table responsive — LayoutBuilder se width fix karo
                     LayoutBuilder(
                       builder: (ctx, constraints) {
-                        // Table ko screen width mein fit karo
                         double tableWidth = constraints.maxWidth;
-
-                        // Column widths proportionally distribute
                         double dateW = tableWidth * 0.23;
                         double dayW = tableWidth * 0.19;
                         double origW = tableWidth * 0.22;
@@ -1158,7 +2289,6 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                           ),
                           child: Column(
                             children: [
-                              // Header Row
                               _tableHeaderRow(
                                 dateW,
                                 dayW,
@@ -1166,7 +2296,6 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                                 paidW,
                                 statusW,
                               ),
-                              // Data Rows
                               ...dueRows.map((row) {
                                 return _tableDueRow(
                                   row: row,
@@ -1183,7 +2312,6 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                       },
                     ),
                     const SizedBox(height: 8),
-                    // Total Remaining
                     Container(
                       padding: const EdgeInsets.symmetric(
                         vertical: 8,
@@ -1228,7 +2356,6 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
     );
   }
 
-  // ── Table Header Row ──
   Widget _tableHeaderRow(
     double dateW,
     double dayW,
@@ -1282,7 +2409,6 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
 
   Widget _vDivider() => Container(width: 1, height: 38, color: Colors.white30);
 
-  // ── Table Data Row ──
   Widget _tableDueRow({
     required Map<String, dynamic> row,
     required double dateW,
@@ -1292,10 +2418,9 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
     required double statusW,
   }) {
     DateTime date = row['date'];
-    String day = DateFormat('EEE').format(date); // Short day e.g. "Mon"
+    String day = DateFormat('EEE').format(date);
     double original = row['original'];
     double paid = row['paid'];
-    double remainingDue = row['remaining'];
     bool isPaidRow = row['isPaid'];
     bool isAdvance = row['isAdvance'];
 
@@ -1304,7 +2429,6 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
     Color rowBg;
 
     if (isAdvance) {
-      // Advance row — original=0, show "Advance" label
       status = "Advance";
       statusColor = Colors.green.shade800;
       rowBg = Colors.green.shade50;
@@ -1319,7 +2443,6 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
         DateTime.now().day,
       );
       DateTime dueDay = DateTime(date.year, date.month, date.day);
-
       if (dueDay.isBefore(today)) {
         status = "Overdue";
         statusColor = Colors.red.shade900;
@@ -1350,7 +2473,6 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
       ),
       child: Row(
         children: [
-          // Date
           SizedBox(
             width: dateW,
             child: Padding(
@@ -1364,7 +2486,6 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
             ),
           ),
           _vDataDivider(),
-          // Day
           SizedBox(
             width: dayW,
             child: Padding(
@@ -1378,7 +2499,6 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
             ),
           ),
           _vDataDivider(),
-          // Original Due
           SizedBox(
             width: origW,
             child: Padding(
@@ -1394,7 +2514,6 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
             ),
           ),
           _vDataDivider(),
-          // ✅ Paid Amount — directly from Firestore (already correct)
           SizedBox(
             width: paidW,
             child: Padding(
@@ -1411,7 +2530,6 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
             ),
           ),
           _vDataDivider(),
-          // Status
           SizedBox(
             width: statusW,
             child: Padding(
@@ -1508,7 +2626,8 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
               shrinkWrap: true,
               itemCount: purchases.length,
               itemBuilder: (context, index) {
-                var pData = purchases[index].data() as Map<String, dynamic>;
+                var purchaseDoc = purchases[index];
+                var pData = purchaseDoc.data() as Map<String, dynamic>;
                 String bNum = pData['billNumber']?.toString() ?? 'N/A';
                 if (bNum == 'null') bNum = 'N/A';
 
@@ -1528,33 +2647,42 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                 String productsStr = items.isNotEmpty
                     ? items.map((e) => e['productName']).join(", ")
                     : "N/A";
+
+                // ✅ Product image for ledger card
+                String firstProductImage = '';
+                if (items.isNotEmpty && items[0]['image'] != null) {
+                  firstProductImage = items[0]['image'].toString();
+                }
+
                 String storeName =
                     pData['storeName'] ?? selectedStoreName ?? 'N/A';
                 String ownerName =
                     pData['ownerName'] ?? selectedOwnerName ?? 'N/A';
 
-                var billPayments = payments
-                    .where((payDoc) {
-                      return (payDoc.data() as Map)['billNumber'] == bNum;
-                    })
-                    .map((e) => e.data() as Map<String, dynamic>)
-                    .toList();
+                String typeLabel = _getBillTypeLabel(pData);
+                String prefix = _getBillPrefix(pData);
+                Color typeColor = _getBillTypeColor(pData);
+                Color typeBgColor = _getBillTypeBgColor(pData);
+
+                var billPayments = payments.where((payDoc) {
+                  return (payDoc.data() as Map)['billNumber'] == bNum;
+                }).toList();
 
                 billPayments.sort(
                   (a, b) => _parseDate(
-                    a['paymentDate'],
-                  ).compareTo(_parseDate(b['paymentDate'])),
+                    (a.data() as Map)['paymentDate'],
+                  ).compareTo(_parseDate((b.data() as Map)['paymentDate'])),
                 );
 
                 double sumOfManualPayments = 0.0;
-                for (var pay in billPayments) {
+                for (var payDoc in billPayments) {
                   sumOfManualPayments +=
-                      double.tryParse(pay['paidAmount']?.toString() ?? '0') ??
+                      double.tryParse(
+                        (payDoc.data() as Map)['paidAmount']?.toString() ?? '0',
+                      ) ??
                       0.0;
                 }
 
-                // ✅ FIX: Advance = totalCashPaidInDB - manual payments
-                // Agar negative ho to 0 rakho
                 double initialAdvance =
                     (totalCashPaidInDB - sumOfManualPayments).clamp(
                       0.0,
@@ -1566,38 +2694,46 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
 
                 runningBalance += billTotal;
                 billLedgerRows.add({
+                  'docId': null,
                   'date': pDate,
                   'details': "Bill Generated",
                   'debit': billTotal,
                   'credit': 0.0,
                   'balance': runningBalance,
+                  'rawMap': null,
                 });
 
-                // ✅ FIX: Advance row sirf tab dikhao jab actually advance tha
                 if (initialAdvance > 0.01) {
                   runningBalance -= initialAdvance;
                   billLedgerRows.add({
+                    'docId': null,
                     'date': pDate.add(const Duration(seconds: 1)),
                     'details': "Advance Cash Paid",
                     'debit': 0.0,
                     'credit': initialAdvance,
                     'balance': runningBalance,
+                    'rawMap': null,
                   });
                 }
 
-                for (var pay in billPayments) {
+                for (var payDoc in billPayments) {
+                  var payMap = payDoc.data() as Map<String, dynamic>;
                   double pAmt =
-                      double.tryParse(pay['paidAmount']?.toString() ?? '0') ??
+                      double.tryParse(
+                        payMap['paidAmount']?.toString() ?? '0',
+                      ) ??
                       0.0;
-                  String mode = pay['paymentMode'] ?? 'Cash';
-                  DateTime payD = _parseDate(pay['paymentDate']);
+                  String mode = payMap['paymentMode'] ?? 'Cash';
+                  DateTime payD = _parseDate(payMap['paymentDate']);
                   runningBalance -= pAmt;
                   billLedgerRows.add({
+                    'docId': payDoc.id,
                     'date': payD,
                     'details': "Payment ($mode)",
                     'debit': 0.0,
                     'credit': pAmt,
                     'balance': runningBalance,
+                    'rawMap': payMap,
                   });
                 }
 
@@ -1620,8 +2756,31 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            // ✅ Product image in ledger card
+                            if (firstProductImage.isNotEmpty)
+                              Container(
+                                width: 52,
+                                height: 52,
+                                margin: const EdgeInsets.only(right: 10),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: Colors.black26),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(7),
+                                  child: Image.network(
+                                    firstProductImage,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => const Icon(
+                                      Icons.inventory_2_outlined,
+                                      size: 26,
+                                      color: Colors.black38,
+                                    ),
+                                  ),
+                                ),
+                              ),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1632,6 +2791,30 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                                       fontSize: 20,
                                       fontWeight: FontWeight.w900,
                                       color: Colors.black,
+                                    ),
+                                  ),
+                                  // ✅ Type badge with prefix in ledger
+                                  Container(
+                                    margin: const EdgeInsets.only(
+                                      top: 2,
+                                      bottom: 4,
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: typeBgColor,
+                                      border: Border.all(color: typeColor),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      "[$prefix] $typeLabel",
+                                      style: GoogleFonts.comicNeue(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w900,
+                                        color: typeColor,
+                                      ),
                                     ),
                                   ),
                                   Text(
@@ -1653,25 +2836,57 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                                 ],
                               ),
                             ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 5,
-                              ),
-                              decoration: BoxDecoration(
-                                color: isFullyPaid
-                                    ? Colors.green.shade900
-                                    : Colors.orange.shade900,
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                isFullyPaid ? "PAID" : "BALANCE",
-                                style: GoogleFonts.comicNeue(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w900,
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isFullyPaid
+                                        ? Colors.green.shade900
+                                        : Colors.orange.shade900,
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(
+                                    isFullyPaid ? "PAID" : "BALANCE",
+                                    style: GoogleFonts.comicNeue(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
                                 ),
-                              ),
+                                const SizedBox(height: 8),
+                                InkWell(
+                                  onTap: () {
+                                    Get.defaultDialog(
+                                      title: "Delete Bill",
+                                      middleText:
+                                          "Permanently delete Bill #$bNum?",
+                                      textConfirm: "Delete",
+                                      confirmTextColor: Colors.white,
+                                      buttonColor: Colors.red.shade900,
+                                      onConfirm: () {
+                                        Get.back();
+                                        _paymentController
+                                            .deleteBillTransaction(
+                                              purchaseId: purchaseDoc.id,
+                                              vendorId: selectedVendorId!,
+                                              billNumber: bNum,
+                                            );
+                                      },
+                                    );
+                                  },
+                                  child: const Icon(
+                                    Icons.delete_forever,
+                                    color: Colors.red,
+                                    size: 28,
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
@@ -1681,15 +2896,15 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                           height: 14,
                         ),
 
-                        // ✅ Ledger table responsive with LayoutBuilder
                         LayoutBuilder(
                           builder: (ctx, constraints) {
                             double w = constraints.maxWidth;
-                            double dW = w * 0.20;
-                            double detW = w * 0.27;
-                            double drW = w * 0.16;
-                            double crW = w * 0.16;
-                            double balW = w * 0.16;
+                            double dW = w * 0.17;
+                            double detW = w * 0.23;
+                            double drW = w * 0.15;
+                            double crW = w * 0.15;
+                            double balW = w * 0.15;
+                            double actW = w * 0.10;
 
                             return Container(
                               width: w,
@@ -1702,7 +2917,6 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                               ),
                               child: Column(
                                 children: [
-                                  // Header
                                   Container(
                                     decoration: const BoxDecoration(
                                       color: Colors.black,
@@ -1716,56 +2930,65 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                                         _headerCell(
                                           "Date",
                                           dW,
-                                          GoogleFonts.comicNeue(
-                                            fontWeight: FontWeight.w900,
+                                          const TextStyle(
                                             color: Colors.white,
-                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 11,
                                           ),
                                         ),
                                         _vDivider(),
                                         _headerCell(
                                           "Details",
                                           detW,
-                                          GoogleFonts.comicNeue(
-                                            fontWeight: FontWeight.w900,
+                                          const TextStyle(
                                             color: Colors.white,
-                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 11,
                                           ),
                                         ),
                                         _vDivider(),
                                         _headerCell(
                                           "Debit",
                                           drW,
-                                          GoogleFonts.comicNeue(
-                                            fontWeight: FontWeight.w900,
+                                          const TextStyle(
                                             color: Colors.white,
-                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 11,
                                           ),
                                         ),
                                         _vDivider(),
                                         _headerCell(
                                           "Credit",
                                           crW,
-                                          GoogleFonts.comicNeue(
-                                            fontWeight: FontWeight.w900,
+                                          const TextStyle(
                                             color: Colors.white,
-                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 11,
                                           ),
                                         ),
                                         _vDivider(),
                                         _headerCell(
                                           "Balance",
                                           balW,
-                                          GoogleFonts.comicNeue(
-                                            fontWeight: FontWeight.w900,
+                                          const TextStyle(
                                             color: Colors.white,
-                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 11,
+                                          ),
+                                        ),
+                                        _vDivider(),
+                                        _headerCell(
+                                          "Edit",
+                                          actW,
+                                          const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 11,
                                           ),
                                         ),
                                       ],
                                     ),
                                   ),
-                                  // Data rows
                                   ...billLedgerRows.map((row) {
                                     bool isBillGen =
                                         row['details'] == "Bill Generated";
@@ -1789,7 +3012,7 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                                               padding:
                                                   const EdgeInsets.symmetric(
                                                     vertical: 7,
-                                                    horizontal: 4,
+                                                    horizontal: 2,
                                                   ),
                                               child: Text(
                                                 DateFormat(
@@ -1798,7 +3021,7 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                                                 style: const TextStyle(
                                                   fontWeight: FontWeight.bold,
                                                   color: Colors.black,
-                                                  fontSize: 11,
+                                                  fontSize: 10,
                                                 ),
                                                 textAlign: TextAlign.center,
                                                 maxLines: 1,
@@ -1812,14 +3035,14 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                                               padding:
                                                   const EdgeInsets.symmetric(
                                                     vertical: 7,
-                                                    horizontal: 4,
+                                                    horizontal: 2,
                                                   ),
                                               child: Text(
                                                 row['details'],
                                                 style: const TextStyle(
                                                   fontWeight: FontWeight.bold,
                                                   color: Colors.black,
-                                                  fontSize: 11,
+                                                  fontSize: 10,
                                                 ),
                                                 textAlign: TextAlign.center,
                                                 maxLines: 2,
@@ -1833,16 +3056,16 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                                               padding:
                                                   const EdgeInsets.symmetric(
                                                     vertical: 7,
-                                                    horizontal: 4,
+                                                    horizontal: 2,
                                                   ),
                                               child: Text(
                                                 row['debit'] > 0
-                                                    ? "PKR ${row['debit'].toStringAsFixed(0)}"
+                                                    ? "${row['debit'].toStringAsFixed(0)}"
                                                     : "-",
                                                 style: TextStyle(
                                                   fontWeight: FontWeight.w900,
                                                   color: Colors.red.shade900,
-                                                  fontSize: 12,
+                                                  fontSize: 11,
                                                 ),
                                                 textAlign: TextAlign.center,
                                                 maxLines: 1,
@@ -1856,16 +3079,16 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                                               padding:
                                                   const EdgeInsets.symmetric(
                                                     vertical: 7,
-                                                    horizontal: 4,
+                                                    horizontal: 2,
                                                   ),
                                               child: Text(
                                                 row['credit'] > 0
-                                                    ? "PKR ${row['credit'].toStringAsFixed(0)}"
+                                                    ? "${row['credit'].toStringAsFixed(0)}"
                                                     : "-",
                                                 style: TextStyle(
                                                   fontWeight: FontWeight.w900,
                                                   color: Colors.green.shade900,
-                                                  fontSize: 12,
+                                                  fontSize: 11,
                                                 ),
                                                 textAlign: TextAlign.center,
                                                 maxLines: 1,
@@ -1879,19 +3102,40 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                                               padding:
                                                   const EdgeInsets.symmetric(
                                                     vertical: 7,
-                                                    horizontal: 4,
+                                                    horizontal: 2,
                                                   ),
                                               child: Text(
-                                                "PKR ${row['balance'].toStringAsFixed(0)}",
+                                                "${row['balance'].toStringAsFixed(0)}",
                                                 style: const TextStyle(
                                                   fontWeight: FontWeight.w900,
                                                   color: Colors.black,
-                                                  fontSize: 13,
+                                                  fontSize: 12,
                                                 ),
                                                 textAlign: TextAlign.center,
                                                 maxLines: 1,
                                               ),
                                             ),
+                                          ),
+                                          _vDataDivider(),
+                                          SizedBox(
+                                            width: actW,
+                                            child: row['docId'] != null
+                                                ? InkWell(
+                                                    onTap: () {
+                                                      _openEditPaymentDialog(
+                                                        row['rawMap'],
+                                                        row['docId'],
+                                                        bNum,
+                                                        purchaseDoc.id,
+                                                      );
+                                                    },
+                                                    child: const Icon(
+                                                      Icons.edit,
+                                                      size: 18,
+                                                      color: Colors.blue,
+                                                    ),
+                                                  )
+                                                : const SizedBox(),
                                           ),
                                         ],
                                       ),

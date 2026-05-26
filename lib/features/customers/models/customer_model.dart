@@ -38,6 +38,47 @@ class CustomerModel {
     required this.isMLMActive,
     this.createdAt,
   });
+  // CustomerModel class ke andar add karo
+  CustomerModel copyWith({
+    String? uid,
+    String? name,
+    String? email,
+    String? phone,
+    String? country,
+    String? address,
+    String? myReferralCode,
+    String? referralCode,
+    String? faceImage,
+    String? cnicNumber,
+    double? walletBalance,
+    double? shoppingWalletBalance,
+    double? totalPoints,
+    double? totalCashbackEarned,
+    String? membershipStatus,
+    bool? isMLMActive,
+    DateTime? createdAt,
+  }) {
+    return CustomerModel(
+      uid: uid ?? this.uid,
+      name: name ?? this.name,
+      email: email ?? this.email,
+      phone: phone ?? this.phone,
+      country: country ?? this.country,
+      address: address ?? this.address,
+      myReferralCode: myReferralCode ?? this.myReferralCode,
+      referralCode: referralCode ?? this.referralCode,
+      faceImage: faceImage ?? this.faceImage,
+      cnicNumber: cnicNumber ?? this.cnicNumber,
+      walletBalance: walletBalance ?? this.walletBalance,
+      shoppingWalletBalance:
+          shoppingWalletBalance ?? this.shoppingWalletBalance,
+      totalPoints: totalPoints ?? this.totalPoints,
+      totalCashbackEarned: totalCashbackEarned ?? this.totalCashbackEarned,
+      membershipStatus: membershipStatus ?? this.membershipStatus,
+      isMLMActive: isMLMActive ?? this.isMLMActive,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
 
   factory CustomerModel.fromMap(Map<String, dynamic> map, String docId) {
     return CustomerModel(

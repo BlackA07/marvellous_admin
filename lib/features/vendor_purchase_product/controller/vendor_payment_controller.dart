@@ -8,7 +8,7 @@ class VendorPaymentController extends GetxController {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   var isLoading = false.obs;
-  var isDeleting = false.obs; // ✅ NAYA: Delete processing loader
+  var isDeleting = false.obs;
 
   DateTime _parseDate(dynamic dateData) {
     if (dateData == null) return DateTime.now();
@@ -18,7 +18,6 @@ class VendorPaymentController extends GetxController {
     return DateTime.now();
   }
 
-  // ✅ FLEXIBLE PAYMENT PROCESSING LOGIC (Unchanged - Exact same as yours)
   Future<bool> processPayment({
     required String purchaseId,
     required String vendorId,
@@ -29,8 +28,13 @@ class VendorPaymentController extends GetxController {
     required DateTime paymentDate,
     required String paymentMode,
     required String note,
+    bool isEditMode = false,
+    String? bankId,
+    String? bankName,
+    String? screenshotBase64,
+    String? chequeNumber,
+    DateTime? chequeDate,
   }) async {
-    // 1. Validations
     if (payingAmount <= 0) {
       Get.snackbar(
         "Invalid Amount",
@@ -56,7 +60,6 @@ class VendorPaymentController extends GetxController {
     try {
       WriteBatch batch = _db.batch();
 
-      // --- A. Update `vendor_purchases` (Main Bill Balance) ---
       DocumentReference purchaseRef = _db
           .collection('vendor_purchases')
           .doc(purchaseId);
@@ -65,7 +68,6 @@ class VendorPaymentController extends GetxController {
         'remainingBalance': FieldValue.increment(-payingAmount),
       });
 
-      // --- B. Distribute Amount among Unpaid Installments (`vendor_dues`) ---
       QuerySnapshot duesSnapshot = await _db.collection('vendor_dues').get();
 
       var unpaidDues = duesSnapshot.docs.where((doc) {
@@ -73,7 +75,6 @@ class VendorPaymentController extends GetxController {
         return d['purchaseId'] == purchaseId && d['isPaid'] == false;
       }).toList();
 
-      // Safe Date Sorting
       unpaidDues.sort((a, b) {
         var dataA = a.data() as Map<String, dynamic>;
         var dataB = b.data() as Map<String, dynamic>;
@@ -93,7 +94,6 @@ class VendorPaymentController extends GetxController {
 
         var dueData = doc.data() as Map<String, dynamic>;
 
-        // ✅ LOGIC FIX: Never change original amountDue. Only compare with paidAmount.
         double originalDueAmount = (dueData['amountDue'] ?? 0.0).toDouble();
         double currentlyPaid = (dueData['paidAmount'] ?? 0.0).toDouble();
         double remainingForThisDue = originalDueAmount - currentlyPaid;
@@ -102,23 +102,20 @@ class VendorPaymentController extends GetxController {
 
         if (amountLeftToDistribute >= remainingForThisDue) {
           batch.update(doc.reference, {
-            'paidAmount': originalDueAmount, // Fully paid
+            'paidAmount': originalDueAmount,
             'isPaid': true,
             'lastPaymentDate': Timestamp.fromDate(paymentDate),
           });
           amountLeftToDistribute -= remainingForThisDue;
         } else {
           batch.update(doc.reference, {
-            'paidAmount': FieldValue.increment(
-              amountLeftToDistribute,
-            ), // Partially paid
+            'paidAmount': FieldValue.increment(amountLeftToDistribute),
             'lastPaymentDate': Timestamp.fromDate(paymentDate),
           });
           amountLeftToDistribute = 0.0;
         }
       }
 
-      // --- C. Create Payment History Record (`vendor_payment_history`) ---
       DocumentReference transactionRef = _db
           .collection('vendor_payment_history')
           .doc();
@@ -132,24 +129,55 @@ class VendorPaymentController extends GetxController {
         paymentMode: paymentMode,
         note: note,
         createdAt: DateTime.now(),
+        bankId: bankId,
+        bankName: bankName,
+        screenshot: screenshotBase64,
+        chequeNumber: chequeNumber,
+        chequeDate: chequeDate,
       );
       batch.set(transactionRef, transaction.toMap());
 
-      // --- D. Update Vendor's Global Balance in `vendors` profile ---
       DocumentReference vendorRef = _db.collection('vendors').doc(vendorId);
       batch.update(vendorRef, {
         'beginningBalance': FieldValue.increment(-payingAmount),
       });
 
+      // ✅ FIX: REAL DEDUCTION FROM BANK OR CASH WITH CORRECT PATH
+      if (paymentMode == 'Bank Transfer' &&
+          bankId != null &&
+          bankId.isNotEmpty) {
+        DocumentReference bankRef = _db
+            .collection('company_finances')
+            .doc('main_finances')
+            .collection('banks')
+            .doc(bankId);
+        batch.update(bankRef, {'balance': FieldValue.increment(-payingAmount)});
+      } else if (paymentMode == 'Cash') {
+        var cashBankQuery = await _db
+            .collection('company_finances')
+            .doc('main_finances')
+            .collection('banks')
+            .where('name', isEqualTo: 'Cash')
+            .limit(1)
+            .get();
+        if (cashBankQuery.docs.isNotEmpty) {
+          batch.update(cashBankQuery.docs.first.reference, {
+            'balance': FieldValue.increment(-payingAmount),
+          });
+        }
+      }
+
       await batch.commit();
 
       isLoading.value = false;
-      Get.snackbar(
-        "Success",
-        "Payment of PKR $payingAmount applied successfully to Bill #$billNumber.",
-        backgroundColor: Colors.green.shade900,
-        colorText: Colors.white,
-      );
+      if (!isEditMode) {
+        Get.snackbar(
+          "Success",
+          "Payment of PKR $payingAmount applied successfully to Bill #$billNumber.",
+          backgroundColor: Colors.green.shade900,
+          colorText: Colors.white,
+        );
+      }
       return true;
     } catch (e) {
       isLoading.value = false;
@@ -163,9 +191,176 @@ class VendorPaymentController extends GetxController {
     }
   }
 
-  // ==============================================================
-  // ✅ NEW: DELETE BILL LOGIC (Without Reversing Vendor Balance)
-  // ==============================================================
+  Future<bool> editPaymentTransaction({
+    required String paymentDocId,
+    required String purchaseId,
+    required String vendorId,
+    required String vendorName,
+    required String billNumber,
+    required double oldAmount,
+    required double newAmount,
+    required DateTime paymentDate,
+    required String paymentMode,
+    required String note,
+    String? bankId,
+    String? bankName,
+    String? screenshotBase64,
+    String? chequeNumber,
+    DateTime? chequeDate,
+  }) async {
+    isLoading.value = true;
+    try {
+      var purchaseSnap = await _db
+          .collection('vendor_purchases')
+          .doc(purchaseId)
+          .get();
+      if (!purchaseSnap.exists) throw "Purchase record not found!";
+
+      var pData = purchaseSnap.data() as Map<String, dynamic>;
+      double currentRemaining =
+          double.tryParse(pData['remainingBalance']?.toString() ?? '0') ?? 0.0;
+
+      double trueRemainingCapacity = currentRemaining + oldAmount;
+
+      if (newAmount > trueRemainingCapacity) {
+        Get.snackbar(
+          "Limit Exceeded",
+          "New amount cannot be greater than Total Bill limit (PKR $trueRemainingCapacity)",
+          backgroundColor: Colors.red.shade900,
+          colorText: Colors.white,
+        );
+        isLoading.value = false;
+        return false;
+      }
+
+      WriteBatch batch = _db.batch();
+
+      // ── REVERSAL PROCESS (Undoing the old payment) ──
+
+      // ✅ FIX: Revert Old Bank Balance OR Cash Balance using correct path
+      var oldPaySnap = await _db
+          .collection('vendor_payment_history')
+          .doc(paymentDocId)
+          .get();
+      if (oldPaySnap.exists) {
+        var oldData = oldPaySnap.data() as Map<String, dynamic>;
+        if (oldData['paymentMode'] == 'Bank Transfer' &&
+            oldData['bankId'] != null) {
+          batch.update(
+            _db
+                .collection('company_finances')
+                .doc('main_finances')
+                .collection('banks')
+                .doc(oldData['bankId']),
+            {'balance': FieldValue.increment(oldAmount)},
+          );
+        } else if (oldData['paymentMode'] == 'Cash') {
+          var cashBankQuery = await _db
+              .collection('company_finances')
+              .doc('main_finances')
+              .collection('banks')
+              .where('bankName', isEqualTo: 'Cash')
+              .limit(1)
+              .get();
+          if (cashBankQuery.docs.isNotEmpty) {
+            batch.update(cashBankQuery.docs.first.reference, {
+              'balance': FieldValue.increment(oldAmount),
+            });
+          }
+        }
+      }
+
+      batch.update(purchaseSnap.reference, {
+        'cashPaid': FieldValue.increment(-oldAmount),
+        'remainingBalance': FieldValue.increment(oldAmount),
+      });
+
+      batch.update(_db.collection('vendors').doc(vendorId), {
+        'beginningBalance': FieldValue.increment(oldAmount),
+      });
+
+      batch.delete(_db.collection('vendor_payment_history').doc(paymentDocId));
+
+      QuerySnapshot duesSnapshot = await _db
+          .collection('vendor_dues')
+          .where('purchaseId', isEqualTo: purchaseId)
+          .get();
+      var allDues = duesSnapshot.docs.toList();
+
+      allDues.sort((a, b) {
+        var dA = (a.data() as Map)['dueDate'] as Timestamp?;
+        var dB = (b.data() as Map)['dueDate'] as Timestamp?;
+        return (dB?.toDate() ?? DateTime.now()).compareTo(
+          dA?.toDate() ?? DateTime.now(),
+        );
+      });
+
+      double amountToReverse = oldAmount;
+
+      for (var doc in allDues) {
+        if (amountToReverse <= 0) break;
+
+        var dData = doc.data() as Map<String, dynamic>;
+        double currentlyPaid = (dData['paidAmount'] ?? 0.0).toDouble();
+
+        if (currentlyPaid > 0) {
+          if (currentlyPaid <= amountToReverse) {
+            batch.update(doc.reference, {'paidAmount': 0.0, 'isPaid': false});
+            amountToReverse -= currentlyPaid;
+          } else {
+            batch.update(doc.reference, {
+              'paidAmount': FieldValue.increment(-amountToReverse),
+              'isPaid': false,
+            });
+            amountToReverse = 0.0;
+          }
+        }
+      }
+
+      await batch.commit();
+
+      // ── RE-APPLY PROCESS (Process payment with new amount) ──
+      bool success = await processPayment(
+        purchaseId: purchaseId,
+        vendorId: vendorId,
+        vendorName: vendorName,
+        billNumber: billNumber,
+        totalBillRemaining: trueRemainingCapacity,
+        payingAmount: newAmount,
+        paymentDate: paymentDate,
+        paymentMode: paymentMode,
+        note: "$note (Edited Payment)",
+        isEditMode: true,
+        bankId: bankId,
+        bankName: bankName,
+        screenshotBase64: screenshotBase64,
+        chequeNumber: chequeNumber,
+        chequeDate: chequeDate,
+      );
+
+      if (success) {
+        Get.snackbar(
+          "Payment Edited",
+          "Transaction has been successfully updated.",
+          backgroundColor: Colors.blue.shade900,
+          colorText: Colors.white,
+        );
+        return true;
+      } else {
+        throw "Failed to re-apply payment.";
+      }
+    } catch (e) {
+      isLoading.value = false;
+      Get.snackbar(
+        "Error Editing",
+        "Failed to edit payment: $e",
+        backgroundColor: Colors.red.shade900,
+        colorText: Colors.white,
+      );
+      return false;
+    }
+  }
+
   Future<bool> deleteBillTransaction({
     required String purchaseId,
     required String vendorId,
@@ -176,13 +371,11 @@ class VendorPaymentController extends GetxController {
     try {
       WriteBatch batch = _db.batch();
 
-      // 1. Delete the Main Purchase Record
       DocumentReference purchaseRef = _db
           .collection('vendor_purchases')
           .doc(purchaseId);
       batch.delete(purchaseRef);
 
-      // 2. Delete all Installments/Dues related to this bill
       QuerySnapshot duesSnapshot = await _db
           .collection('vendor_dues')
           .where('purchaseId', isEqualTo: purchaseId)
@@ -191,7 +384,6 @@ class VendorPaymentController extends GetxController {
         batch.delete(doc.reference);
       }
 
-      // 3. Delete all Payment History related to this bill
       QuerySnapshot historySnapshot = await _db
           .collection('vendor_payment_history')
           .where('vendorId', isEqualTo: vendorId)
@@ -201,13 +393,10 @@ class VendorPaymentController extends GetxController {
         batch.delete(doc.reference);
       }
 
-      // NOTE: Vendor Balance is INTENTIONALLY NOT REVERSED here as per requirement.
-
       await batch.commit();
 
       isDeleting.value = false;
 
-      // ✅ Success Alert with Manual Update Notice
       Get.defaultDialog(
         title: "Bill Deleted Successfully",
         titleStyle: GoogleFonts.comicNeue(
