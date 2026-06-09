@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:image_picker/image_picker.dart';
 
 // Import local components
 import 'package_product_table.dart';
@@ -28,6 +27,9 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
   final VendorController vendorController = Get.put(VendorController());
   final _formKey = GlobalKey<FormState>();
 
+  // ✅ NEW: Scroll Controller for Main Screen
+  final ScrollController _mainScrollController = ScrollController();
+
   // Controllers
   final TextEditingController nameCtrl = TextEditingController();
   final TextEditingController descCtrl = TextEditingController();
@@ -41,7 +43,7 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
   String? selectedLocation;
   List<ProductModel> _selectedProducts = [];
 
-  // New Logistics State for Packages (To satisfy the required model arguments)
+  // New Logistics State for Packages
   Map<String, double> deliveryFeesMap = {
     "Karachi": 0.0,
     "Pakistan": 0.0,
@@ -70,6 +72,12 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
     } else {
       selectedLocation = "Pakistan";
     }
+  }
+
+  @override
+  void dispose() {
+    _mainScrollController.dispose();
+    super.dispose();
   }
 
   void _loadPackageData() {
@@ -108,8 +116,9 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
       gp += (p.salePrice - p.purchasePrice);
       pts += productController.calculatePoints(p.purchasePrice, p.salePrice);
       if (updateImages && p.images.isNotEmpty) {
-        if (!autoImages.contains(p.images.first))
+        if (!autoImages.contains(p.images.first)) {
           autoImages.add(p.images.first);
+        }
       }
     }
     setState(() {
@@ -152,65 +161,74 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
             opacity: _isSuccess ? 0.1 : 1.0,
             child: AbsorbPointer(
               absorbing: _isSuccess,
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      PackageProductTable(
-                        productController: productController,
-                        selectedProducts: _selectedProducts,
-                        onProductToggle: _onProductToggle,
-                        totalBuy: totalBuy,
-                        totalGP: totalGP,
-                        totalPts: totalPts,
-                      ),
-                      const SizedBox(height: 30),
-                      PackageDetailsForm(
-                        nameCtrl: nameCtrl,
-                        descCtrl: descCtrl,
-                        selectedImagesBase64: selectedImagesBase64,
-                        selectedVendorId: selectedVendorId,
-                        selectedLocation: selectedLocation,
-                        selectedProducts: _selectedProducts,
-                        vendorController: vendorController,
-                        onImagesChanged: (list) =>
-                            setState(() => selectedImagesBase64 = list),
-                        onVendorChanged: (val) =>
-                            setState(() => selectedVendorId = val),
-                        onLocationChanged: (val) =>
-                            setState(() => selectedLocation = val),
-                        onLogisticsChanged: (fees, times, cod) {
-                          setState(() {
-                            deliveryFeesMap = fees;
-                            deliveryTimeMap = times;
-                            codFee = cod;
-                          });
-                        },
-                        initialDeliveryFees: widget.packageToEdit != null
-                            ? deliveryFeesMap
-                            : null,
-                        initialDeliveryTimes: widget.packageToEdit != null
-                            ? deliveryTimeMap
-                            : null,
-                        initialCodFee: widget.packageToEdit != null
-                            ? codFee
-                            : null,
-                      ),
-                      const SizedBox(height: 30),
-                      PackagePricingSection(
-                        productController: productController,
-                        salePriceCtrl: salePriceCtrl,
-                        originalPriceCtrl: originalPriceCtrl,
-                        stockCtrl: stockCtrl,
-                        totalBuy: totalBuy,
-                        totalIndividualSell: totalIndividualSell,
-                        onSave: () => _handleSave(),
-                      ),
-                      const SizedBox(height: 40),
-                    ],
+              // ✅ FIX: Dark Black and Thicker Main Scrollbar
+              child: RawScrollbar(
+                controller: _mainScrollController,
+                thumbColor: Colors.black87, // Dark black color
+                thickness: 10, // Thicker for better visibility
+                radius: const Radius.circular(8),
+                thumbVisibility: true, // Always visible
+                child: SingleChildScrollView(
+                  controller: _mainScrollController,
+                  padding: const EdgeInsets.all(20),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        PackageProductTable(
+                          productController: productController,
+                          selectedProducts: _selectedProducts,
+                          onProductToggle: _onProductToggle,
+                          totalBuy: totalBuy,
+                          totalGP: totalGP,
+                          totalPts: totalPts,
+                        ),
+                        const SizedBox(height: 30),
+                        PackageDetailsForm(
+                          nameCtrl: nameCtrl,
+                          descCtrl: descCtrl,
+                          selectedImagesBase64: selectedImagesBase64,
+                          selectedVendorId: selectedVendorId,
+                          selectedLocation: selectedLocation,
+                          selectedProducts: _selectedProducts,
+                          vendorController: vendorController,
+                          onImagesChanged: (list) =>
+                              setState(() => selectedImagesBase64 = list),
+                          onVendorChanged: (val) =>
+                              setState(() => selectedVendorId = val),
+                          onLocationChanged: (val) =>
+                              setState(() => selectedLocation = val),
+                          onLogisticsChanged: (fees, times, cod) {
+                            setState(() {
+                              deliveryFeesMap = fees;
+                              deliveryTimeMap = times;
+                              codFee = cod;
+                            });
+                          },
+                          initialDeliveryFees: widget.packageToEdit != null
+                              ? deliveryFeesMap
+                              : null,
+                          initialDeliveryTimes: widget.packageToEdit != null
+                              ? deliveryTimeMap
+                              : null,
+                          initialCodFee: widget.packageToEdit != null
+                              ? codFee
+                              : null,
+                        ),
+                        const SizedBox(height: 30),
+                        PackagePricingSection(
+                          productController: productController,
+                          salePriceCtrl: salePriceCtrl,
+                          originalPriceCtrl: originalPriceCtrl,
+                          stockCtrl: stockCtrl,
+                          totalBuy: totalBuy,
+                          totalIndividualSell: totalIndividualSell,
+                          onSave: () => _handleSave(),
+                        ),
+                        const SizedBox(height: 40),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -243,8 +261,7 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
         return;
       }
 
-      // ✅ CLOUDINARY UPLOAD: Package ki images ko bhi URL mein badalna hai
-      // productController aapka wahi controller hai jisme uploadImagesToCloudinary hai
+      // CLOUDINARY UPLOAD: Package ki images ko bhi URL mein badalna hai
       List<String> uploadedUrls = await productController
           .uploadImagesToCloudinary(selectedImagesBase64);
 
@@ -263,10 +280,12 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
         salePrice: sell,
         originalPrice: double.tryParse(originalPriceCtrl.text) ?? 0,
         stockQuantity: int.tryParse(stockCtrl.text) ?? 0,
+        stockIn:
+            int.tryParse(stockCtrl.text) ?? 0, // Ensure stockIn is populated
         vendorId: selectedVendorId!,
-        vendorName: "Marvellous Official Store", // Update if needed
+        vendorName: "Marvellous Official Store",
         status: "approved",
-        images: uploadedUrls, // ✅ Yahan URLs aa gaye
+        images: uploadedUrls,
         dateAdded: DateTime.now(),
         deliveryLocation: selectedLocation ?? 'Worldwide',
         warranty: "See Items",
@@ -281,7 +300,6 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
         totalReviews: widget.packageToEdit?.totalReviews ?? 0,
       );
 
-      // Save call
       bool success = widget.packageToEdit == null
           ? await productController.addNewPackage(newPackage)
           : await productController.updateProduct(newPackage);
@@ -296,7 +314,7 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
       child: Center(
         child: Container(
           width: 300,
-          padding: const EdgeInsets.all(25), // Thodi zyada padding
+          padding: const EdgeInsets.all(25),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(20),
@@ -304,19 +322,15 @@ class _AddPackageScreenState extends State<AddPackageScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
-                Icons.check_circle,
-                color: Colors.green,
-                size: 70,
-              ), // Icon size thoda bada kiya
+              const Icon(Icons.check_circle, color: Colors.green, size: 70),
               const SizedBox(height: 20),
               Text(
                 widget.packageToEdit == null
                     ? "Package Created!"
                     : "Package Updated!",
-                textAlign: TextAlign.center, // Text center align kiya
+                textAlign: TextAlign.center,
                 style: GoogleFonts.orbitron(
-                  color: Colors.black, // Color explicit set kiya
+                  color: Colors.black,
                   fontWeight: FontWeight.bold,
                   fontSize: 20,
                 ),

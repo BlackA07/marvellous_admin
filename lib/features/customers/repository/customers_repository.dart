@@ -52,7 +52,8 @@ class CustomersRepository {
           .doc('image')
           .get();
       if (doc.exists && doc.data() != null) {
-        return doc.data()!['image']?.toString() ?? '';
+        // ✅ FIX: 'image' ki jagah 'faceImage' fetch karna hai
+        return doc.data()!['faceImage']?.toString() ?? '';
       }
     } catch (_) {}
     return '';

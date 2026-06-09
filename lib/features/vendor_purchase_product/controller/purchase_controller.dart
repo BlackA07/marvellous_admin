@@ -416,6 +416,29 @@ class PurchaseController extends GetxController {
 
       await _repo.savePurchase(newPurchase, realSchedule);
 
+      for (var item in addedItems) {
+        String productId = item['productId'];
+        int qty = item['quantity'];
+
+        if (productId.isNotEmpty) {
+          try {
+            // Pehle products collection mein stock update karo
+            await _db.collection('products').doc(productId).update({
+              'stockQuantity': FieldValue.increment(qty),
+              'stockIn': FieldValue.increment(qty), // ✅ Ye line add kar lein
+            });
+          } catch (e) {
+            // Agar product package hai to packages collection mein update karo
+            try {
+              await _db.collection('packages').doc(productId).update({
+                'stockQuantity': FieldValue.increment(qty),
+                'stockIn': FieldValue.increment(qty), // ✅ Ye line add kar lein
+              });
+            } catch (_) {}
+          }
+        }
+      }
+
       // ✅ FIX: BANK AND CASH DEDUCTION LOGIC
       if (cashPaid > 0) {
         if (transactionMode == 'Bank Transfer' &&

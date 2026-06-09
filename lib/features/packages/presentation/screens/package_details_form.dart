@@ -121,6 +121,30 @@ class _PackageDetailsFormState extends State<PackageDetailsForm> {
     }
   }
 
+  // ✅ FIX: Universal Image Builder that handles both Cloudinary URL and Base64 Strings
+  Widget _buildSmartImage(String data) {
+    if (data.isEmpty) return const Icon(Icons.image, color: Colors.grey);
+    try {
+      if (data.startsWith('http')) {
+        return Image.network(
+          data,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) =>
+              const Icon(Icons.broken_image, color: Colors.grey),
+        );
+      }
+      String cleanData = data.contains(',') ? data.split(',').last : data;
+      return Image.memory(
+        base64Decode(cleanData),
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) =>
+            const Icon(Icons.broken_image, color: Colors.grey),
+      );
+    } catch (e) {
+      return const Icon(Icons.broken_image, color: Colors.grey);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     const TextStyle inputTextStyle = TextStyle(
@@ -224,7 +248,7 @@ class _PackageDetailsFormState extends State<PackageDetailsForm> {
         ),
         const SizedBox(height: 10),
 
-        // KARACHI SECTION — hamesha show
+        // KARACHI SECTION
         _buildRegionInput("Karachi", "Karachi Fee", "Karachi Time"),
 
         // PAKISTAN SECTION
@@ -244,7 +268,7 @@ class _PackageDetailsFormState extends State<PackageDetailsForm> {
           ),
 
         const SizedBox(height: 15),
-        // COD field with controller
+        // COD field
         TextFormField(
           controller: _codController,
           keyboardType: TextInputType.number,
@@ -320,10 +344,12 @@ class _PackageDetailsFormState extends State<PackageDetailsForm> {
                   margin: const EdgeInsets.only(right: 10),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(10),
-                    image: DecorationImage(
-                      image: MemoryImage(base64Decode(e.value)),
-                      fit: BoxFit.cover,
-                    ),
+                    color: Colors.grey.shade100, // Background color for safety
+                  ),
+                  // ✅ FIX: Use _buildSmartImage here to handle both base64 and URLs
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: _buildSmartImage(e.value),
                   ),
                 ),
                 Positioned(

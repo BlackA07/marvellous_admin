@@ -26,10 +26,28 @@ class BanksScreen extends StatelessWidget {
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: Colors.cyanAccent,
-        child: const Icon(Icons.add, color: Colors.black),
-        onPressed: () => _bankDialog(context),
+      // ✅ FAB with Transfer + Add buttons
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FloatingActionButton.extended(
+            heroTag: 'transfer',
+            backgroundColor: Colors.deepPurpleAccent,
+            icon: const Icon(Icons.swap_horiz, color: Colors.white),
+            label: const Text(
+              'Transfer',
+              style: TextStyle(color: Colors.white),
+            ),
+            onPressed: () => _transferDialog(context),
+          ),
+          const SizedBox(height: 12),
+          FloatingActionButton(
+            heroTag: 'add',
+            backgroundColor: Colors.cyanAccent,
+            child: const Icon(Icons.add, color: Colors.black),
+            onPressed: () => _bankDialog(context),
+          ),
+        ],
       ),
       body: Obx(() {
         final systemAccounts = controller.banks
@@ -70,6 +88,8 @@ class BanksScreen extends StatelessWidget {
               ...bankAccounts
                   .map((bank) => _buildBankCard(context, bank))
                   .toList(),
+              // Bottom padding so FABs don't overlap last card
+              const SizedBox(height: 100),
             ],
           ),
         );
@@ -80,9 +100,7 @@ class BanksScreen extends StatelessWidget {
   Widget _buildBankCard(BuildContext context, BankModel bank) {
     bool isInternal =
         bank.isSystem && bank.name.toLowerCase().contains('internal');
-    String displayBalance = isInternal
-        ? controller.totalCompanyBalance.value.toString()
-        : bank.balance.toString();
+    String displayBalance = bank.balance.toStringAsFixed(0);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 15),
@@ -97,6 +115,7 @@ class BanksScreen extends StatelessWidget {
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        // ✅ FIX: Title takes available space, trailing is flexible
         title: Text(
           bank.name,
           style: GoogleFonts.comicNeue(
@@ -120,11 +139,14 @@ class BanksScreen extends StatelessWidget {
                   if (bank.iban.isNotEmpty)
                     Row(
                       children: [
-                        Text(
-                          'IBAN: ${bank.iban}',
-                          style: const TextStyle(
-                            color: Colors.white54,
-                            fontSize: 12,
+                        Flexible(
+                          child: Text(
+                            'IBAN: ${bank.iban}',
+                            style: const TextStyle(
+                              color: Colors.white54,
+                              fontSize: 12,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         IconButton(
@@ -142,11 +164,14 @@ class BanksScreen extends StatelessWidget {
                   if (bank.accountNo.isNotEmpty)
                     Row(
                       children: [
-                        Text(
-                          'A/C: ${bank.accountNo}',
-                          style: const TextStyle(
-                            color: Colors.white54,
-                            fontSize: 12,
+                        Flexible(
+                          child: Text(
+                            'A/C: ${bank.accountNo}',
+                            style: const TextStyle(
+                              color: Colors.white54,
+                              fontSize: 12,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         IconButton(
@@ -163,25 +188,23 @@ class BanksScreen extends StatelessWidget {
                     ),
                 ],
               ),
-        trailing: SizedBox(
-          width: 100,
+        // ✅ FIX: Responsive trailing - no fixed width, uses intrinsic size
+        trailing: IntrinsicHeight(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  'PKR $displayBalance',
-                  style: GoogleFonts.comicNeue(
-                    color: Colors.greenAccent,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                  ),
+              Text(
+                'PKR $displayBalance',
+                style: GoogleFonts.comicNeue(
+                  color: Colors.greenAccent,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
                 ),
+                maxLines: 1,
               ),
               Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
                     icon: const Icon(Icons.edit, color: Colors.white, size: 18),
@@ -222,18 +245,213 @@ class BanksScreen extends StatelessWidget {
     );
   }
 
+  // ✅ TRANSFER DIALOG - Bank se Bank transfer with Firestore transaction
+  void _transferDialog(BuildContext context) {
+    final amountCtrl = TextEditingController();
+    final descCtrl = TextEditingController(text: 'Internal Transfer');
+
+    // All banks (system + regular) can be source/destination
+    final allBanks = controller.banks.toList();
+    if (allBanks.length < 2) {
+      Get.snackbar(
+        'Not Enough Accounts',
+        'Kam az kam 2 accounts hone chahiye transfer ke liye.',
+        backgroundColor: Colors.orangeAccent,
+        colorText: Colors.white,
+      );
+      return;
+    }
+
+    BankModel? fromBank = allBanks.first;
+    BankModel? toBank = allBanks.length > 1 ? allBanks[1] : null;
+
+    Get.defaultDialog(
+      backgroundColor: const Color(0xFF2C2C2C),
+      title: '💸 Transfer Funds',
+      titleStyle: const TextStyle(
+        color: Colors.white,
+        fontWeight: FontWeight.bold,
+      ),
+      content: StatefulBuilder(
+        builder: (ctx, setState) => SizedBox(
+          width: Get.width * 0.9,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'From Account:',
+                style: TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+              const SizedBox(height: 4),
+              DropdownButtonFormField<BankModel>(
+                value: fromBank,
+                dropdownColor: const Color(0xFF2C2C2C),
+                decoration: const InputDecoration(
+                  enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.cyanAccent),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.white),
+                  ),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                ),
+                items: allBanks
+                    .map(
+                      (b) => DropdownMenuItem(
+                        value: b,
+                        child: Text(
+                          '${b.name} (PKR ${b.balance.toStringAsFixed(0)})',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (val) => setState(() {
+                  fromBank = val;
+                  // Agar from aur to same ho jaye to to change kar do
+                  if (toBank?.id == val?.id) {
+                    toBank = allBanks.firstWhere(
+                      (b) => b.id != val?.id,
+                      orElse: () => allBanks.first,
+                    );
+                  }
+                }),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'To Account:',
+                style: TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+              const SizedBox(height: 4),
+              DropdownButtonFormField<BankModel>(
+                value: toBank,
+                dropdownColor: const Color(0xFF2C2C2C),
+                decoration: const InputDecoration(
+                  enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.deepPurpleAccent),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.white),
+                  ),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                ),
+                items: allBanks
+                    .where((b) => b.id != fromBank?.id)
+                    .map(
+                      (b) => DropdownMenuItem(
+                        value: b,
+                        child: Text(
+                          '${b.name} (PKR ${b.balance.toStringAsFixed(0)})',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (val) => setState(() => toBank = val),
+              ),
+              const SizedBox(height: 12),
+              _input(amountCtrl, 'Amount (PKR)', isNum: true),
+              _input(descCtrl, 'Description / Note'),
+            ],
+          ),
+        ),
+      ),
+      confirm: ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.deepPurpleAccent,
+        ),
+        onPressed: () async {
+          final amount = double.tryParse(amountCtrl.text) ?? 0;
+          if (amount <= 0) {
+            Get.snackbar(
+              'Error',
+              'Valid amount enter karein',
+              backgroundColor: Colors.red,
+              colorText: Colors.white,
+            );
+            return;
+          }
+          if (fromBank == null || toBank == null) {
+            Get.snackbar(
+              'Error',
+              'Dono accounts select karein',
+              backgroundColor: Colors.red,
+              colorText: Colors.white,
+            );
+            return;
+          }
+          if (fromBank!.id == toBank!.id) {
+            Get.snackbar(
+              'Error',
+              'From aur To account alag hone chahiye',
+              backgroundColor: Colors.red,
+              colorText: Colors.white,
+            );
+            return;
+          }
+
+          Get.back();
+          final success = await controller.transferFunds(
+            fromBank: fromBank!,
+            toBank: toBank!,
+            amount: amount,
+            description: descCtrl.text.isEmpty
+                ? 'Internal Transfer'
+                : descCtrl.text,
+          );
+
+          if (success) {
+            Get.snackbar(
+              '✅ Transfer Complete',
+              'PKR ${amount.toStringAsFixed(0)} transferred from ${fromBank!.name} to ${toBank!.name}',
+              backgroundColor: Colors.green,
+              colorText: Colors.white,
+              duration: const Duration(seconds: 3),
+            );
+          } else {
+            Get.snackbar(
+              '❌ Transfer Failed',
+              'Insufficient balance ya koi error. Dobara try karein.',
+              backgroundColor: Colors.redAccent,
+              colorText: Colors.white,
+            );
+          }
+        },
+        child: const Text('Transfer', style: TextStyle(color: Colors.white)),
+      ),
+      cancel: TextButton(
+        onPressed: () => Get.back(),
+        child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+      ),
+    );
+  }
+
   void _bankDialog(BuildContext context, {BankModel? bank}) {
     final nameCtrl = TextEditingController(text: bank?.name);
     final titleCtrl = TextEditingController(text: bank?.accountTitle);
     final ibanCtrl = TextEditingController(text: bank?.iban);
     final acCtrl = TextEditingController(text: bank?.accountNo);
-    final balCtrl = TextEditingController(text: bank?.balance.toString());
+    final balCtrl = TextEditingController(
+      text: bank?.balance.toStringAsFixed(0),
+    );
 
+    // ✅ FIX: isSystemAcc aur isInternal properly initialize hon editing ke time bhi
     bool isSystemAcc = bank?.isSystem ?? false;
     bool isInternal =
         isSystemAcc && (bank?.name.toLowerCase().contains('internal') ?? false);
 
-    // Settings
     bool showInCustomerApp = bank?.showInCustomerApp ?? true;
     bool showTitle = bank?.showTitle ?? true;
     bool showIban = bank?.showIban ?? true;
@@ -252,25 +470,22 @@ class BanksScreen extends StatelessWidget {
           child: SingleChildScrollView(
             child: Column(
               children: [
+                // ✅ FIX: System account bhi naam edit kar sake
                 _input(nameCtrl, 'Bank/Account Name (e.g. Cash, Internal)'),
+
+                // ✅ FIX: Agar isInternal hai to sirf naam aur balance hide karo
+                // lekin edit open hone dete hain - pehle ye block hi nahi tha system accounts ke liye
                 if (!isSystemAcc) ...[
                   _input(titleCtrl, 'Account Title'),
                   _input(ibanCtrl, 'IBAN'),
                   _input(acCtrl, 'Account No'),
                 ],
 
-                if (!isInternal) _input(balCtrl, 'Balance', isNum: true),
+                // ✅ FIX: Internal account ke liye balance field hide karo
+                // Regular system (Cash) ke liye balance edit hota hai
+                _input(balCtrl, 'Balance', isNum: true),
 
-                if (isInternal)
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 8),
-                    child: Text(
-                      'Balance is auto-synced from Total Company Balance.',
-                      style: TextStyle(color: Colors.cyanAccent, fontSize: 12),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-
+                // ✅ FIX: isSystem checkbox sirf naye account pe dikhao
                 if (bank == null)
                   CheckboxListTile(
                     title: const Text(
@@ -348,32 +563,25 @@ class BanksScreen extends StatelessWidget {
                       onChanged: (val) => setState(() => showQr = val ?? true),
                     ),
                     const SizedBox(height: 10),
-
-                    // ✅ FIXED IMAGE PICKER LOGIC HERE
                     GestureDetector(
                       onTap: () async {
                         try {
                           final img = await ImagePicker().pickImage(
                             source: ImageSource.gallery,
-                            imageQuality: 50, // Image compress ho jaye
+                            imageQuality: 50,
                           );
                           if (img != null) {
                             final bytes = await img.readAsBytes();
-
-                            // Check size: Firestore document limit is 1MB.
-                            // Base64 increases size by ~33%.
-                            // Raw bytes should be max ~700KB.
                             if (bytes.lengthInBytes > 700 * 1024) {
                               Get.snackbar(
                                 "Image Too Large ❌",
-                                "QR Code must be smaller than 700KB. Try taking a screenshot to compress it.",
+                                "QR Code must be smaller than 700KB.",
                                 backgroundColor: Colors.orangeAccent,
                                 colorText: Colors.white,
                                 duration: const Duration(seconds: 4),
                               );
                               return;
                             }
-
                             setState(() => qrCodeBase64 = base64Encode(bytes));
                           }
                         } catch (e) {
@@ -459,37 +667,84 @@ class BanksScreen extends StatelessWidget {
     Get.bottomSheet(
       Container(
         color: const Color(0xFF1A1A1A),
-        child: StreamBuilder<List<BankTransactionModel>>(
-          stream: controller.getBankHistory(bank.id!),
-          builder: (ctx, snap) {
-            if (!snap.hasData)
-              return const Center(child: CircularProgressIndicator());
-            return ListView.builder(
-              itemCount: snap.data!.length,
-              itemBuilder: (ctx, i) {
-                final tx = snap.data![i];
-                return ListTile(
-                  title: Text(
-                    tx.description,
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                  subtitle: Text(
-                    tx.date.toString(),
-                    style: const TextStyle(color: Colors.white54),
-                  ),
-                  trailing: Text(
-                    '${tx.type == 'in' ? '+' : '-'} ${tx.amount}',
-                    style: TextStyle(
-                      color: tx.type == 'in' ? Colors.green : Colors.red,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                );
-              },
-            );
-          },
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                '${bank.name} - Transaction History',
+                style: GoogleFonts.comicNeue(
+                  color: Colors.cyanAccent,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            Expanded(
+              child: StreamBuilder<List<BankTransactionModel>>(
+                stream: controller.getBankHistory(bank.id!),
+                builder: (ctx, snap) {
+                  if (!snap.hasData)
+                    return const Center(child: CircularProgressIndicator());
+                  if (snap.data!.isEmpty)
+                    return const Center(
+                      child: Text(
+                        'Koi transaction nahi',
+                        style: TextStyle(color: Colors.white54),
+                      ),
+                    );
+                  return ListView.builder(
+                    itemCount: snap.data!.length,
+                    itemBuilder: (ctx, i) {
+                      final tx = snap.data![i];
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: tx.type == 'in'
+                              ? Colors.green.withOpacity(0.2)
+                              : Colors.red.withOpacity(0.2),
+                          child: Icon(
+                            tx.type == 'in'
+                                ? Icons.arrow_downward
+                                : Icons.arrow_upward,
+                            color: tx.type == 'in'
+                                ? Colors.greenAccent
+                                : Colors.redAccent,
+                            size: 18,
+                          ),
+                        ),
+                        title: Text(
+                          tx.description,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                          ),
+                        ),
+                        subtitle: Text(
+                          tx.date.toString().substring(0, 16),
+                          style: const TextStyle(
+                            color: Colors.white54,
+                            fontSize: 11,
+                          ),
+                        ),
+                        trailing: Text(
+                          '${tx.type == 'in' ? '+' : '-'} PKR ${tx.amount.toStringAsFixed(0)}',
+                          style: TextStyle(
+                            color: tx.type == 'in'
+                                ? Colors.greenAccent
+                                : Colors.redAccent,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ),
+      isScrollControlled: true,
     );
   }
 

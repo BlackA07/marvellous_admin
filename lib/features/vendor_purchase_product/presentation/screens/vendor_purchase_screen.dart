@@ -124,28 +124,89 @@ class _VendorPurchaseScreenState extends State<VendorPurchaseScreen> {
     );
   }
 
-  // ✅ Safe Base64 Image Builder
+  // ✅ FAST & CRASH-PROOF UNIVERSAL IMAGE BUILDER (Handles both Cloudinary URLs & Base64)
   Widget _buildBase64Image(String? base64String, double size) {
     if (base64String == null || base64String.isEmpty) {
-      return Icon(Icons.image_not_supported, size: size, color: Colors.grey);
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade200,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Icon(
+          Icons.image_not_supported,
+          size: size * 0.5,
+          color: Colors.grey,
+        ),
+      );
     }
+
     try {
+      // ✅ 1. Agar Cloudinary URL hai (Migration ke baad)
+      if (base64String.startsWith('http')) {
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: Image.network(
+            base64String,
+            width: size,
+            height: size,
+            fit: BoxFit.cover,
+            cacheWidth: (size * 2).toInt(), // 🔥 SPEED FIX: RAM Optimization
+            errorBuilder: (context, error, stackTrace) => Container(
+              width: size,
+              height: size,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Icon(
+                Icons.broken_image,
+                size: size * 0.5,
+                color: Colors.grey,
+              ),
+            ),
+          ),
+        );
+      }
+
+      // ✅ 2. Agar purana Base64 Data hai (Migration se pehle ka)
       String cleanBase64 = base64String.contains(',')
           ? base64String.split(',').last
           : base64String;
       return ClipRRect(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(6),
         child: Image.memory(
           base64Decode(cleanBase64),
           width: size,
           height: size,
           fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) =>
-              Icon(Icons.broken_image, size: size, color: Colors.grey),
+          cacheWidth: (size * 2).toInt(), // 🔥 SPEED FIX: RAM Optimization
+          errorBuilder: (context, error, stackTrace) => Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade200,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Icon(
+              Icons.broken_image,
+              size: size * 0.5,
+              color: Colors.grey,
+            ),
+          ),
         ),
       );
     } catch (e) {
-      return Icon(Icons.broken_image, size: size, color: Colors.grey);
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade200,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Icon(Icons.broken_image, size: size * 0.5, color: Colors.grey),
+      );
     }
   }
 

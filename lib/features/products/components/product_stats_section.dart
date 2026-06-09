@@ -14,7 +14,17 @@ class ProductStatsSection extends StatelessWidget {
     required this.isMobile,
   }) : super(key: key);
 
-  // 1. Total Inventory Value (Stock * Price) - Total Value
+  // 1. Total Units Available (Current Stock)
+  int get totalUnitsAvailable {
+    return controller.productsOnly.fold(0, (sum, p) => sum + p.stockQuantity);
+  }
+
+  // 2. Total Units Bought Ever (Total IN)
+  int get totalUnitsBought {
+    return controller.productsOnly.fold(0, (sum, p) => sum + p.stockIn);
+  }
+
+  // 3. Current Inventory Value (Remaining Stock * Sale Price)
   double get totalInventoryValue {
     return controller.productsOnly.fold(
       0,
@@ -22,15 +32,15 @@ class ProductStatsSection extends StatelessWidget {
     );
   }
 
-  // 2. Total One Unit Value (Sum of all prices - 1 qty each) - Unit Value
-  double get totalOneUnitValue {
+  // 4. Total Invested Amount (Total In * Purchase Price)
+  double get totalPurchasedValue {
     return controller.productsOnly.fold(
       0,
-      (sum, product) => sum + product.salePrice,
+      (sum, product) => sum + (product.purchasePrice * product.stockIn),
     );
   }
 
-  // 3. Total Profit - Existing
+  // 5. Total Estimated Gross Profit
   double get totalProfit {
     return controller.productsOnly.fold(0, (sum, product) {
       double profit =
@@ -39,31 +49,26 @@ class ProductStatsSection extends StatelessWidget {
     });
   }
 
-  // 4. Products "In" Stock (Count of items with stock > 0)
-  int get productsInStockCount {
-    return controller.productsOnly.where((p) => p.stockQuantity > 0).length;
-  }
-
   @override
   Widget build(BuildContext context) {
     const Color cardColor = Color.fromARGB(255, 231, 225, 225);
 
-    // Formatted Values
-    // Products: "Total / In Stock" (No Change)
-    String productStats = "${controller.totalProducts} / $productsInStockCount";
+    String productStats = "${controller.totalProducts} Items";
+    String productSubTitle =
+        "($totalUnitsAvailable Left / $totalUnitsBought Bought)";
 
-    // Value: "Total Stock / One Unit" (Swapped to match format)
-    String valueStats =
-        "${totalOneUnitValue.toStringAsFixed(0)} / ${totalInventoryValue.toStringAsFixed(0)}";
+    String valueStats = "PKR ${totalInventoryValue.toStringAsFixed(0)}";
+    String valueSubTitle =
+        "(Total Invested: PKR ${totalPurchasedValue.toStringAsFixed(0)})";
 
     if (isDesktop) {
       return Row(
         children: [
           Expanded(
             child: _buildStatCard(
-              "Total Products",
+              "Total Products & Stock",
               productStats,
-              "(Total / In Stock)",
+              productSubTitle,
               Icons.inventory,
               Colors.purple,
               cardColor,
@@ -72,9 +77,9 @@ class ProductStatsSection extends StatelessWidget {
           const SizedBox(width: 16),
           Expanded(
             child: _buildStatCard(
-              "Inventory Value (PKR)",
+              "Current Stock Value",
               valueStats,
-              "(Total Stock / 1 Unit Sum)", // Label Swapped
+              valueSubTitle,
               Icons.attach_money,
               Colors.green,
               cardColor,
@@ -83,9 +88,9 @@ class ProductStatsSection extends StatelessWidget {
           const SizedBox(width: 16),
           Expanded(
             child: _buildStatCard(
-              "Total Profit",
+              "Est. Gross Profit",
               "PKR ${totalProfit.toStringAsFixed(0)}",
-              "(Estimated Gross)",
+              "(On Available Stock)",
               Icons.trending_up,
               Colors.orange,
               cardColor,
@@ -103,25 +108,25 @@ class ProductStatsSection extends StatelessWidget {
         childAspectRatio: isMobile ? 1.4 : 2.0,
         children: [
           _buildStatCard(
-            "Total Products",
+            "Products & Stock",
             productStats,
-            "(Total / In Stock)",
+            productSubTitle,
             Icons.inventory,
             Colors.purple,
             cardColor,
           ),
           _buildStatCard(
-            "Total Value",
+            "Stock Value",
             valueStats,
-            "(Total Stock / 1 Unit)", // Label Swapped
+            valueSubTitle,
             Icons.attach_money,
             Colors.green,
             cardColor,
           ),
           _buildStatCard(
-            "Total Profit",
+            "Est. Profit",
             "PKR ${totalProfit.toStringAsFixed(0)}",
-            "(Gross)",
+            "(On Left Stock)",
             Icons.trending_up,
             Colors.orange,
             cardColor,
@@ -168,7 +173,6 @@ class ProductStatsSection extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Main Value
                 FittedBox(
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
@@ -182,8 +186,6 @@ class ProductStatsSection extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 2),
-
-                // Title
                 Text(
                   title,
                   style: GoogleFonts.comicNeue(
@@ -194,15 +196,12 @@ class ProductStatsSection extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-
-                // Helper Subtitle
                 Text(
                   subTitle,
                   style: GoogleFonts.comicNeue(
-                    color: color.withOpacity(0.8),
+                    color: color.withOpacity(0.9),
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
-                    fontStyle: FontStyle.italic,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,

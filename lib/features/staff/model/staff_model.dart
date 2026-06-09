@@ -2,7 +2,9 @@ import 'package:flutter/foundation.dart';
 
 class StaffModel {
   final String? id;
+  final String? uid;
   final DateTime joiningDate;
+  final String? imageUrl;
   final String name;
   final String fatherName;
   final String cnic;
@@ -66,6 +68,7 @@ class StaffModel {
 
   StaffModel({
     this.id,
+    this.uid,
     required this.joiningDate,
     required this.name,
     required this.fatherName,
@@ -73,6 +76,7 @@ class StaffModel {
     required this.mobile1,
     this.mobile2,
     this.email,
+    this.imageUrl,
     this.password,
     required this.designation,
     required this.address,
@@ -115,8 +119,10 @@ class StaffModel {
   Map<String, dynamic> toFirestore() {
     return {
       'joiningDate': joiningDate.toIso8601String(),
+      'uid': uid,
       'name': name,
       'fatherName': fatherName,
+      'imageUrl': imageUrl,
       'cnic': cnic,
       'mobile1': mobile1,
       'mobile2': mobile2,
@@ -164,9 +170,11 @@ class StaffModel {
   factory StaffModel.fromFirestore(Map<String, dynamic> map, String docId) {
     return StaffModel(
       id: docId,
+      uid: map['uid'] as String?,
       joiningDate: DateTime.parse(map['joiningDate']),
       name: map['name'] ?? '',
       fatherName: map['fatherName'] ?? '',
+      imageUrl: map['imageUrl'],
       cnic: map['cnic'] ?? '',
       mobile1: map['mobile1'] ?? '',
       mobile2: map['mobile2'],

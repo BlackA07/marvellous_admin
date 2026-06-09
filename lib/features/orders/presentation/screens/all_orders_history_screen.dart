@@ -23,8 +23,16 @@ class _AllOrdersHistoryScreenState extends State<AllOrdersHistoryScreen> {
     'Shipped',
     'Delivered',
     'Rejected',
-    'Cancelled',
   ];
+
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -48,46 +56,126 @@ class _AllOrdersHistoryScreenState extends State<AllOrdersHistoryScreen> {
       ),
       body: Column(
         children: [
+          // ── SEARCH BAR ────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+            child: TextField(
+              controller: _searchController,
+              style: const TextStyle(color: Colors.white),
+              onChanged: (val) =>
+                  setState(() => _searchQuery = val.trim().toLowerCase()),
+              decoration: InputDecoration(
+                hintText: 'Search by Order ID, Name or Product...',
+                hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
+                prefixIcon: const Icon(Icons.search, color: Colors.white38),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white38),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() => _searchQuery = '');
+                        },
+                      )
+                    : null,
+                filled: true,
+                fillColor: const Color(0xFF1A1A1A),
+                contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Colors.redAccent),
+                ),
+              ),
+            ),
+          ),
+
           // ── FILTERS ──────────────────────────────────────────
           Container(
-            height: 60,
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              itemCount: filters.length,
-              itemBuilder: (context, index) {
-                final filter = filters[index];
-                final isSelected = selectedFilter == filter;
-                return GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      selectedFilter = filter;
-                    });
+            height: 80,
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('orders')
+                  .snapshots(),
+              builder: (context, snap) {
+                Map<String, double> filterTotals = {};
+                if (snap.hasData) {
+                  for (var doc in snap.data!.docs) {
+                    final d = doc.data() as Map<String, dynamic>;
+                    final status = (d['status'] ?? 'pending')
+                        .toString()
+                        .toLowerCase();
+                    final amount =
+                        ((d['grandTotal'] ?? d['totalAmount'] ?? 0.0) as num)
+                            .toDouble();
+                    filterTotals['all'] = (filterTotals['all'] ?? 0.0) + amount;
+                    filterTotals[status] =
+                        (filterTotals[status] ?? 0.0) + amount;
+                  }
+                }
+
+                return ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  itemCount: filters.length,
+                  itemBuilder: (context, index) {
+                    final filter = filters[index];
+                    final isSelected = selectedFilter == filter;
+                    final key = filter.toLowerCase();
+                    final total = filterTotals[key] ?? 0.0;
+
+                    return GestureDetector(
+                      onTap: () => setState(() => selectedFilter = filter),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        margin: const EdgeInsets.only(right: 10),
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: isSelected ? Colors.redAccent : Colors.white12,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: isSelected
+                                ? Colors.redAccent
+                                : Colors.transparent,
+                          ),
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              filter,
+                              style: GoogleFonts.comicNeue(
+                                color: isSelected
+                                    ? Colors.white
+                                    : Colors.white70,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
+                            if (snap.hasData && total > 0)
+                              Text(
+                                'Rs.${total.toStringAsFixed(0)}',
+                                style: TextStyle(
+                                  color: isSelected
+                                      ? Colors.white70
+                                      : Colors.white38,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
                   },
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    margin: const EdgeInsets.only(right: 10),
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: isSelected ? Colors.redAccent : Colors.white12,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: isSelected
-                            ? Colors.redAccent
-                            : Colors.transparent,
-                      ),
-                    ),
-                    child: Text(
-                      filter,
-                      style: GoogleFonts.comicNeue(
-                        color: isSelected ? Colors.white : Colors.white70,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
                 );
               },
             ),
@@ -121,6 +209,8 @@ class _AllOrdersHistoryScreenState extends State<AllOrdersHistoryScreen> {
                 }
 
                 var docs = snapshot.data!.docs;
+
+                // Status filter
                 if (selectedFilter != 'All') {
                   docs = docs.where((doc) {
                     final status =
@@ -132,8 +222,31 @@ class _AllOrdersHistoryScreenState extends State<AllOrdersHistoryScreen> {
                   }).toList();
                 }
 
+                // Search filter — order id, customer name, product name
+                if (_searchQuery.isNotEmpty) {
+                  docs = docs.where((doc) {
+                    final d = doc.data() as Map<String, dynamic>;
+                    final orderId = doc.id.toLowerCase();
+                    final customerName = (d['customerName'] ?? '')
+                        .toString()
+                        .toLowerCase();
+                    final items = d['items'] as List? ?? [];
+                    final productNames = items
+                        .map((i) => (i['name'] ?? '').toString().toLowerCase())
+                        .join(' ');
+
+                    return orderId.contains(_searchQuery) ||
+                        customerName.contains(_searchQuery) ||
+                        productNames.contains(_searchQuery);
+                  }).toList();
+                }
+
                 if (docs.isEmpty) {
-                  return _buildEmptyState("No $selectedFilter orders found.");
+                  return _buildEmptyState(
+                    _searchQuery.isNotEmpty
+                        ? 'No results for "$_searchQuery"'
+                        : "No $selectedFilter orders found.",
+                  );
                 }
 
                 return ListView.builder(
@@ -152,6 +265,8 @@ class _AllOrdersHistoryScreenState extends State<AllOrdersHistoryScreen> {
       ),
     );
   }
+
+  // baaki sara code same rehta hai — _buildOrderCard se neeche tak kuch nahi badla
 
   Widget _buildOrderCard(String orderId, Map<String, dynamic> data) {
     String customerName = data['customerName'] ?? 'Unknown Customer';

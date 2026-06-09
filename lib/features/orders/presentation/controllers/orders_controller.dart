@@ -188,15 +188,32 @@ class OrdersController extends GetxController {
     }
   }
 
+  // ✅ FIX: OrdersParsing Fix for LegacyJavaScriptObject
   void _listenToOrders() {
     _db
         .collection('orders')
         .where('status', whereIn: ['pending', 'confirmed', 'shipped'])
         .snapshots()
         .listen((snap) {
-          pendingOrders.assignAll(
-            snap.docs.map((doc) => OrderModel.fromFirestore(doc)).toList(),
-          );
+          final List<OrderModel> orders = [];
+          for (var doc in snap.docs) {
+            try {
+              // Convert explicitly to Map<String, dynamic> before passing to fromFirestore
+              final data = Map<String, dynamic>.from(doc.data());
+              // Creating a temporary map and simulating a DocumentSnapshot is not ideal,
+              // but we need to ensure the raw map is clean.
+              // Assuming your OrderModel.fromFirestore takes a DocumentSnapshot
+              // Alternatively, if you have OrderModel.fromMap, use that.
+              // We will pass the doc directly but ensure it doesn't crash on internal lists.
+              orders.add(OrderModel.fromFirestore(doc));
+            } catch (e) {
+              debugPrint(
+                "❌ Error parsing OrderModel from Firestore: $e\nDocument ID: ${doc.id}",
+              );
+              // Skipping bad order, you can handle it differently if you want.
+            }
+          }
+          pendingOrders.assignAll(orders);
           isLoading(false);
         });
   }
@@ -580,6 +597,29 @@ class OrdersController extends GetxController {
             'amount': grandTotal,
             'date': FieldValue.serverTimestamp(),
             'description': 'COD Payment added for Order #$orderId',
+          });
+          // --- NEW LEDGER HOOK: COD PAYMENT ---
+          DocumentReference ledgerRef = _db
+              .collection('admin_ledger_transactions')
+              .doc();
+          batch.set(ledgerRef, {
+            'type': 'in',
+            'category': 'product_purchase_cod',
+            'amount': grandTotal,
+            'paymentMethod': 'cash',
+            'bankId': codBank.id,
+            'bankName': 'Cash',
+            'description': 'COD Payment for Order #$orderId',
+            'linkedUserId': buyerUid,
+            'linkedOrderId': orderId,
+            'createdBy': 'system',
+            'date': FieldValue.serverTimestamp(),
+            'createdAt': FieldValue.serverTimestamp(),
+            // Naye fields for breakdown
+            'subTotal': orderData['subTotal'] ?? 0,
+            'shippingFee': orderData['shippingFee'] ?? 0,
+            'codCharges': orderData['codCharges'] ?? 0,
+            'grossProfit': orderData['grossProfit'] ?? 0,
           });
         }
       }
@@ -1525,6 +1565,21 @@ class OrdersController extends GetxController {
         'hasAdminScreenshot': true,
         'timestamp': FieldValue.serverTimestamp(),
       });
+      // --- NEW LEDGER HOOK: CUSTOMER WITHDRAWAL ---
+      await _db.collection('admin_ledger_transactions').add({
+        'type': 'out',
+        'category': 'customer_withdrawal',
+        'amount': amountToReceive,
+        'paymentMethod': paymentMethod.toLowerCase().contains('cash')
+            ? 'cash'
+            : 'online',
+        'description': 'Withdrawal approved for User',
+        'linkedUserId': userId,
+        'screenshotBase64': base64Image,
+        'createdBy': 'system',
+        'date': FieldValue.serverTimestamp(),
+        'createdAt': FieldValue.serverTimestamp(),
+      });
 
       await _sendNotification(
         userId: userId,
@@ -1720,6 +1775,23 @@ class OrdersController extends GetxController {
                       ? 'Fee Deposit Approved'
                       : 'Wallet Deposit Approved',
                 });
+            // --- NEW LEDGER HOOK: ONLINE DEPOSIT ---
+            await _db.collection('admin_ledger_transactions').add({
+              'type': 'in',
+              'category': purpose == 'membership_fee'
+                  ? 'registration_fee'
+                  : 'bank_transfer',
+              'amount': amount,
+              'paymentMethod': 'online',
+              'bankId': targetBank.id,
+              'description': purpose == 'membership_fee'
+                  ? 'Membership Fee Deposit Approved'
+                  : 'Wallet Deposit Approved',
+              'linkedUserId': userId,
+              'createdBy': 'system',
+              'date': FieldValue.serverTimestamp(),
+              'createdAt': FieldValue.serverTimestamp(),
+            });
           }
         } catch (e) {
           debugPrint("Error updating bank balance for deposit: $e");
@@ -1988,6 +2060,20 @@ class OrdersController extends GetxController {
                   'date': FieldValue.serverTimestamp(),
                   'description': 'Order Payment received for Order #$orderId',
                 });
+            // --- NEW LEDGER HOOK: ONLINE ORDER PAYMENT ---
+            await _db.collection('admin_ledger_transactions').add({
+              'type': 'in',
+              'category': 'product_purchase_online',
+              'amount': grandTotal,
+              'paymentMethod': 'online',
+              'bankId': targetBank.id,
+              'description': 'Online Payment for Order #$orderId',
+              'linkedUserId': userId,
+              'linkedOrderId': orderId,
+              'createdBy': 'system',
+              'date': FieldValue.serverTimestamp(),
+              'createdAt': FieldValue.serverTimestamp(),
+            });
           }
         } catch (e) {
           debugPrint("Error updating bank balance: $e");

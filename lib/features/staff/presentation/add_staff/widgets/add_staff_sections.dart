@@ -4,7 +4,7 @@ import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import '../../../controller/add_staff_controller.dart';
 import '../staff_ui_helpers.dart';
-import '../map_picker_screen.dart'; // Ensure this path matches your project structure
+import '../map_picker_screen.dart';
 
 // ─── 1. Date Picker Section ────────────────────────────────────────────────
 class DatePickerSection extends GetView<AddStaffController> {
@@ -103,6 +103,9 @@ class PersonalInfoSection extends GetView<AddStaffController> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // ── STAFF IMAGE ──────────────────────────────────────
+        _buildImagePicker(),
+        const SizedBox(height: 16),
         StaffUiHelpers.sectionTitle(
           'Personal Information',
           Icons.person_rounded,
@@ -195,7 +198,6 @@ class PersonalInfoSection extends GetView<AddStaffController> {
             return null;
           },
         ),
-        // --- MANDATORY PASSWORD ---
         StaffUiHelpers.inputField(
           label: 'Login Password',
           fieldController: controller.passwordController,
@@ -226,6 +228,131 @@ class PersonalInfoSection extends GetView<AddStaffController> {
         _buildAddressField(context),
       ],
     );
+  }
+
+  Widget _buildImagePicker() {
+    return Obx(() {
+      final hasImage =
+          controller.staffImageUrl.value.isNotEmpty ||
+          controller.staffImageFile.value != null;
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          StaffUiHelpers.sectionTitle(
+            'Staff Photo',
+            Icons.photo_camera_rounded,
+          ),
+          Center(
+            child: Stack(
+              children: [
+                Container(
+                  height: 110,
+                  width: 110,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: StaffUiHelpers.surface,
+                    border: Border.all(
+                      color: hasImage
+                          ? StaffUiHelpers.accent
+                          : StaffUiHelpers.cardBorder,
+                      width: 2.5,
+                    ),
+                  ),
+                  child: ClipOval(
+                    child: controller.isImageUploading.value
+                        ? const Center(
+                            child: CircularProgressIndicator(
+                              color: StaffUiHelpers.accent,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : controller.staffImageUrl.value.isNotEmpty
+                        ? Image.network(
+                            controller.staffImageUrl.value,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const Icon(
+                              Icons.person_rounded,
+                              color: StaffUiHelpers.textMid,
+                              size: 50,
+                            ),
+                          )
+                        : const Icon(
+                            Icons.person_rounded,
+                            color: StaffUiHelpers.textMid,
+                            size: 50,
+                          ),
+                  ),
+                ),
+                Positioned(
+                  bottom: 0,
+                  right: 0,
+                  child: GestureDetector(
+                    onTap: controller.isImageUploading.value
+                        ? null
+                        : () => controller.pickAndUploadImage(),
+                    child: Container(
+                      height: 34,
+                      width: 34,
+                      decoration: BoxDecoration(
+                        color: StaffUiHelpers.accent,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: StaffUiHelpers.bg, width: 2),
+                      ),
+                      child: Icon(
+                        hasImage
+                            ? Icons.edit_rounded
+                            : Icons.add_a_photo_rounded,
+                        color: Colors.white,
+                        size: 16,
+                      ),
+                    ),
+                  ),
+                ),
+                if (hasImage)
+                  Positioned(
+                    top: 0,
+                    right: 0,
+                    child: GestureDetector(
+                      onTap: () {
+                        controller.staffImageUrl.value = '';
+                        controller.staffImageFile.value = null;
+                      },
+                      child: Container(
+                        height: 26,
+                        width: 26,
+                        decoration: BoxDecoration(
+                          color: StaffUiHelpers.red,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: StaffUiHelpers.bg,
+                            width: 2,
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.close_rounded,
+                          color: Colors.white,
+                          size: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          if (controller.isImageUploading.value)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Center(
+                child: Text(
+                  'Uploading image...',
+                  style: TextStyle(color: StaffUiHelpers.accent, fontSize: 12),
+                ),
+              ),
+            ),
+        ],
+      );
+    });
   }
 
   Widget _buildAddressField(BuildContext context) {
@@ -534,7 +661,7 @@ class EmploymentSection extends GetView<AddStaffController> {
               label: 'Salary Amount (Rs.)',
               hint: '0.00',
               prefixIcon: const Icon(
-                Icons.currency_rupee_rounded,
+                Icons.attach_money_sharp,
                 color: StaffUiHelpers.green,
                 size: 20,
               ),
@@ -603,7 +730,6 @@ class EmploymentSection extends GetView<AddStaffController> {
           controller.cashFixCtrl,
           controller.cashPercCtrl,
         ),
-
         Obx(() {
           return Column(
             children: [
@@ -628,7 +754,6 @@ class EmploymentSection extends GetView<AddStaffController> {
             ],
           );
         }),
-
         const SizedBox(height: 16),
         StaffUiHelpers.sectionTitle(
           'Fuel Allowance',
@@ -1110,7 +1235,7 @@ class BonusSection extends GetView<AddStaffController> {
         Obx(
           () => Row(
             children: [
-              _bonusTypeChip('double', 'Double Salary'),
+              _bonusTypeChip('no_bonus', 'No Bonus'),
               const SizedBox(width: 8),
               _bonusTypeChip('full', 'Full Salary'),
               const SizedBox(width: 8),
@@ -1118,109 +1243,143 @@ class BonusSection extends GetView<AddStaffController> {
             ],
           ),
         ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            const Expanded(
-              flex: 2,
-              child: Text(
-                'How many times per year',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: StaffUiHelpers.textMid,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Obx(
-                () => DropdownButtonFormField<int>(
-                  value: controller.bonusYearlyCount.value,
-                  dropdownColor: StaffUiHelpers.card,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    color: StaffUiHelpers.textWhite,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  decoration: StaffUiHelpers.inputDeco(label: 'Times'),
-                  items: [1, 2, 3, 4, 5]
-                      .map((v) => DropdownMenuItem(value: v, child: Text('$v')))
-                      .toList(),
-                  onChanged: (v) {
-                    if (v != null) controller.bonusYearlyCount.value = v;
-                  },
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
+
+        // ── "How many times per year" — no_bonus mein hide ──
         Obx(
-          () => Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: BoxDecoration(
-              color: StaffUiHelpers.amber.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: StaffUiHelpers.amber.withOpacity(0.35)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Row(
-                  children: [
-                    Icon(
-                      Icons.calculate_rounded,
-                      color: StaffUiHelpers.amber,
-                      size: 20,
+          () => controller.bonusType.value == 'no_bonus'
+              ? const SizedBox.shrink()
+              : Padding(
+                  padding: const EdgeInsets.only(top: 16),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        flex: 2,
+                        child: Text(
+                          'How many times per year',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: StaffUiHelpers.textMid,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Obx(
+                          () => DropdownButtonFormField<int>(
+                            value: controller.bonusYearlyCount.value,
+                            dropdownColor: StaffUiHelpers.card,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              color: StaffUiHelpers.textWhite,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            decoration: StaffUiHelpers.inputDeco(
+                              label: 'Times',
+                            ),
+                            items: [1, 2, 3, 4, 5]
+                                .map(
+                                  (v) => DropdownMenuItem(
+                                    value: v,
+                                    child: Text('$v'),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (v) {
+                              if (v != null)
+                                controller.bonusYearlyCount.value = v;
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+        ),
+
+        // ── Bonus breakdown — no_bonus mein hide ──
+        Obx(
+          () => controller.bonusType.value == 'no_bonus'
+              ? const SizedBox.shrink()
+              : Container(
+                  margin: const EdgeInsets.only(top: 16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
+                  decoration: BoxDecoration(
+                    color: StaffUiHelpers.amber.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: StaffUiHelpers.amber.withOpacity(0.35),
                     ),
-                    SizedBox(width: 8),
-                    Text(
-                      'Bonus Breakdown',
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(
+                            Icons.calculate_rounded,
+                            color: StaffUiHelpers.amber,
+                            size: 20,
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            'Bonus Breakdown',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: StaffUiHelpers.amber,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      _bonusBreakdownRow(
+                        'Per Bonus Payment:',
+                        'Rs. ${controller.perBonusAmount.value.toStringAsFixed(0)}',
+                      ),
+                      _bonusBreakdownRow(
+                        'Yearly Total Bonus:',
+                        'Rs. ${(controller.perBonusAmount.value * controller.bonusYearlyCount.value).toStringAsFixed(0)}',
+                      ),
+                      const Divider(color: Colors.white12, height: 16),
+                      _bonusBreakdownRow(
+                        'Monthly Bonus Reserve:',
+                        'Rs. ${controller.bonusMonthlyAmount.value.toStringAsFixed(0)}',
+                        highlight: true,
+                      ),
+                    ],
+                  ),
+                ),
+        ),
+
+        // ── Bonus payment dates — no_bonus mein hide ──
+        Obx(
+          () => controller.bonusType.value == 'no_bonus'
+              ? const SizedBox.shrink()
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Bonus Payment Dates',
                       style: TextStyle(
                         fontSize: 14,
-                        color: StaffUiHelpers.amber,
-                        fontWeight: FontWeight.w700,
+                        color: StaffUiHelpers.textMid,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Column(
+                      children: List.generate(
+                        controller.bonusPayDates.length,
+                        (i) => _buildBonusPayDateRow(i),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
-                _bonusBreakdownRow(
-                  'Per Bonus Payment:',
-                  'Rs. ${controller.perBonusAmount.value.toStringAsFixed(0)}',
-                ),
-                _bonusBreakdownRow(
-                  'Yearly Total Bonus:',
-                  'Rs. ${(controller.perBonusAmount.value * controller.bonusYearlyCount.value).toStringAsFixed(0)}',
-                ),
-                const Divider(color: Colors.white12, height: 16),
-                _bonusBreakdownRow(
-                  'Monthly Bonus Reserve:',
-                  'Rs. ${controller.bonusMonthlyAmount.value.toStringAsFixed(0)}',
-                  highlight: true,
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        const Text(
-          'Bonus Payment Dates',
-          style: TextStyle(
-            fontSize: 14,
-            color: StaffUiHelpers.textMid,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 10),
-        Obx(
-          () => Column(
-            children: List.generate(
-              controller.bonusPayDates.length,
-              (i) => _buildBonusPayDateRow(i),
-            ),
-          ),
         ),
       ],
     );

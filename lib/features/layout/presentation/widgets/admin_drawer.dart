@@ -16,6 +16,7 @@ import 'package:marvellous_admin/features/vendors/screens/vendors_list_screen.da
 
 import '../../../../core/theme/pallete.dart';
 import '../../../customers/presentation/screens/customers_screen.dart';
+import '../../../finance/screens/admin_finance_home_screen.dart';
 import '../../../finance/screens/banks_screen.dart';
 import '../../../finance/screens/expenses_screen.dart';
 import '../../../finance/screens/taxes_screen.dart';
@@ -137,6 +138,7 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
       icon: Icons.monetization_on_outlined,
       hasSubmenu: true,
       subItems: [
+        "Finance Overview",
         "Banks",
         "Expenses",
         "Taxes",
@@ -356,7 +358,7 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
                                 if (item.title == "Dashboard") {
                                   screen = const DashboardScreen();
                                 } else if (item.title == "Orders") {
-                                  screen = const OrdersDashboardScreen();
+                                  screen = OrdersDashboardScreen();
                                 } else if (item.title == "Profile") {
                                   screen = const AdminProfileScreen();
                                 } else if (item.title == "Point Variable") {
@@ -505,7 +507,10 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
                                   }
                                   // ─── FINANCE ───────────────────────────────
                                   else if (item.title == "Finance") {
-                                    if (subItem == "Banks") {
+                                    if (subItem == "Finance Overview") {
+                                      targetScreen =
+                                          AdminFinanceHomeScreen(); // ← naya
+                                    } else if (subItem == "Banks") {
                                       targetScreen = BanksScreen();
                                     } else if (subItem == "Expenses") {
                                       targetScreen = ExpensesScreen();
@@ -515,8 +520,7 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
                                   }
                                   // ─── ORDERS ───────────────────────────────
                                   else if (item.title == "Orders") {
-                                    targetScreen =
-                                        const OrdersDashboardScreen();
+                                    targetScreen = OrdersDashboardScreen();
                                   }
 
                                   // Navigate using provider

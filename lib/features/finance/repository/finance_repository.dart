@@ -1,3 +1,4 @@
+// Path: lib/features/finances/repository/finance_repository.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/finance_models.dart';
 
@@ -84,8 +85,19 @@ class FinanceRepository {
 
   Future<void> addBank(BankModel bank) async => await _banks.add(bank.toMap());
 
-  Future<void> updateBank(BankModel bank) async =>
-      await _banks.doc(bank.id).update(bank.toMap());
+  Future<void> updateBank(BankModel bank) async {
+    await _banks.doc(bank.id).update(bank.toMap());
+
+    // ✅ Agar Internal account hai to totalCompanyBalance bhi sync karo
+    final isInternal =
+        bank.isSystem && bank.name.toLowerCase().contains('internal');
+
+    if (isInternal) {
+      await _firestore.collection('company_finances').doc('balance').update({
+        'totalCompanyBalance': bank.balance,
+      });
+    }
+  }
 
   Future<void> deleteBank(String id) async => await _banks.doc(id).delete();
 
@@ -98,6 +110,117 @@ class FinanceRepository {
 
   Future<void> deleteExpenseCategory(String id) async =>
       await _expenseCategories.doc(id).delete();
+
+  // ✅ NEW: Bank to Bank Transfer - Firestore atomic transaction
+  Future<bool> transferFunds({
+    required BankModel fromBank,
+    required BankModel toBank,
+    required double amount,
+    required String description,
+  }) async {
+    try {
+      await _firestore.runTransaction((tx) async {
+        final fromRef = _banks.doc(fromBank.id);
+        final toRef = _banks.doc(toBank.id);
+
+        final fromDoc = await tx.get(fromRef);
+        final toDoc = await tx.get(toRef);
+
+        if (!fromDoc.exists) throw Exception("Source account not found");
+        if (!toDoc.exists) throw Exception("Destination account not found");
+
+        final fromData = fromDoc.data() as Map<String, dynamic>;
+        final toData = toDoc.data() as Map<String, dynamic>;
+
+        final fromBalance = (fromData['balance'] ?? 0.0) as num;
+        final toBalance = (toData['balance'] ?? 0.0) as num;
+
+        // ✅ Insufficient balance check
+        if (fromBalance.toDouble() < amount) {
+          throw Exception("Insufficient balance in ${fromBank.name}");
+        }
+
+        // ✅ Update both bank balances
+        tx.update(fromRef, {'balance': fromBalance.toDouble() - amount});
+        tx.update(toRef, {'balance': toBalance.toDouble() + amount});
+
+        final now = DateTime.now();
+
+        // ✅ Transaction record: From bank (OUT)
+        final fromTransRef = _transactions.doc();
+        tx.set(fromTransRef, {
+          'bankId': fromBank.id,
+          'type': 'out',
+          'amount': amount,
+          'date': now,
+          'description': 'Transfer to ${toBank.name}: $description',
+        });
+
+        // ✅ Transaction record: To bank (IN)
+        final toTransRef = _transactions.doc();
+        tx.set(toTransRef, {
+          'bankId': toBank.id,
+          'type': 'in',
+          'amount': amount,
+          'date': now,
+          'description': 'Transfer from ${fromBank.name}: $description',
+        });
+
+        // ✅ Agar fromBank Internal hai to totalCompanyBalance update nahi karo
+        // (Internal balance auto-sync hoti hai totalCompanyBalance se)
+        // Agar regular bank se Internal mein transfer ho to totalCompanyBalance bhi update
+        final fromIsInternal =
+            (fromData['isSystem'] ?? false) &&
+            (fromData['name'] ?? '').toString().toLowerCase().contains(
+              'internal',
+            );
+        final toIsInternal =
+            (toData['isSystem'] ?? false) &&
+            (toData['name'] ?? '').toString().toLowerCase().contains(
+              'internal',
+            );
+
+        // Sirf tab update karo jab koi ek Internal ho aur doosra na ho
+        // (dono internal nahin ho sakte normally)
+        if (toIsInternal && !fromIsInternal) {
+          // Regular -> Internal: totalCompanyBalance mein add (internal balance already update hua)
+          // Note: Internal bank ka balance Firestore mein separately hai;
+          // totalCompanyBalance alag doc hai. Dono sync karo.
+          final balRef = _firestore
+              .collection('company_finances')
+              .doc('balance');
+          final balDoc = await tx.get(balRef);
+          if (balDoc.exists) {
+            final tcb =
+                ((balDoc.data()
+                            as Map<String, dynamic>)['totalCompanyBalance'] ??
+                        0.0)
+                    as num;
+            tx.update(balRef, {'totalCompanyBalance': tcb.toDouble() + amount});
+          }
+        } else if (fromIsInternal && !toIsInternal) {
+          // Internal -> Regular: totalCompanyBalance se minus
+          final balRef = _firestore
+              .collection('company_finances')
+              .doc('balance');
+          final balDoc = await tx.get(balRef);
+          if (balDoc.exists) {
+            final tcb =
+                ((balDoc.data()
+                            as Map<String, dynamic>)['totalCompanyBalance'] ??
+                        0.0)
+                    as num;
+            tx.update(balRef, {'totalCompanyBalance': tcb.toDouble() - amount});
+          }
+        }
+        // Regular -> Regular ya Internal -> Internal: totalCompanyBalance unchanged
+      });
+      return true;
+    } catch (e) {
+      print('Transfer error: $e');
+      return false;
+    }
+  }
 
   Future<bool> addExpenseAndDeduct(ExpenseModel expense) async {
     try {

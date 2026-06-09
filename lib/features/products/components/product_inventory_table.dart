@@ -14,8 +14,6 @@ class ProductInventoryTable extends ConsumerStatefulWidget {
   final ProductsController controller;
   final bool isMobile;
   final BoxConstraints constraints;
-
-  // ✅ FIX: Added onEdit parameter and updated onDelete type
   final Function(ProductModel) onEdit;
   final Function(ProductModel) onDelete;
 
@@ -25,7 +23,7 @@ class ProductInventoryTable extends ConsumerStatefulWidget {
     required this.controller,
     required this.isMobile,
     required this.constraints,
-    required this.onEdit, // ✅ FIX: Added to constructor
+    required this.onEdit,
     required this.onDelete,
   }) : super(key: key);
 
@@ -37,17 +35,12 @@ class ProductInventoryTable extends ConsumerStatefulWidget {
 class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
   bool ascending = true;
   int? sortColumnIndex;
-
   int inOutSortState = 0;
 
-  // --- PAGINATION STATE ---
   int _currentPage = 1;
   final int _itemsPerPage = 11;
-
-  // --- SELECTION STATE ---
   Set<String> selectedProductIds = {};
 
-  // Controllers for Scrolling
   final ScrollController _verticalController = ScrollController();
   final ScrollController _topHorizontalController = ScrollController();
   final ScrollController _bottomHorizontalController = ScrollController();
@@ -82,7 +75,7 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
     int columnIndex,
   ) {
     setState(() {
-      inOutSortState = 0; // ✅ Reset In/Out state when other columns are clicked
+      inOutSortState = 0;
       if (sortColumnIndex == columnIndex) {
         ascending = !ascending;
       } else {
@@ -99,31 +92,30 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
     });
   }
 
-  // ✅ NEW: Custom Sort for In/Out Column (Only Descending Toggle)
   void _sortInOut(int columnIndex) {
     setState(() {
       sortColumnIndex = columnIndex;
-      ascending = false; // Always show descending arrow for this logic
+      ascending = false;
 
       if (inOutSortState == 0 || inOutSortState == 2) {
-        inOutSortState = 1; // Sort by IN Descending
+        inOutSortState = 1;
         widget.filteredList.sort(
           (a, b) => b.stockQuantity.compareTo(a.stockQuantity),
         );
         Get.snackbar(
           "Sorting Applied",
-          "Sorted by IN (Available Stock) - Highest to Lowest",
-          backgroundColor: Colors.blueAccent,
+          "Sorted by Left (Available Stock) - Highest to Lowest",
+          backgroundColor: Colors.green.shade800,
           colorText: Colors.white,
           duration: const Duration(seconds: 1),
         );
       } else {
-        inOutSortState = 2; // Sort by OUT Descending
-        widget.filteredList.sort((a, b) => b.stockOut.compareTo(a.stockOut));
+        inOutSortState = 2;
+        widget.filteredList.sort((a, b) => b.stockIn.compareTo(a.stockIn));
         Get.snackbar(
           "Sorting Applied",
-          "Sorted by OUT (Sold Stock) - Highest to Lowest",
-          backgroundColor: Colors.orangeAccent,
+          "Sorted by Total Bought (IN) - Highest to Lowest",
+          backgroundColor: Colors.blueAccent,
           colorText: Colors.white,
           duration: const Duration(seconds: 1),
         );
@@ -135,27 +127,18 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
     double sale = product.salePrice;
     double purchase = product.purchasePrice;
     double profitPerPointVal = 0.0;
-
     try {
       profitPerPointVal = widget.controller.profitPerPoint.toDouble();
     } catch (e) {
       profitPerPointVal = 1.0;
     }
-
-    if (profitPerPointVal == 0) {
-      return 0.0;
-    }
-
+    if (profitPerPointVal == 0) return 0.0;
     double grossProfit = sale - purchase;
     double points = grossProfit / profitPerPointVal;
-
-    if (points.isNaN || points.isInfinite) {
-      return 0.0;
-    }
+    if (points.isNaN || points.isInfinite) return 0.0;
     return points;
   }
 
-  // --- CALCULATE TOTAL POINTS OF FILTERED LIST ---
   double _calculateTotalPoints() {
     double total = 0.0;
     for (var product in widget.filteredList) {
@@ -164,7 +147,6 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
     return total;
   }
 
-  // --- CALCULATE TOTAL AMOUNT (PRICE) OF FILTERED LIST ---
   double _calculateTotalAmount() {
     double total = 0.0;
     for (var product in widget.filteredList) {
@@ -173,7 +155,6 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
     return total;
   }
 
-  // --- CALCULATE TOTAL POINTS OF SELECTED PRODUCTS ---
   double _calculateSelectedPoints() {
     double total = 0.0;
     for (var product in widget.filteredList) {
@@ -184,7 +165,6 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
     return total;
   }
 
-  // --- CALCULATE TOTAL AMOUNT OF SELECTED PRODUCTS ---
   double _calculateSelectedAmount() {
     double total = 0.0;
     for (var product in widget.filteredList) {
@@ -195,7 +175,6 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
     return total;
   }
 
-  // --- TOGGLE SELECT ALL ---
   void _toggleSelectAll(List<ProductModel> currentDisplayList) {
     setState(() {
       if (selectedProductIds.length == currentDisplayList.length &&
@@ -207,7 +186,6 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
     });
   }
 
-  // --- BULK DELETE SELECTED ---
   void _deleteSelected() {
     if (selectedProductIds.isEmpty) {
       Get.snackbar(
@@ -218,9 +196,7 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
       );
       return;
     }
-
     final int count = selectedProductIds.length;
-
     Get.defaultDialog(
       title: "Delete Selected Products?",
       titleStyle: GoogleFonts.comicNeue(fontWeight: FontWeight.bold),
@@ -248,11 +224,8 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
     );
   }
 
-  // ✅ NEW: Smart Image Loader for fixing the crash
   Widget _buildSmartImage(String data) {
-    if (data.isEmpty) {
-      return const Icon(Icons.image, color: Colors.white24);
-    }
+    if (data.isEmpty) return const Icon(Icons.image, color: Colors.white24);
     try {
       if (data.startsWith('http')) {
         return Image.network(
@@ -297,16 +270,13 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
       startIndex,
       endIndex,
     );
-
     final double estimatedTableWidth = widget.isMobile ? 900 : 1300;
 
-    // --- TOTALS ---
     double totalFilteredPoints = _calculateTotalPoints();
     double totalFilteredAmount = _calculateTotalAmount();
     double totalSelectedPoints = _calculateSelectedPoints();
     double totalSelectedAmount = _calculateSelectedAmount();
 
-    // --- Check showDecimals from Firestore (global setting) ---
     bool showDecimals = widget.controller.showDecimals.value;
 
     return Container(
@@ -326,7 +296,6 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // --- HEADER WITH TOTALS ---
             Padding(
               padding: const EdgeInsets.all(15.0),
               child: Column(
@@ -345,9 +314,8 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                       ),
                       if (widget.controller.searchHistoryList.isNotEmpty)
                         TextButton(
-                          onPressed: () async {
-                            await widget.controller.clearAllHistory();
-                          },
+                          onPressed: () async =>
+                              await widget.controller.clearAllHistory(),
                           child: const Text(
                             "Clear History",
                             style: TextStyle(color: Colors.grey, fontSize: 12),
@@ -356,12 +324,10 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  // --- TOTAL POINTS & AMOUNT ROW ---
                   Wrap(
                     spacing: 10,
                     runSpacing: 8,
                     children: [
-                      // Total Points
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
@@ -383,7 +349,6 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                           ),
                         ),
                       ),
-                      // Total Amount
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
@@ -403,7 +368,6 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                           ),
                         ),
                       ),
-                      // Selected Totals
                       if (selectedProductIds.isNotEmpty) ...[
                         Container(
                           padding: const EdgeInsets.symmetric(
@@ -434,7 +398,6 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
             ),
             const Divider(color: Colors.grey, height: 1),
 
-            // --- SELECTION TOOLBAR ---
             if (selectedProductIds.isNotEmpty)
               Container(
                 padding: const EdgeInsets.symmetric(
@@ -473,7 +436,6 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                 ),
               ),
 
-            // --- EMPTY STATE ---
             if (widget.filteredList.isEmpty)
               Expanded(
                 child: Center(
@@ -487,7 +449,6 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
               Expanded(
                 child: Column(
                   children: [
-                    // --- TOP SCROLLBAR ---
                     Scrollbar(
                       controller: _topHorizontalController,
                       thumbVisibility: true,
@@ -505,7 +466,6 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                         ),
                       ),
                     ),
-                    // --- TABLE CONTENT ---
                     Expanded(
                       child: Scrollbar(
                         controller: _verticalController,
@@ -532,13 +492,14 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                                   headingRowColor: MaterialStateProperty.all(
                                     const Color.fromARGB(255, 216, 213, 213),
                                   ),
-                                  dataRowHeight: _rowHeight,
+                                  dataRowHeight:
+                                      _rowHeight +
+                                      5, // Extra height for new text
                                   headingRowHeight: _rowHeight,
                                   columnSpacing: _colSpacing,
                                   horizontalMargin: 10,
                                   showCheckboxColumn: false,
                                   columns: [
-                                    // --- SELECT ALL CHECKBOX ---
                                     DataColumn(
                                       label: Checkbox(
                                         value:
@@ -600,11 +561,10 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                                     ),
                                     DataColumn(
                                       label: _tableHeader(
-                                        "In/Out",
+                                        "Stock In / Out",
                                         textColor,
                                         _fontSize,
                                       ),
-                                      // ✅ FIX: Call our custom sorting function
                                       onSort: (index, _) => _sortInOut(index),
                                     ),
                                     DataColumn(
@@ -638,8 +598,9 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                                     ),
                                   ],
                                   rows: currentDisplayList.map((product) {
-                                    int stockIn = product.stockQuantity;
+                                    int stockIn = product.stockIn;
                                     int stockOut = product.stockOut;
+                                    int stockLeft = product.stockQuantity;
                                     double dynamicPoints = _calculatePoints(
                                       product,
                                     );
@@ -660,7 +621,6 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                                         });
                                       },
                                       cells: [
-                                        // --- CHECKBOX CELL ---
                                         DataCell(
                                           Checkbox(
                                             value: isSelected,
@@ -680,7 +640,6 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                                             activeColor: Colors.blue,
                                           ),
                                         ),
-                                        // --- PRODUCT NAME & MODEL NUMBER ---
                                         DataCell(
                                           Row(
                                             mainAxisSize: MainAxisSize.min,
@@ -699,7 +658,6 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                                                         ),
                                                     color: Colors.black12,
                                                   ),
-                                                  // ✅ FIX: Replaced MemoryImage with _buildSmartImage
                                                   child: ClipRRect(
                                                     borderRadius:
                                                         BorderRadius.circular(
@@ -746,20 +704,19 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                                                                   _fontSize - 2,
                                                             ),
                                                       ),
-                                                    // ✅ NEW: Product ID Added Here
                                                     Text(
                                                       "ID: ${product.id ?? 'Unknown'}",
                                                       overflow:
                                                           TextOverflow.ellipsis,
-                                                      style: GoogleFonts.comicNeue(
-                                                        color: Colors
-                                                            .black87, // Dark and visible
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                        fontSize:
-                                                            _fontSize -
-                                                            3, // Slightly smaller than model number
-                                                      ),
+                                                      style:
+                                                          GoogleFonts.comicNeue(
+                                                            color:
+                                                                Colors.black87,
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                            fontSize:
+                                                                _fontSize - 3,
+                                                          ),
                                                     ),
                                                   ],
                                                 ),
@@ -783,9 +740,34 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                                           product.deliveryLocation,
                                           _fontSize,
                                         ),
-                                        _buildCellText(
-                                          "$stockIn / $stockOut",
-                                          _fontSize,
+                                        // ✅ NEW: Shows Total In, Total Out and Current Left properly
+                                        DataCell(
+                                          Column(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                "In: $stockIn | Out: $stockOut",
+                                                style: GoogleFonts.comicNeue(
+                                                  fontSize: 11,
+                                                  color: Colors.black54,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                              Text(
+                                                "Left: $stockLeft",
+                                                style: GoogleFonts.comicNeue(
+                                                  fontSize: 13,
+                                                  color: stockLeft < 10
+                                                      ? Colors.red
+                                                      : Colors.green.shade800,
+                                                  fontWeight: FontWeight.w900,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                         ),
                                         DataCell(
                                           Text(
@@ -833,15 +815,12 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                                                   );
                                                 },
                                               ),
-                                              // ✅ FIX: _actionIcon for EDIT
                                               _actionIcon(
                                                 Icons.edit,
                                                 Colors.orangeAccent,
                                                 _iconSize,
                                                 () {
-                                                  widget.onEdit(
-                                                    product,
-                                                  ); // Edit call here
+                                                  widget.onEdit(product);
                                                 },
                                               ),
                                               _actionIcon(
@@ -865,7 +844,6 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                         ),
                       ),
                     ),
-                    // --- PAGINATION CONTROLS ---
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 20,
@@ -942,7 +920,6 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
     );
   }
 
-  // ✅ Replaced with IconButton inside Container for reliable clicks
   Widget _actionIcon(
     IconData icon,
     Color color,

@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -27,9 +29,18 @@ class PackageProductTable extends StatefulWidget {
 }
 
 class _PackageProductTableState extends State<PackageProductTable> {
+  // ✅ NEW: Search controller for clearing text instantly
+  final TextEditingController _searchCtrl = TextEditingController();
   String _productSearchQuery = "";
+
   int? sortColumnIndex;
   bool ascending = true;
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
 
   void _sortProducts(int columnIndex, bool asc) {
     setState(() {
@@ -100,6 +111,30 @@ class _PackageProductTableState extends State<PackageProductTable> {
   double get totalCustomerPoints =>
       widget.selectedProducts.fold(0, (s, p) => s + _custPts(p));
 
+  // ✅ Crash-proof image loader for Cloudinary URLs & Base64
+  Widget _buildSmartImage(String data) {
+    if (data.isEmpty)
+      return const Icon(Icons.image, color: Colors.grey, size: 20);
+    try {
+      if (data.startsWith('http')) {
+        return Image.network(
+          data,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) =>
+              const Icon(Icons.broken_image, size: 20),
+        );
+      }
+      String cleanData = data.contains(',') ? data.split(',').last : data;
+      return Image.memory(
+        base64Decode(cleanData),
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, size: 20),
+      );
+    } catch (e) {
+      return const Icon(Icons.broken_image, color: Colors.grey, size: 20);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool showDecimals = widget.productController.showDecimals.value;
@@ -116,16 +151,31 @@ class _PackageProductTableState extends State<PackageProductTable> {
           ),
         ),
         const SizedBox(height: 10),
+
+        // ✅ RESPONSIVE & INSTANT SEARCH BAR
         TextField(
+          controller: _searchCtrl,
           onChanged: (val) => setState(() => _productSearchQuery = val),
-          style: const TextStyle(
+          style: GoogleFonts.comicNeue(
             color: Colors.black,
             fontWeight: FontWeight.bold,
             fontSize: 15,
           ),
           decoration: InputDecoration(
             hintText: "Search by Name, Brand, Category, Model, Location...",
+            hintStyle: GoogleFonts.comicNeue(color: Colors.black54),
             prefixIcon: const Icon(Icons.search, color: Colors.deepPurple),
+            // ✅ CROSS BUTTON ADDED
+            suffixIcon: _productSearchQuery.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.close, color: Colors.black54),
+                    onPressed: () {
+                      _searchCtrl.clear();
+                      setState(() => _productSearchQuery = "");
+                      FocusScope.of(context).unfocus();
+                    },
+                  )
+                : null,
             filled: true,
             fillColor: Colors.white,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
@@ -135,7 +185,8 @@ class _PackageProductTableState extends State<PackageProductTable> {
             ),
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 15),
+
         Obx(() {
           final query = _productSearchQuery.toLowerCase();
           var all = widget.productController.productsOnly.where((p) {
@@ -148,127 +199,231 @@ class _PackageProductTableState extends State<PackageProductTable> {
           }).toList();
           all = _getSortedProducts(all);
 
-          // Column widths
-          const double wSel = 35;
-          const double wProd = 130;
-          const double wBrand = 65;
-          const double wCat = 65;
-          const double wSub = 65;
-          const double wLoc = 65;
-          const double wNum = 65;
-          const double totalWidth =
-              wSel + wProd + wBrand + wCat + wSub + wLoc + (wNum * 5) + 80;
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              // ✅ FLEXIBLE RESPONSIVE WIDTH CALCULATION
+              double minTableWidth = 1000;
+              double tableWidth = math.max(constraints.maxWidth, minTableWidth);
 
-          return Container(
-            height: 400,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: const [
-                BoxShadow(color: Colors.black12, blurRadius: 5),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Scrollbar(
-                thumbVisibility: true,
-                trackVisibility: true,
-                thickness: 10,
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.vertical,
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: SizedBox(
-                      width: totalWidth,
-                      child: Column(
-                        children: [
-                          // Header
-                          _buildHeader(),
-                          const Divider(height: 1),
-                          // Rows via ListView.builder logic (Column with items)
-                          ...all
-                              .map(
-                                (product) => _buildRow(product, showDecimals),
-                              )
-                              .toList(),
-                        ],
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ─── 1. MAIN INVENTORY TABLE ───
+                  Container(
+                    height: 400,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.black12),
+                      boxShadow: const [
+                        BoxShadow(color: Colors.black12, blurRadius: 5),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Scrollbar(
+                        thumbVisibility: true,
+                        trackVisibility: true,
+                        thickness: 8,
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: SizedBox(
+                            width: tableWidth,
+                            child: Column(
+                              children: [
+                                _buildHeader(isSelectedTable: false),
+                                const Divider(
+                                  height: 1,
+                                  thickness: 1,
+                                  color: Colors.black12,
+                                ),
+                                Expanded(
+                                  child: SingleChildScrollView(
+                                    scrollDirection: Axis.vertical,
+                                    child: Column(
+                                      children: all
+                                          .map(
+                                            (product) => _buildRow(
+                                              product,
+                                              showDecimals,
+                                            ),
+                                          )
+                                          .toList(),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ),
-            ),
+
+                  // ─── 2. SELECTED PRODUCTS TABLE (NEW) ───
+                  if (widget.selectedProducts.isNotEmpty) ...[
+                    const SizedBox(height: 25),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.check_circle,
+                          color: Colors.green,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          "Selected Items (${widget.selectedProducts.length})",
+                          style: GoogleFonts.orbitron(
+                            color: Colors.green.shade800,
+                            fontSize: 17,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      constraints: const BoxConstraints(
+                        maxHeight: 280,
+                      ), // Auto size up to 280
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade50, // Slight green tint
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.green.shade300,
+                          width: 2,
+                        ),
+                        boxShadow: const [
+                          BoxShadow(color: Colors.black12, blurRadius: 5),
+                        ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Scrollbar(
+                          thumbVisibility: true,
+                          thickness: 8,
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: SizedBox(
+                              width: tableWidth,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min, // Hug content
+                                children: [
+                                  _buildHeader(
+                                    isSelectedTable: true,
+                                  ), // Disable sort on this header
+                                  const Divider(
+                                    height: 1,
+                                    thickness: 1,
+                                    color: Colors.black12,
+                                  ),
+                                  Flexible(
+                                    child: SingleChildScrollView(
+                                      scrollDirection: Axis.vertical,
+                                      child: Column(
+                                        children: widget.selectedProducts
+                                            .map(
+                                              (product) => _buildRow(
+                                                product,
+                                                showDecimals,
+                                              ),
+                                            )
+                                            .toList(),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              );
+            },
           );
         }),
-        const SizedBox(height: 10),
+        const SizedBox(height: 20),
         _buildSummary(showDecimals),
       ],
     );
   }
 
-  Widget _buildHeader() {
-    final headers = [
-      ("", 35.0, false, -1),
-      ("Product", 130.0, true, 1),
-      ("Brand", 65.0, true, 2),
-      ("Cat", 65.0, true, 3),
-      ("Sub", 65.0, true, 4),
-      ("Loc", 65.0, true, 5),
-      ("Buy", 65.0, true, 6),
-      ("Sell", 65.0, true, 7),
-      ("GP", 65.0, true, 8),
-      ("Cust", 65.0, true, 9),
-      ("Orig", 65.0, true, 10),
-    ];
+  // ✅ RESPONSIVE HEADER WITH FLEX
+  Widget _buildHeader({bool isSelectedTable = false}) {
+    Color headerColor = isSelectedTable
+        ? Colors.green.shade100
+        : Colors.grey.shade200;
 
     return Container(
       height: 40,
-      color: Colors.grey.shade200,
+      color: headerColor,
       child: Row(
-        children: headers.map((h) {
-          final (label, width, sortable, colIdx) = h;
-          return GestureDetector(
-            onTap: sortable
-                ? () {
-                    if (sortColumnIndex == colIdx) {
-                      _sortProducts(colIdx, !ascending);
-                    } else {
-                      _sortProducts(colIdx, true);
-                    }
-                  }
-                : null,
-            child: SizedBox(
-              width: width,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(width: 4),
-                  Flexible(
-                    child: Text(
-                      label,
-                      style: GoogleFonts.comicNeue(
-                        color: Colors.black,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (sortable && sortColumnIndex == colIdx)
-                    Icon(
-                      ascending ? Icons.arrow_upward : Icons.arrow_downward,
-                      size: 12,
-                      color: Colors.deepPurple,
-                    ),
-                ],
-              ),
-            ),
-          );
-        }).toList(),
+        children: [
+          const SizedBox(width: 45), // Space for checkbox
+          _headerCell("Product", 5, 1, isSelectedTable),
+          _headerCell("Brand", 2, 2, isSelectedTable),
+          _headerCell("Cat", 2, 3, isSelectedTable),
+          _headerCell("Sub", 2, 4, isSelectedTable),
+          _headerCell("Loc", 2, 5, isSelectedTable),
+          _headerCell("Buy", 2, 6, isSelectedTable),
+          _headerCell("Sell", 2, 7, isSelectedTable),
+          _headerCell("GP", 2, 8, isSelectedTable),
+          _headerCell("Cust Pts", 2, 9, isSelectedTable),
+          _headerCell("Orig Pts", 2, 10, isSelectedTable),
+        ],
       ),
     );
   }
 
+  Widget _headerCell(String label, int flex, int colIdx, bool isSelectedTable) {
+    return Expanded(
+      flex: flex,
+      child: GestureDetector(
+        onTap: isSelectedTable
+            ? null
+            : () {
+                if (sortColumnIndex == colIdx) {
+                  _sortProducts(colIdx, !ascending);
+                } else {
+                  _sortProducts(colIdx, true);
+                }
+              },
+        child: Container(
+          color: Colors.transparent, // Ensures full area is clickable
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  label,
+                  style: GoogleFonts.comicNeue(
+                    color: isSelectedTable
+                        ? Colors.green.shade900
+                        : Colors.black,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 13,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (!isSelectedTable && sortColumnIndex == colIdx)
+                Icon(
+                  ascending ? Icons.arrow_upward : Icons.arrow_downward,
+                  size: 14,
+                  color: Colors.deepPurple,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ✅ RESPONSIVE DATA ROW WITH FLEX
   Widget _buildRow(ProductModel product, bool showDecimals) {
     final isSelected = widget.selectedProducts.any((p) => p.id == product.id);
     final origPts = _origPts(product);
@@ -291,30 +446,31 @@ class _PackageProductTableState extends State<PackageProductTable> {
           children: [
             // Checkbox
             SizedBox(
-              width: 35,
+              width: 45,
               child: Checkbox(
                 value: isSelected,
                 onChanged: (_) => widget.onProductToggle(product),
                 activeColor: Colors.deepPurple,
               ),
             ),
-            // Product name + image
-            SizedBox(
-              width: 130,
+            // Product name + image (Flex 5)
+            Expanded(
+              flex: 5,
               child: Row(
-                mainAxisSize: MainAxisSize.min,
                 children: [
                   if (product.images.isNotEmpty)
                     Container(
                       width: 40,
                       height: 40,
-                      margin: const EdgeInsets.only(right: 6),
+                      margin: const EdgeInsets.only(right: 8),
                       decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
                         borderRadius: BorderRadius.circular(6),
-                        image: DecorationImage(
-                          image: NetworkImage(product.images.first),
-                          fit: BoxFit.cover,
-                        ),
+                        border: Border.all(color: Colors.black12),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: _buildSmartImage(product.images.first),
                       ),
                     ),
                   Expanded(
@@ -328,8 +484,8 @@ class _PackageProductTableState extends State<PackageProductTable> {
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.comicNeue(
                             color: Colors.black,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 11,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 13,
                           ),
                         ),
                         Text(
@@ -339,7 +495,7 @@ class _PackageProductTableState extends State<PackageProductTable> {
                           style: GoogleFonts.comicNeue(
                             color: Colors.black54,
                             fontWeight: FontWeight.bold,
-                            fontSize: 9,
+                            fontSize: 11,
                           ),
                         ),
                       ],
@@ -348,28 +504,36 @@ class _PackageProductTableState extends State<PackageProductTable> {
                 ],
               ),
             ),
-            _cell(product.brand, 65, Colors.black),
-            _cell(product.category, 65, Colors.black),
-            _cell(product.subCategory, 65, Colors.black),
-            _cell(product.deliveryLocation, 65, Colors.black),
-            _cell("${product.purchasePrice.toInt()}", 65, Colors.red),
-            _cell("${product.salePrice.toInt()}", 65, Colors.purple),
+            _cell(product.brand, 2, Colors.black87),
+            _cell(product.category, 2, Colors.black87),
+            _cell(product.subCategory, 2, Colors.black87),
+            _cell(product.deliveryLocation, 2, Colors.black87),
             _cell(
-              "${(product.salePrice - product.purchasePrice).toInt()}",
-              65,
-              Colors.blue,
+              "Rs. ${product.purchasePrice.toInt()}",
+              2,
+              Colors.red.shade700,
             ),
-            _cell(custPtsStr, 65, Colors.orange.shade900),
-            _cell(origPtsStr, 65, Colors.deepOrange),
+            _cell(
+              "Rs. ${product.salePrice.toInt()}",
+              2,
+              Colors.purple.shade700,
+            ),
+            _cell(
+              "Rs. ${(product.salePrice - product.purchasePrice).toInt()}",
+              2,
+              Colors.blue.shade700,
+            ),
+            _cell(custPtsStr, 2, Colors.orange.shade900),
+            _cell(origPtsStr, 2, Colors.deepOrange),
           ],
         ),
       ),
     );
   }
 
-  Widget _cell(String text, double width, Color color) {
-    return SizedBox(
-      width: width,
+  Widget _cell(String text, int flex, Color color) {
+    return Expanded(
+      flex: flex,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4),
         child: Text(
@@ -394,9 +558,7 @@ class _PackageProductTableState extends State<PackageProductTable> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.deepPurple.withOpacity(0.2)),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10),
-        ],
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
       ),
       child: Wrap(
         alignment: WrapAlignment.spaceBetween,
