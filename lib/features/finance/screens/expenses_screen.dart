@@ -1,3 +1,4 @@
+// Path: lib/features/finances/presentation/screens/ExpensesScreen.dart
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -10,9 +11,10 @@ class ExpensesScreen extends StatefulWidget {
 }
 
 class _ExpensesScreenState extends State<ExpensesScreen> {
-  final FinanceController controller = Get.find();
+  final FinanceController controller = Get.put(FinanceController());
   String? selectedCategory;
   String? selectedSubcategory;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -42,15 +44,24 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
         final catModel = controller.expenseCategories.firstWhereOrNull(
           (c) => c.name == selectedCategory,
         );
-        final subcategories = catModel?.subcategories ?? [];
+        final subcategories =
+            catModel?.subcategories.map((s) => s.name).toList() ?? [];
+
         if (selectedCategory != null &&
             !categories.contains(selectedCategory)) {
           selectedCategory = null;
           selectedSubcategory = null;
         }
         if (selectedSubcategory != null &&
-            !subcategories.contains(selectedSubcategory))
+            !subcategories.contains(selectedSubcategory)) {
           selectedSubcategory = null;
+        }
+
+        // Selected subcategory model (for type/fixedAmount info)
+        final selectedSubModel = catModel?.subcategories.firstWhereOrNull(
+          (s) => s.name == selectedSubcategory,
+        );
+
         double catTotal = 0.0;
         double subcatTotal = 0.0;
         List<ExpenseModel> tableData = [];
@@ -63,6 +74,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
           }
         }
         tableData.sort((a, b) => a.date.compareTo(b.date));
+
         return Padding(
           padding: const EdgeInsets.all(20),
           child: Column(
@@ -98,20 +110,55 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Category Total: PKR $catTotal',
+                      'Category Total: PKR ${catTotal.toStringAsFixed(0)}',
                       style: GoogleFonts.comicNeue(
                         color: Colors.white70,
                         fontSize: 16,
                       ),
                     ),
                     if (selectedSubcategory != null)
-                      Text(
-                        'Subcategory Total: PKR $subcatTotal',
-                        style: GoogleFonts.comicNeue(
-                          color: Colors.cyanAccent,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            'Subcategory Total: PKR ${subcatTotal.toStringAsFixed(0)}',
+                            style: GoogleFonts.comicNeue(
+                              color: Colors.cyanAccent,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                            ),
+                          ),
+                          // ✅ Fixed/Variable badge
+                          if (selectedSubModel != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: selectedSubModel.type == 'fixed'
+                                    ? Colors.amberAccent.withOpacity(0.2)
+                                    : Colors.greenAccent.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: selectedSubModel.type == 'fixed'
+                                      ? Colors.amberAccent
+                                      : Colors.greenAccent,
+                                ),
+                              ),
+                              child: Text(
+                                selectedSubModel.type == 'fixed'
+                                    ? '📌 Fixed: PKR ${selectedSubModel.fixedAmount.toStringAsFixed(0)}'
+                                    : '📊 Variable Expense',
+                                style: TextStyle(
+                                  color: selectedSubModel.type == 'fixed'
+                                      ? Colors.amberAccent
+                                      : Colors.greenAccent,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                   ],
                 ),
@@ -131,7 +178,11 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    onPressed: () => _expenseDialog(),
+                    onPressed: () => _expenseDialog(
+                      fixedAmount: selectedSubModel?.type == 'fixed'
+                          ? selectedSubModel?.fixedAmount
+                          : null,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -188,10 +239,10 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
             DataCell(Text(exp.date.toString().substring(0, 10))),
             DataCell(Text(exp.description)),
             DataCell(Text(bankName)),
-            DataCell(Text(prev.toString())),
+            DataCell(Text(prev.toStringAsFixed(0))),
             DataCell(
               Text(
-                exp.amount.toString(),
+                exp.amount.toStringAsFixed(0),
                 style: const TextStyle(color: Colors.redAccent),
               ),
             ),
@@ -245,6 +296,9 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     );
   }
 
+  // ─────────────────────────────────────────────
+  // MANAGE CATEGORIES DIALOG
+  // ─────────────────────────────────────────────
   void _manageCategoriesDialog() {
     Get.defaultDialog(
       backgroundColor: const Color(0xFF2C2C2C),
@@ -267,8 +321,13 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                   ),
                 ),
                 subtitle: Text(
-                  cat.subcategories.join(', '),
-                  style: const TextStyle(color: Colors.white70),
+                  cat.subcategories
+                      .map(
+                        (s) =>
+                            '${s.name} (${s.type == 'fixed' ? 'Fixed: ${s.fixedAmount.toStringAsFixed(0)}' : 'Variable'})',
+                      )
+                      .join(', '),
+                  style: const TextStyle(color: Colors.white70, fontSize: 11),
                 ),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -313,47 +372,277 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     );
   }
 
+  // ─────────────────────────────────────────────
+  // ADD / EDIT CATEGORY DIALOG
+  // ─────────────────────────────────────────────
   void _addCategoryDialog({ExpenseCategoryModel? cat}) {
     final nameCtrl = TextEditingController(text: cat?.name);
-    final subsCtrl = TextEditingController(text: cat?.subcategories.join(','));
+
+    // Local copy of subcategories for editing
+    List<SubcategoryModel> subcategories =
+        cat?.subcategories
+            .map(
+              (s) => SubcategoryModel(
+                name: s.name,
+                type: s.type,
+                fixedAmount: s.fixedAmount,
+              ),
+            )
+            .toList() ??
+        [];
+
+    // Controllers for new subcategory input
+    final newSubNameCtrl = TextEditingController();
+    String newSubType = 'variable';
+    final newSubAmtCtrl = TextEditingController();
+
     Get.defaultDialog(
       backgroundColor: const Color(0xFF2C2C2C),
       title: cat == null ? 'Add Category' : 'Edit Category',
       titleStyle: const TextStyle(color: Colors.white),
-      content: Column(
-        children: [
-          TextField(
-            controller: nameCtrl,
-            style: const TextStyle(color: Colors.white),
-            decoration: const InputDecoration(
-              hintText: 'Category Name',
-              hintStyle: TextStyle(color: Colors.white54),
+      content: StatefulBuilder(
+        builder: (ctx, setState) => SizedBox(
+          width: Get.width * 0.85,
+          height: Get.height * 0.65,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Category name
+                TextField(
+                  controller: nameCtrl,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    hintText: 'Category Name',
+                    hintStyle: TextStyle(color: Colors.white54),
+                    enabledBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(color: Colors.cyanAccent),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // ✅ Existing subcategories list
+                const Text(
+                  'Subcategories:',
+                  style: TextStyle(
+                    color: Colors.cyanAccent,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                if (subcategories.isEmpty)
+                  const Text(
+                    'Koi subcategory nahi. Neeche se add karo.',
+                    style: TextStyle(color: Colors.white54, fontSize: 12),
+                  ),
+                ...subcategories.asMap().entries.map((entry) {
+                  final idx = entry.key;
+                  final sub = entry.value;
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white10,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: sub.type == 'fixed'
+                            ? Colors.amberAccent.withOpacity(0.5)
+                            : Colors.greenAccent.withOpacity(0.5),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                sub.name,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              Text(
+                                sub.type == 'fixed'
+                                    ? '📌 Fixed: PKR ${sub.fixedAmount.toStringAsFixed(0)}'
+                                    : '📊 Variable',
+                                style: TextStyle(
+                                  color: sub.type == 'fixed'
+                                      ? Colors.amberAccent
+                                      : Colors.greenAccent,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(
+                            Icons.delete,
+                            color: Colors.redAccent,
+                            size: 16,
+                          ),
+                          onPressed: () =>
+                              setState(() => subcategories.removeAt(idx)),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+
+                const Divider(color: Colors.white24),
+
+                // ✅ Add new subcategory section
+                const Text(
+                  'Nai Subcategory Add Karo:',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: newSubNameCtrl,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    hintText: 'Subcategory Name (e.g. Office Rent)',
+                    hintStyle: TextStyle(color: Colors.white54, fontSize: 13),
+                    enabledBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: Colors.white24),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: Colors.cyanAccent),
+                    ),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 10,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                // ✅ Fixed / Variable toggle
+                Row(
+                  children: [
+                    const Text(
+                      'Type: ',
+                      style: TextStyle(color: Colors.white70),
+                    ),
+                    const SizedBox(width: 8),
+                    ChoiceChip(
+                      label: const Text('Fixed'),
+                      selected: newSubType == 'fixed',
+                      selectedColor: Colors.amberAccent,
+                      labelStyle: TextStyle(
+                        color: newSubType == 'fixed'
+                            ? Colors.black
+                            : Colors.white70,
+                      ),
+                      onSelected: (v) => setState(() => newSubType = 'fixed'),
+                    ),
+                    const SizedBox(width: 8),
+                    ChoiceChip(
+                      label: const Text('Variable'),
+                      selected: newSubType == 'variable',
+                      selectedColor: Colors.greenAccent,
+                      labelStyle: TextStyle(
+                        color: newSubType == 'variable'
+                            ? Colors.black
+                            : Colors.white70,
+                      ),
+                      onSelected: (v) =>
+                          setState(() => newSubType = 'variable'),
+                    ),
+                  ],
+                ),
+
+                // ✅ Fixed amount field (sirf fixed type ke liye)
+                if (newSubType == 'fixed') ...[
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: newSubAmtCtrl,
+                    keyboardType: TextInputType.number,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(
+                      hintText: 'Fixed Amount (e.g. 30000)',
+                      hintStyle: TextStyle(color: Colors.white54, fontSize: 13),
+                      enabledBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: Colors.amberAccent),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: Colors.white),
+                      ),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 10,
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 10),
+
+                // ✅ Add subcategory button
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white12,
+                      side: const BorderSide(color: Colors.cyanAccent),
+                    ),
+                    icon: const Icon(Icons.add, color: Colors.cyanAccent),
+                    label: const Text(
+                      'Add Subcategory',
+                      style: TextStyle(color: Colors.cyanAccent),
+                    ),
+                    onPressed: () {
+                      final subName = newSubNameCtrl.text.trim();
+                      if (subName.isEmpty) {
+                        Get.snackbar(
+                          'Error',
+                          'Subcategory ka naam likho',
+                          backgroundColor: Colors.red,
+                          colorText: Colors.white,
+                        );
+                        return;
+                      }
+                      setState(() {
+                        subcategories.add(
+                          SubcategoryModel(
+                            name: subName,
+                            type: newSubType,
+                            fixedAmount: newSubType == 'fixed'
+                                ? (double.tryParse(newSubAmtCtrl.text) ?? 0)
+                                : 0,
+                          ),
+                        );
+                        newSubNameCtrl.clear();
+                        newSubAmtCtrl.clear();
+                        newSubType = 'variable';
+                      });
+                    },
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 10),
-          TextField(
-            controller: subsCtrl,
-            style: const TextStyle(color: Colors.white),
-            decoration: const InputDecoration(
-              hintText: 'Subcategories (comma separated)',
-              hintStyle: TextStyle(color: Colors.white54),
-            ),
-          ),
-        ],
+        ),
       ),
       confirm: ElevatedButton(
         style: ElevatedButton.styleFrom(backgroundColor: Colors.cyanAccent),
         onPressed: () {
-          final subs = subsCtrl.text
-              .split(',')
-              .map((e) => e.trim())
-              .where((e) => e.isNotEmpty)
-              .toList();
+          if (nameCtrl.text.trim().isEmpty) return;
           controller.saveCategory(
             ExpenseCategoryModel(
               id: cat?.id,
               name: nameCtrl.text.trim(),
-              subcategories: subs,
+              subcategories: subcategories,
             ),
           );
           Get.back();
@@ -363,81 +652,111 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     );
   }
 
-  void _expenseDialog({ExpenseModel? expToEdit}) {
+  // ─────────────────────────────────────────────
+  // ADD / EDIT EXPENSE ENTRY DIALOG
+  // ─────────────────────────────────────────────
+  void _expenseDialog({ExpenseModel? expToEdit, double? fixedAmount}) {
     final descCtrl = TextEditingController(text: expToEdit?.description);
-    final amtCtrl = TextEditingController(text: expToEdit?.amount.toString());
+    // ✅ Agar fixed expense hai to amount pre-fill karo
+    final amtCtrl = TextEditingController(
+      text:
+          expToEdit?.amount.toStringAsFixed(0) ??
+          (fixedAmount != null && fixedAmount > 0
+              ? fixedAmount.toStringAsFixed(0)
+              : ''),
+    );
     String? bankId = expToEdit?.bankId;
     DateTime d = expToEdit?.date ?? DateTime.now();
+
     Get.defaultDialog(
       backgroundColor: const Color(0xFF2C2C2C),
       title: expToEdit == null ? 'Add Entry' : 'Edit Entry',
       titleStyle: const TextStyle(color: Colors.white),
       content: StatefulBuilder(
-        builder: (ctx, setDState) => Column(
-          children: [
-            TextField(
-              controller: descCtrl,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                hintText: 'Description',
-                hintStyle: TextStyle(color: Colors.white54),
-              ),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: amtCtrl,
-              keyboardType: TextInputType.number,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                hintText: 'Amount',
-                hintStyle: TextStyle(color: Colors.white54),
-              ),
-            ),
-            const SizedBox(height: 10),
-            DropdownButtonFormField<String>(
-              decoration: const InputDecoration(
-                filled: true,
-                fillColor: Color(0xFF2C2C2C),
-              ),
-              dropdownColor: const Color(0xFF2C2C2C),
-              value: bankId,
-              hint: const Text(
-                'Select Bank/Cash',
-                style: TextStyle(color: Colors.white54),
-              ),
-              items: controller.banks
-                  .map(
-                    (b) => DropdownMenuItem(
-                      value: b.id,
-                      child: Text(
-                        b.name,
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (val) => setDState(() => bankId = val),
-            ),
-            ListTile(
-              title: Text(
-                d.toString().substring(0, 10),
+        builder: (ctx, setDState) => SizedBox(
+          width: Get.width * 0.85,
+          child: Column(
+            children: [
+              TextField(
+                controller: descCtrl,
                 style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  hintText: 'Description',
+                  hintStyle: TextStyle(color: Colors.white54),
+                ),
               ),
-              trailing: const Icon(
-                Icons.calendar_today,
-                color: Colors.cyanAccent,
+              const SizedBox(height: 10),
+              TextField(
+                controller: amtCtrl,
+                keyboardType: TextInputType.number,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: 'Amount',
+                  hintStyle: const TextStyle(color: Colors.white54),
+                  // ✅ Agar fixed amount hai to badge dikhao
+                  suffixIcon: fixedAmount != null && fixedAmount > 0
+                      ? Tooltip(
+                          message: 'Fixed expense',
+                          child: const Icon(
+                            Icons.lock,
+                            color: Colors.amberAccent,
+                            size: 18,
+                          ),
+                        )
+                      : null,
+                ),
               ),
-              onTap: () async {
-                DateTime? dt = await showDatePicker(
-                  context: context,
-                  initialDate: d,
-                  firstDate: DateTime(2000),
-                  lastDate: DateTime(2100),
-                );
-                if (dt != null) setDState(() => d = dt);
-              },
-            ),
-          ],
+              const SizedBox(height: 10),
+
+              // ✅ Bank dropdown with available balance
+              DropdownButtonFormField<String>(
+                decoration: const InputDecoration(
+                  filled: true,
+                  fillColor: Color(0xFF2C2C2C),
+                  enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.white24),
+                  ),
+                ),
+                dropdownColor: const Color(0xFF2C2C2C),
+                value: bankId,
+                hint: const Text(
+                  'Select Bank/Cash',
+                  style: TextStyle(color: Colors.white54),
+                ),
+                items: controller.banks.map((b) {
+                  return DropdownMenuItem(
+                    value: b.id,
+                    child: Text(
+                      // ✅ Bank name ke saath balance bhi
+                      '${b.name}  (PKR ${b.balance.toStringAsFixed(0)})',
+                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                    ),
+                  );
+                }).toList(),
+                onChanged: (val) => setDState(() => bankId = val),
+              ),
+
+              ListTile(
+                title: Text(
+                  d.toString().substring(0, 10),
+                  style: const TextStyle(color: Colors.white),
+                ),
+                trailing: const Icon(
+                  Icons.calendar_today,
+                  color: Colors.cyanAccent,
+                ),
+                onTap: () async {
+                  DateTime? dt = await showDatePicker(
+                    context: context,
+                    initialDate: d,
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime(2100),
+                  );
+                  if (dt != null) setDState(() => d = dt);
+                },
+              ),
+            ],
+          ),
         ),
       ),
       confirm: ElevatedButton(

@@ -107,21 +107,65 @@ class BankTransactionModel {
 class ExpenseCategoryModel {
   String? id;
   String name;
-  List<String> subcategories;
+  List<SubcategoryModel> subcategories; // ✅ String se SubcategoryModel
+
   ExpenseCategoryModel({
     this.id,
     required this.name,
     required this.subcategories,
   });
+
   Map<String, dynamic> toMap() => {
     'name': name,
-    'subcategories': subcategories,
+    'subcategories': subcategories.map((s) => s.toMap()).toList(),
   };
+
   factory ExpenseCategoryModel.fromMap(Map<String, dynamic> map, String id) =>
       ExpenseCategoryModel(
         id: id,
         name: map['name'] ?? '',
-        subcategories: List<String>.from(map['subcategories'] ?? []),
+        subcategories: (map['subcategories'] as List? ?? []).map((s) {
+          // ✅ Agar string hai (purana data) to variable banao
+          if (s is String) {
+            return SubcategoryModel(name: s, type: 'variable', fixedAmount: 0);
+          }
+          // ✅ Agar Map hai (naya data) to properly parse karo
+          if (s is Map<String, dynamic>) {
+            return SubcategoryModel.fromMap(s);
+          }
+          // ✅ Fallback
+          return SubcategoryModel(
+            name: s.toString(),
+            type: 'variable',
+            fixedAmount: 0,
+          );
+        }).toList(),
+      );
+}
+
+// Subcategory ki naye model
+class SubcategoryModel {
+  String name;
+  String type; // 'fixed' ya 'variable'
+  double fixedAmount;
+
+  SubcategoryModel({
+    required this.name,
+    required this.type,
+    this.fixedAmount = 0,
+  });
+
+  Map<String, dynamic> toMap() => {
+    'name': name,
+    'type': type,
+    'fixedAmount': fixedAmount,
+  };
+
+  factory SubcategoryModel.fromMap(Map<String, dynamic> map) =>
+      SubcategoryModel(
+        name: map['name'] ?? '',
+        type: map['type'] ?? 'variable',
+        fixedAmount: (map['fixedAmount'] ?? 0).toDouble(),
       );
 }
 

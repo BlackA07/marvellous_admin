@@ -137,6 +137,32 @@ class VendorPaymentController extends GetxController {
       );
       batch.set(transactionRef, transaction.toMap());
 
+      // --- NEW LEDGER HOOK: VENDOR PAYMENT ---
+      DocumentReference ledgerRef = _db
+          .collection('admin_ledger_transactions')
+          .doc();
+      batch.set(ledgerRef, {
+        'type': 'out',
+        'category': 'vendor_payment',
+        'amount': payingAmount,
+        'paymentMethod': paymentMode == 'Cash'
+            ? 'cash'
+            : (paymentMode == 'Bank Transfer' ? 'online' : 'cheque'),
+        'bankId': bankId,
+        'bankName': bankName,
+        'chequeNumber': chequeNumber,
+        'chequeDate': chequeDate != null
+            ? Timestamp.fromDate(chequeDate)
+            : null,
+        'description': 'Payment to Vendor ($vendorName) for Bill #$billNumber',
+        'linkedVendorId': vendorId,
+        'linkedVendorName': vendorName,
+        'screenshotBase64': screenshotBase64,
+        'createdBy': isEditMode ? 'admin' : 'system',
+        'date': Timestamp.fromDate(paymentDate),
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
       DocumentReference vendorRef = _db.collection('vendors').doc(vendorId);
       batch.update(vendorRef, {
         'beginningBalance': FieldValue.increment(-payingAmount),
@@ -280,6 +306,25 @@ class VendorPaymentController extends GetxController {
       });
 
       batch.delete(_db.collection('vendor_payment_history').doc(paymentDocId));
+      // --- NEW LEDGER HOOK: VENDOR PAYMENT REVERSAL (EDIT) ---
+      DocumentReference ledgerReversalRef = _db
+          .collection('admin_ledger_transactions')
+          .doc();
+      batch.set(ledgerReversalRef, {
+        'type': 'in', // Reversing an 'out' payment makes it an 'in'
+        'category': 'vendor_payment_refund',
+        'amount': oldAmount,
+        'paymentMethod': paymentMode == 'Cash'
+            ? 'cash'
+            : (paymentMode == 'Bank Transfer' ? 'online' : 'cheque'),
+        'description':
+            'Reversal: Edited Payment to Vendor ($vendorName) for Bill #$billNumber',
+        'linkedVendorId': vendorId,
+        'linkedVendorName': vendorName,
+        'createdBy': 'admin',
+        'date': FieldValue.serverTimestamp(),
+        'createdAt': FieldValue.serverTimestamp(),
+      });
 
       QuerySnapshot duesSnapshot = await _db
           .collection('vendor_dues')

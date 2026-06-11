@@ -207,14 +207,20 @@ class StaffListScreen extends StatelessWidget {
                   CircleAvatar(
                     radius: 24,
                     backgroundColor: _accent.withOpacity(0.15),
-                    child: Text(
-                      staff.name.substring(0, 1).toUpperCase(),
-                      style: const TextStyle(
-                        color: _accent,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 18,
-                      ),
-                    ),
+                    backgroundImage:
+                        (staff.imageUrl != null && staff.imageUrl!.isNotEmpty)
+                        ? NetworkImage(staff.imageUrl!)
+                        : null,
+                    child: (staff.imageUrl == null || staff.imageUrl!.isEmpty)
+                        ? Text(
+                            staff.name.substring(0, 1).toUpperCase(),
+                            style: const TextStyle(
+                              color: _accent,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 18,
+                            ),
+                          )
+                        : null,
                   ),
                   const SizedBox(width: 14),
                   Expanded(

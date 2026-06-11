@@ -1,7 +1,9 @@
+import 'package:cloudinary_public/cloudinary_public.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:image_picker/image_picker.dart';
 import '../model/staff_model.dart';
 import '../repository/staff_repository.dart';
 
@@ -11,6 +13,13 @@ class AddStaffController extends GetxController {
   final GlobalKey<FormState> formKey = GlobalKey<FormState>();
 
   final Rx<DateTime> joiningDate = DateTime.now().obs;
+
+  final RxString staffImageUrl = ''.obs;
+  final Rx<XFile?> staffImageFile = Rx<XFile?>(null);
+  final RxBool isImageUploading = false.obs;
+
+  static const String _cloudName = 'dzluvpc34';
+  static const String _uploadPreset = 'marvellous';
 
   // --- Personal Info ---
   final nameController = TextEditingController();
@@ -72,7 +81,7 @@ class AddStaffController extends GetxController {
   ];
 
   // --- Bonus & Attendance ---
-  final RxString bonusType = 'full'.obs;
+  final RxString bonusType = 'no_bonus'.obs;
   final RxInt bonusYearlyCount = 1.obs;
   final RxList<BonusPayDate> bonusPayDates = <BonusPayDate>[].obs;
   final RxDouble perBonusAmount = 0.0.obs;
@@ -151,7 +160,10 @@ class AddStaffController extends GetxController {
   void _calculateBonus() {
     final salary = double.tryParse(salaryController.text) ?? 0;
 
-    if (salary <= 0 || employmentType.value == 'commission') {
+    // YEH ADD KARO:
+    if (salary <= 0 ||
+        employmentType.value == 'commission' ||
+        bonusType.value == 'no_bonus') {
       perBonusAmount.value = 0;
       bonusMonthlyAmount.value = 0;
       totalMonthlyPayable.value = salary;
@@ -159,13 +171,10 @@ class AddStaffController extends GetxController {
     }
 
     switch (bonusType.value) {
-      case 'double':
-        perBonusAmount.value = salary * 2;
-        break;
       case 'half':
         perBonusAmount.value = salary / 2;
         break;
-      default:
+      default: // 'full'
         perBonusAmount.value = salary;
     }
 
@@ -208,10 +217,48 @@ class AddStaffController extends GetxController {
     }
   }
 
+  Future<void> pickAndUploadImage() async {
+    try {
+      final picker = ImagePicker();
+      final XFile? picked = await picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 70,
+        maxWidth: 800,
+      );
+      if (picked == null) return;
+
+      staffImageFile.value = picked;
+      isImageUploading.value = true;
+
+      final cloudinary = CloudinaryPublic(_cloudName, _uploadPreset);
+      final response = await cloudinary.uploadFile(
+        CloudinaryFile.fromFile(
+          picked.path,
+          resourceType: CloudinaryResourceType.Image,
+          folder: 'staff_photos',
+        ),
+      );
+
+      staffImageUrl.value = response.secureUrl;
+    } catch (e) {
+      Get.snackbar(
+        'Upload Failed',
+        'Image upload error: $e',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+      staffImageFile.value = null;
+    } finally {
+      isImageUploading.value = false;
+    }
+  }
+
   void _resetForm() {
     joiningDate.value = DateTime.now();
 
     nameController.clear();
+    staffImageUrl.value = '';
+    staffImageFile.value = null;
     fatherNameController.clear();
     cnicController.clear();
     mobile1Controller.clear();
@@ -313,6 +360,7 @@ class AddStaffController extends GetxController {
             ? null
             : mobile2Controller.text.trim(),
         email: staffEmail,
+        imageUrl: staffImageUrl.value.isEmpty ? null : staffImageUrl.value,
         password: staffPassword,
         designation: designationController.text.trim(),
         address: addressController.text.trim(),

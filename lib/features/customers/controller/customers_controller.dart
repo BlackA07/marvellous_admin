@@ -17,8 +17,15 @@ class CustomersController extends GetxController {
   var currentFilter = 'All'.obs;
   var statusFilter = 'all'.obs; // 'all' | 'active' | 'inactive'
 
+  // ✅ NEW: Location Filter Variables
+  var selectedLocationFilter = 'All Locations'.obs;
+  var availableLocations = <String>['All Locations'].obs;
+
   var isSelectionMode = false.obs;
   var selectedUids = <String>{}.obs;
+
+  // Memoized referrals count to avoid repeating computation per card
+  Map<String, int> referralsCountCache = {};
 
   @override
   void onInit() {
@@ -31,6 +38,13 @@ class CustomersController extends GetxController {
       isLoading(true);
       var data = await _repo.getAllCustomers();
       customersList.assignAll(data);
+
+      // ✅ Compute Referrals for all customers efficiently
+      _computeReferrals();
+
+      // ✅ Extract unique locations from data
+      _extractAvailableLocations();
+
       _applyAll();
     } catch (e) {
       Get.snackbar("Error", "Could not load customers: $e");
@@ -39,12 +53,44 @@ class CustomersController extends GetxController {
     }
   }
 
+  void _computeReferrals() {
+    referralsCountCache.clear();
+    for (var customer in customersList) {
+      if (customer.myReferralCode.isNotEmpty) {
+        int count = customersList
+            .where((c) => c.referralCode == customer.myReferralCode)
+            .length;
+        referralsCountCache[customer.uid] = count;
+      }
+    }
+  }
+
+  int getReferralsCount(String uid) {
+    return referralsCountCache[uid] ?? 0;
+  }
+
+  void _extractAvailableLocations() {
+    Set<String> locations = {'All Locations'};
+    for (var customer in customersList) {
+      // ✅ Using city and country from your data
+      String city = customer.city.trim();
+      String country = customer.country.trim();
+
+      if (city.isNotEmpty && city != 'null') {
+        locations.add(city);
+      }
+      if (country.isNotEmpty && country != 'null') {
+        locations.add(country);
+      }
+    }
+    availableLocations.assignAll(locations.toList()..sort());
+  }
+
   void searchCustomer(String query) {
     if (query.isEmpty) {
       _applyAll();
     } else {
-      // Search within current status-filtered base
-      final base = _statusFilteredList();
+      final base = _baseFilteredList();
       filteredList.assignAll(
         base.where(
           (c) =>
@@ -67,21 +113,40 @@ class CustomersController extends GetxController {
     _applyAll();
   }
 
-  // Returns list after applying status filter only
-  List<CustomerModel> _statusFilteredList() {
-    switch (statusFilter.value) {
-      case 'active':
-        return customersList.where((c) => c.isMLMActive).toList();
-      case 'inactive':
-        return customersList.where((c) => !c.isMLMActive).toList();
-      default:
-        return List.from(customersList);
-    }
+  // ✅ NEW: Apply Location Filter
+  void applyLocationFilter(String location) {
+    selectedLocationFilter.value = location;
+    _applyAll();
   }
 
-  // Applies both status filter + sort filter together
+  // Returns list after applying BOTH status and location filters
+  List<CustomerModel> _baseFilteredList() {
+    List<CustomerModel> list = List.from(customersList);
+
+    // Apply Status
+    if (statusFilter.value == 'active') {
+      list = list.where((c) => c.isMLMActive).toList();
+    } else if (statusFilter.value == 'inactive') {
+      list = list.where((c) => !c.isMLMActive).toList();
+    }
+
+    // ✅ Apply Location
+    if (selectedLocationFilter.value != 'All Locations') {
+      String filterLower = selectedLocationFilter.value.toLowerCase();
+      list = list
+          .where(
+            (c) =>
+                c.city.toLowerCase() == filterLower ||
+                c.country.toLowerCase() == filterLower,
+          )
+          .toList();
+    }
+
+    return list;
+  }
+
   void _applyAll() {
-    List<CustomerModel> list = _statusFilteredList();
+    List<CustomerModel> list = _baseFilteredList();
 
     switch (currentFilter.value) {
       case 'Newest':
@@ -96,12 +161,8 @@ class CustomersController extends GetxController {
         break;
       case 'Most Refers':
         list.sort((a, b) {
-          int aRefers = customersList
-              .where((c) => c.referralCode == a.myReferralCode)
-              .length;
-          int bRefers = customersList
-              .where((c) => c.referralCode == b.myReferralCode)
-              .length;
+          int aRefers = getReferralsCount(a.uid);
+          int bRefers = getReferralsCount(b.uid);
           return bRefers.compareTo(aRefers);
         });
         break;

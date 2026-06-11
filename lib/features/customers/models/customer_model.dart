@@ -6,6 +6,8 @@ class CustomerModel {
   final String email;
   final String phone;
   final String country;
+  final String state; // ✅ Added State
+  final String city; // ✅ Added City
   final String address;
   final String myReferralCode;
   final String referralCode;
@@ -14,7 +16,7 @@ class CustomerModel {
   final double walletBalance;
   final double shoppingWalletBalance;
   final double totalPoints;
-  final double totalCashbackEarned; // Added
+  final double totalCashbackEarned;
   final String membershipStatus;
   final bool isMLMActive;
   final DateTime? createdAt;
@@ -25,6 +27,8 @@ class CustomerModel {
     required this.email,
     required this.phone,
     required this.country,
+    required this.state, // ✅ Added
+    required this.city, // ✅ Added
     required this.address,
     required this.myReferralCode,
     required this.referralCode,
@@ -38,13 +42,15 @@ class CustomerModel {
     required this.isMLMActive,
     this.createdAt,
   });
-  // CustomerModel class ke andar add karo
+
   CustomerModel copyWith({
     String? uid,
     String? name,
     String? email,
     String? phone,
     String? country,
+    String? state, // ✅ Added
+    String? city, // ✅ Added
     String? address,
     String? myReferralCode,
     String? referralCode,
@@ -64,6 +70,8 @@ class CustomerModel {
       email: email ?? this.email,
       phone: phone ?? this.phone,
       country: country ?? this.country,
+      state: state ?? this.state, // ✅ Added
+      city: city ?? this.city, // ✅ Added
       address: address ?? this.address,
       myReferralCode: myReferralCode ?? this.myReferralCode,
       referralCode: referralCode ?? this.referralCode,
@@ -87,6 +95,8 @@ class CustomerModel {
       email: map['email'] ?? 'N/A',
       phone: map['phone'] ?? 'N/A',
       country: map['country'] ?? 'N/A',
+      state: map['state'] ?? 'N/A', // ✅ Added
+      city: map['city'] ?? 'N/A', // ✅ Added
       address: map['address'] ?? 'N/A',
       myReferralCode: map['myReferralCode'] ?? '',
       referralCode:

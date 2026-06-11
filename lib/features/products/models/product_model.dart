@@ -11,19 +11,18 @@ class ProductModel {
   double purchasePrice;
   double salePrice;
   double originalPrice;
-  int stockQuantity;
-  int stockOut;
+  int stockQuantity; // Available Stock (Left)
+  int stockOut; // Total Sold
+  int stockIn; // ✅ ADDED: Total Bought (In)
   String vendorId;
-  String vendorName; // ✅ ADDED: Vendor Name
+  String vendorName;
   List<String> images;
   String? video;
   DateTime dateAdded;
-  String deliveryLocation; // Only Karachi, Pakistan, or Worldwide
+  String deliveryLocation;
   String warranty;
   double productPoints;
 
-  // --- NEW FLEXIBLE LOGISTICS FIELDS ---
-  // Key: "Karachi", "Pakistan", "Worldwide"
   Map<String, double> deliveryFeesMap;
   Map<String, String> deliveryTimeMap;
   double codFee;
@@ -35,7 +34,7 @@ class ProductModel {
   bool showDecimalPoints;
   String? ram;
   String? storage;
-  String status; // ✅ ADDED: Status (pending, approved, rejected)
+  String status;
 
   ProductModel({
     this.id,
@@ -50,8 +49,9 @@ class ProductModel {
     required this.originalPrice,
     required this.stockQuantity,
     this.stockOut = 0,
+    this.stockIn = 0, // ✅ ADDED
     required this.vendorId,
-    this.vendorName = 'Admin', // ✅ Default for older admin products
+    this.vendorName = 'Admin',
     required this.images,
     this.video,
     required this.dateAdded,
@@ -68,7 +68,7 @@ class ProductModel {
     this.showDecimalPoints = true,
     this.ram,
     this.storage,
-    this.status = 'approved', // ✅ Default for older admin products
+    this.status = 'approved',
   });
 
   Map<String, dynamic> toMap() {
@@ -85,8 +85,9 @@ class ProductModel {
       'originalPrice': originalPrice,
       'stockQuantity': stockQuantity,
       'stockOut': stockOut,
+      'stockIn': stockIn, // ✅ ADDED
       'vendorId': vendorId,
-      'vendorName': vendorName, // ✅ ADDED
+      'vendorName': vendorName,
       'images': images,
       'video': video,
       'dateAdded': Timestamp.fromDate(dateAdded),
@@ -103,7 +104,7 @@ class ProductModel {
       'showDecimalPoints': showDecimalPoints,
       'ram': ram,
       'storage': storage,
-      'status': status, // ✅ ADDED
+      'status': status,
     };
   }
 
@@ -121,8 +122,10 @@ class ProductModel {
       originalPrice: (map['originalPrice'] ?? 0).toDouble(),
       stockQuantity: map['stockQuantity'] ?? 0,
       stockOut: map['stockOut'] ?? 0,
+      // ✅ Fallback to stockQuantity for older products that didn't have stockIn
+      stockIn: map['stockIn'] ?? map['stockQuantity'] ?? 0,
       vendorId: map['vendorId'] ?? '',
-      vendorName: map['vendorName'] ?? 'Admin', // ✅ ADDED Fallback
+      vendorName: map['vendorName'] ?? 'Admin',
       images: List<String>.from(map['images'] ?? []),
       video: map['video'],
       dateAdded: (map['dateAdded'] as Timestamp).toDate(),
@@ -139,7 +142,7 @@ class ProductModel {
       showDecimalPoints: map['showDecimalPoints'] ?? true,
       ram: map['ram'],
       storage: map['storage'],
-      status: map['status'] ?? 'approved', // ✅ ADDED Fallback
+      status: map['status'] ?? 'approved',
     );
   }
 }

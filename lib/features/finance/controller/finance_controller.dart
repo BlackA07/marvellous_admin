@@ -1,3 +1,4 @@
+// Path: lib/features/finances/controller/finance_controller.dart
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get/get.dart';
 import '../models/finance_models.dart';
@@ -84,4 +85,22 @@ class FinanceController extends GetxController {
 
   Stream<List<BankTransactionModel>> getBankHistory(String bankId) =>
       _repo.getBankTransactions(bankId);
+
+  // ✅ NEW: Transfer between accounts
+  Future<bool> transferFunds({
+    required BankModel fromBank,
+    required BankModel toBank,
+    required double amount,
+    required String description,
+  }) async {
+    isLoading.value = true;
+    final success = await _repo.transferFunds(
+      fromBank: fromBank,
+      toBank: toBank,
+      amount: amount,
+      description: description,
+    );
+    isLoading.value = false;
+    return success;
+  }
 }

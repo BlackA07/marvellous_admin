@@ -268,7 +268,7 @@ class AdminAppBar extends StatelessWidget {
                       icon: Icons.assignment_late_outlined,
                       tooltip: "Pending Operations & Requests",
                       onTap: () {
-                        Get.to(() => const OrdersDashboardScreen());
+                        Get.to(() => OrdersDashboardScreen());
                       },
                     ),
                   ),

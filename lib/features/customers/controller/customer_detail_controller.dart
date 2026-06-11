@@ -11,10 +11,12 @@ class CustomerDetailController extends GetxController {
   var isLoading = true.obs;
   var customer = Rxn<CustomerModel>();
   var mlmTree = Rxn<MLMNode>();
+  double _paidFee = 0.0;
 
   // Dates
-  var startDate = DateTime.now().subtract(const Duration(days: 30)).obs;
-  var endDate = DateTime.now().obs;
+  var startDate = DateTime(DateTime.now().year, DateTime.now().month, 1).obs;
+  var endDate = DateTime(DateTime.now().year, DateTime.now().month + 1, 0).obs;
+  var isAllTime = false.obs;
 
   // Stats
   var ownSaleAmount = 0.0.obs;
@@ -25,9 +27,9 @@ class CustomerDetailController extends GetxController {
   var totalWithdrawn = 0.0.obs;
 
   // Profile extras
-  var downlineCount = 0.obs; // total active downline
-  var directActiveCount = 0.obs; // direct active members
-  var totalActiveCount = 0.obs; // all active members in tree
+  var downlineCount = 0.obs;
+  var directActiveCount = 0.obs;
+  var totalActiveCount = 0.obs;
   var paidStatus = "".obs;
   var remainingFee = 0.0.obs;
   var membershipStatus = "".obs;
@@ -37,19 +39,50 @@ class CustomerDetailController extends GetxController {
   var levelEarnings = <Map<String, dynamic>>[].obs;
   var directReferralCount = 0.obs;
 
-  // Orders
+  var directMembersList = <Map<String, dynamic>>[].obs;
+  var otherMembersList = <Map<String, dynamic>>[].obs;
+
+  var networkLevelBreakdown = <Map<String, dynamic>>[].obs;
   var ordersList = <Map<String, dynamic>>[].obs;
+
+  // Points config from Firestore
+  double _profitPerPoint = 199.0;
+  bool showDecimals = false;
 
   CustomerDetailController({required this.uid});
 
   @override
   void onInit() {
     super.onInit();
+    _setCurrentMonthRange();
     loadAllData();
+  }
+
+  void _setCurrentMonthRange() {
+    final now = DateTime.now();
+    startDate.value = DateTime(now.year, now.month, 1);
+    endDate.value = DateTime(now.year, now.month + 1, 0);
+    isAllTime.value = false;
+  }
+
+  void setAllTime() {
+    isAllTime.value = true;
+    startDate.value = DateTime(2020, 1, 1);
+    endDate.value = DateTime(2100, 12, 31);
+    fetchStatsForDateRange();
+    fetchLevelEarnings();
+  }
+
+  void setCurrentMonth() {
+    _setCurrentMonthRange();
+    isAllTime.value = false;
+    fetchStatsForDateRange();
+    fetchLevelEarnings();
   }
 
   Future<void> loadAllData() async {
     isLoading(true);
+    await _fetchPointsConfig();
     await _fetchCustomerData();
     await fetchStatsForDateRange();
     await _loadMLMTree();
@@ -58,14 +91,92 @@ class CustomerDetailController extends GetxController {
     isLoading(false);
   }
 
+  Future<void> _fetchPointsConfig() async {
+    try {
+      final doc = await _db
+          .collection('admin_settings')
+          .doc('global_config')
+          .get();
+      if (doc.exists) {
+        final data = doc.data() as Map<String, dynamic>;
+        _profitPerPoint = (data['profitPerPoint'] ?? 199.0).toDouble();
+        showDecimals = data['showDecimals'] ?? false;
+      }
+    } catch (e) {
+      debugPrint("Points config fetch error: $e");
+    }
+  }
+
+  // ✅ Customer App Wali EXACT Points Logic
+  Map<String, dynamic> getOrderPointsData(Map<String, dynamic> order) {
+    double grossProfit =
+        double.tryParse(order['grossProfit']?.toString() ?? '0') ?? 0.0;
+    double ppp = _profitPerPoint > 0 ? _profitPerPoint : 199.0;
+    double totalPoints = grossProfit > 0 ? grossProfit / ppp : 0.0;
+
+    List items = order['items'] ?? [];
+    double totalSale = 0.0;
+    for (var item in items) {
+      double sp =
+          double.tryParse(
+            item['salePrice']?.toString() ?? item['price']?.toString() ?? '0',
+          ) ??
+          0.0;
+      int qty = int.tryParse(item['quantity']?.toString() ?? '1') ?? 1;
+      totalSale += sp * qty;
+    }
+
+    List<double> itemPts = [];
+    for (var item in items) {
+      double sp =
+          double.tryParse(
+            item['salePrice']?.toString() ?? item['price']?.toString() ?? '0',
+          ) ??
+          0.0;
+      int qty = int.tryParse(item['quantity']?.toString() ?? '1') ?? 1;
+      double itemSale = sp * qty;
+
+      double itemP = 0.0;
+      if (totalSale > 0 && itemSale > 0) {
+        itemP = (itemSale / totalSale) * totalPoints;
+      }
+      itemPts.add(itemP);
+    }
+
+    return {'grandTotalPoints': totalPoints, 'itemPoints': itemPts};
+  }
+
+  String formatPoints(double points) {
+    if (showDecimals) return points.toStringAsFixed(2);
+    return points.toInt().toString();
+  }
+
   Future<void> _fetchCustomerData() async {
     try {
       var doc = await _db.collection('users').doc(uid).get();
       if (doc.exists) {
-        customer.value = CustomerModel.fromMap(
-          doc.data() as Map<String, dynamic>,
-          doc.id,
-        );
+        var data = doc.data() as Map<String, dynamic>;
+
+        // ✅ FIX: Image Fetching Logic from Subcollection for Detail Screen
+        String userImage = data['faceImage'] ?? '';
+        if (userImage.isEmpty) {
+          try {
+            var imgDoc = await _db
+                .collection('users')
+                .doc(uid)
+                .collection('profile_data')
+                .doc('image')
+                .get();
+            if (imgDoc.exists && imgDoc.data() != null) {
+              userImage = imgDoc.data()!['faceImage'] ?? '';
+            }
+          } catch (_) {}
+        }
+        // Override faceImage in data so the model gets the correct image
+        data['faceImage'] = userImage;
+
+        customer.value = CustomerModel.fromMap(data, doc.id);
+        _paidFee = (data['paidFees'] ?? 0.0).toDouble();
       }
     } catch (e) {
       Get.snackbar("Error", "Failed to load user info");
@@ -75,14 +186,12 @@ class CustomerDetailController extends GetxController {
   Future<void> _fetchProfileExtras() async {
     if (customer.value == null) return;
     try {
-      // Upline code
       uplineCode.value =
           customer.value!.referralCode == "null" ||
               customer.value!.referralCode.isEmpty
           ? "Top / Direct"
           : customer.value!.referralCode;
 
-      // Membership status
       membershipStatus.value = customer.value!.membershipStatus ?? "pending";
 
       double requiredFee = 15000;
@@ -91,38 +200,90 @@ class CustomerDetailController extends GetxController {
       if (membershipStatus.value.toLowerCase() == "approved") {
         paidFee = requiredFee;
       } else {
-        paidFee = 0.0;
+        paidFee = _paidFee;
       }
 
-      paidStatus.value = paidFee >= requiredFee ? "Paid" : "Unpaid";
+      paidStatus.value = paidFee >= requiredFee
+          ? "Paid"
+          : paidFee > 0
+          ? "Partial (Rs. ${paidFee.toStringAsFixed(0)})"
+          : "Unpaid";
       remainingFee.value = (requiredFee - paidFee).clamp(0, double.infinity);
 
-      // Direct active members (mlm_downline of this user, isMLMActive = true)
-      final directSnap = await _db
+      final String myCode = customer.value!.myReferralCode;
+
+      final directByReferrerSnap = await _db
           .collection('users')
-          .doc(uid)
-          .collection('mlm_downline')
+          .where('mlmReferrerUid', isEqualTo: uid)
           .get();
 
       int directActive = 0;
-      for (var doc in directSnap.docs) {
-        final userDoc = await _db.collection('users').doc(doc.id).get();
-        if (userDoc.exists) {
-          final data = userDoc.data() as Map<String, dynamic>;
-          if (data['isMLMActive'] == true) directActive++;
+      List<Map<String, dynamic>> directList = [];
+
+      final commSnap = await _db
+          .collection('users')
+          .doc(uid)
+          .collection('commission_history')
+          .where('type', isEqualTo: 'direct_sale_bonus')
+          .get();
+
+      Map<String, double> directCommMap = {};
+      for (var doc in commSnap.docs) {
+        final d = doc.data() as Map<String, dynamic>;
+        String fromUid = d['fromUid'] ?? '';
+        double amt = (d['amount'] ?? 0.0).toDouble();
+        if (fromUid.isNotEmpty) {
+          directCommMap[fromUid] = (directCommMap[fromUid] ?? 0.0) + amt;
         }
       }
+
+      for (var doc in directByReferrerSnap.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        if (data['isMLMActive'] == true) {
+          directActive++;
+          directList.add({
+            'uid': doc.id,
+            'name': data['name'] ?? data['username'] ?? 'User',
+            'image': data['faceImage'] ?? '',
+            'amount': directCommMap[doc.id] ?? 0.0,
+            'isMLMActive': true,
+          });
+        }
+      }
+
+      if (directActive == 0 && myCode.isNotEmpty) {
+        final directByCodeSnap = await _db
+            .collection('users')
+            .where('referralCode', isEqualTo: myCode)
+            .get();
+
+        for (var doc in directByCodeSnap.docs) {
+          final data = doc.data() as Map<String, dynamic>;
+          if (data['isMLMActive'] == true) {
+            directActive++;
+            directList.add({
+              'uid': doc.id,
+              'name': data['name'] ?? data['username'] ?? 'User',
+              'image': data['faceImage'] ?? '',
+              'amount': directCommMap[doc.id] ?? 0.0,
+              'isMLMActive': true,
+            });
+          }
+        }
+      }
+
+      directList.sort(
+        (a, b) => (b['amount'] as double).compareTo(a['amount'] as double),
+      );
+
       directActiveCount.value = directActive;
       directReferralCount.value = directActive;
-
-      // Total active in full tree (counted during tree build)
-      // Will be set after _loadMLMTree completes
+      directMembersList.assignAll(directList);
     } catch (e) {
       debugPrint("Profile extras error: $e");
     }
   }
 
-  // ── MLM TREE (mlm_downline subcollection, unlimited levels, active only) ──
   Future<void> _loadMLMTree() async {
     if (customer.value == null) return;
     try {
@@ -138,8 +299,8 @@ class CustomerDetailController extends GetxController {
         totalCommission: customer.value!.totalCashbackEarned,
         rank: _calcRank(customer.value!.totalPoints),
         isMLMActive: customer.value!.isMLMActive,
-        parentUid: '', // root has no parent
-        referrerUid: '', // root has no referrer
+        parentUid: '',
+        referrerUid: '',
         rootUid: uid,
         activeMembersRef: (count) => activeMembersTotal += count,
       );
@@ -152,10 +313,6 @@ class CustomerDetailController extends GetxController {
     }
   }
 
-  /// Builds tree from mlm_downline subcollection recursively.
-  /// - Only includes nodes where isMLMActive == true
-  /// - Detects isDirectReferral (joined via rootUser's referral code)
-  /// - Detects isOverflow (placed under a different parent than referrer)
   Future<MLMNode> _buildAdminTree({
     required String nodeUid,
     required String name,
@@ -172,7 +329,6 @@ class CustomerDetailController extends GetxController {
     required Function(int) activeMembersRef,
   }) async {
     List<MLMNode> children = [];
-    int activeCount = 0;
 
     try {
       final downlineSnap = await _db
@@ -181,7 +337,6 @@ class CustomerDetailController extends GetxController {
           .collection('mlm_downline')
           .get();
 
-      // Sort by joinedAt ascending (earliest first)
       final sortedDocs = downlineSnap.docs.toList()
         ..sort((a, b) {
           final aData = a.data() as Map<String, dynamic>;
@@ -202,7 +357,6 @@ class CustomerDetailController extends GetxController {
 
           final childData = childDoc.data() as Map<String, dynamic>;
 
-          // ✅ Skip inactive users — they don't appear in tree or count
           if (childData['isMLMActive'] != true) continue;
 
           final childPoints = (childData['totalPoints'] ?? 0.0).toDouble();
@@ -214,11 +368,10 @@ class CustomerDetailController extends GetxController {
           final childReferrerUid = childData['mlmReferrerUid'] ?? '';
           final childMyCode = childData['myReferralCode'] ?? '';
 
-          // D badge: direct referral of root user
           final bool isDirectReferral =
+              childReferrerUid == rootUid ||
               childReferralCode == customer.value!.myReferralCode;
 
-          // OF badge: placed under a different parent than who referred them
           final bool isOverflow =
               childReferrerUid.isNotEmpty &&
               childParentUid.isNotEmpty &&
@@ -242,8 +395,6 @@ class CustomerDetailController extends GetxController {
             activeMembersRef: (count) => childActiveCount += count,
           );
 
-          activeCount++;
-          activeCount += childActiveCount;
           activeMembersRef(1 + childActiveCount);
 
           children.add(
@@ -271,7 +422,7 @@ class CustomerDetailController extends GetxController {
       rank: rank,
       totalCommissionEarned: totalCommission,
       children: children,
-      totalMembers: activeCount,
+      totalMembers: children.length,
       paidMembers: 0,
       remainingSlots: 7 - children.length,
       isOverflow: false,
@@ -286,42 +437,165 @@ class CustomerDetailController extends GetxController {
     return 'Diamond';
   }
 
-  // ── PUBLIC: fetch level earnings ────────────────────────────────────────
+  // ✅ FIX: Exact BFS mapping for absolute level/depth accuracy
   Future<void> fetchLevelEarnings() async {
     try {
-      final start = Timestamp.fromDate(startDate.value);
-      final end = Timestamp.fromDate(
-        endDate.value.add(const Duration(hours: 23, minutes: 59)),
-      );
+      // Step 1: Run BFS from root user's downline to map exact depth
+      QuerySnapshot downlineSnap = await _db
+          .collection('users')
+          .doc(uid)
+          .collection('mlm_downline')
+          .get();
+      Map<int, int> depthCounts = {};
 
-      final commSnap = await _db
+      for (var doc in downlineSnap.docs) {
+        int depth = (doc.data() as Map<String, dynamic>)['level'] ?? 1;
+        depthCounts[depth] = (depthCounts[depth] ?? 0) + 1;
+      }
+
+      depthCounts.clear();
+      List<Map<String, dynamic>> queue = [
+        {'uid': uid, 'depth': 0},
+      ];
+      Set<String> visitedNodes = {uid};
+      Map<String, int> uidToExactDepth = {};
+
+      while (queue.isNotEmpty) {
+        var current = queue.removeAt(0);
+        String cUid = current['uid'];
+        int cDepth = current['depth'] as int;
+
+        uidToExactDepth[cUid] = cDepth;
+
+        if (cDepth > 0) {
+          depthCounts[cDepth] = (depthCounts[cDepth] ?? 0) + 1;
+        }
+
+        if (cDepth < 13) {
+          try {
+            QuerySnapshot snap = await _db
+                .collection('users')
+                .doc(cUid)
+                .collection('mlm_downline')
+                .get();
+            for (var doc in snap.docs) {
+              if (!visitedNodes.contains(doc.id)) {
+                visitedNodes.add(doc.id);
+                queue.add({'uid': doc.id, 'depth': cDepth + 1});
+              }
+            }
+          } catch (_) {}
+        }
+      }
+
+      // Step 2: Fetch Commission History
+      Query commQuery = _db
           .collection('users')
           .doc(uid)
           .collection('commission_history')
-          .where('timestamp', isGreaterThanOrEqualTo: start)
-          .where('timestamp', isLessThanOrEqualTo: end)
-          .get();
+          .where(
+            'type',
+            whereIn: ['downline_purchase', 'direct_sale_bonus', 'commission'],
+          );
 
-      Map<int, double> levelTotal = {};
-      Map<int, int> levelCount = {};
+      if (!isAllTime.value) {
+        final start = Timestamp.fromDate(startDate.value);
+        final end = Timestamp.fromDate(
+          endDate.value.add(const Duration(hours: 23, minutes: 59)),
+        );
+        commQuery = commQuery
+            .where('timestamp', isGreaterThanOrEqualTo: start)
+            .where('timestamp', isLessThanOrEqualTo: end);
+      }
+
+      final commSnap = await commQuery.get();
+      Map<int, double> depthCommissions = {};
+      Map<String, Map<String, dynamic>> memberDetailMap = {};
 
       for (var doc in commSnap.docs) {
-        final data = doc.data();
-        int level = data['level'] ?? 0;
+        var data = doc.data() as Map<String, dynamic>;
+        int cLevel = data['level'] ?? 2;
+        String fromUid = data['fromUid'] ?? doc.id;
+        String fromUser = data['fromUser'] ?? 'Unknown';
         double amount = (data['amount'] ?? 0.0).toDouble();
-        levelTotal[level] = (levelTotal[level] ?? 0) + amount;
-        levelCount[level] = (levelCount[level] ?? 0) + 1;
+
+        // Cross-reference with BFS depth
+        int depth =
+            uidToExactDepth[fromUid] ??
+            data['depth'] ??
+            (data['type'] == 'direct_sale_bonus' ? 1 : (cLevel - 1));
+
+        if (depth == 0) continue;
+
+        depthCommissions[depth] = (depthCommissions[depth] ?? 0.0) + amount;
+
+        if (fromUid.isNotEmpty && fromUid != doc.id) {
+          if (memberDetailMap.containsKey(fromUid)) {
+            memberDetailMap[fromUid]!['amount'] += amount;
+          } else {
+            memberDetailMap[fromUid] = {
+              'uid': fromUid,
+              'name': fromUser,
+              'image': '',
+              'amount': amount,
+              'level': depth,
+            };
+          }
+        }
       }
 
+      // Assemble final level array
       List<Map<String, dynamic>> breakdown = [];
-      for (int lvl in levelTotal.keys.toList()..sort()) {
-        breakdown.add({
-          'level': lvl,
-          'peopleCount': levelCount[lvl] ?? 0,
-          'totalCommission': levelTotal[lvl] ?? 0.0,
-        });
+      for (int i = 1; i <= 13; i++) {
+        int filled = depthCounts[i] ?? 0;
+        double commission = depthCommissions[i] ?? 0.0;
+
+        if (filled > 0 || commission > 0) {
+          breakdown.add({
+            'level': i,
+            'peopleCount': filled,
+            'totalCommission': commission,
+          });
+        }
       }
       levelEarnings.value = breakdown;
+
+      // Fetch images
+      final uidsToFetch = memberDetailMap.keys.toList();
+      for (int i = 0; i < uidsToFetch.length; i += 10) {
+        final batch = uidsToFetch.skip(i).take(10).toList();
+        for (var mUid in batch) {
+          try {
+            final mDoc = await _db.collection('users').doc(mUid).get();
+            if (mDoc.exists) {
+              final mData = mDoc.data() as Map<String, dynamic>;
+              memberDetailMap[mUid]!['image'] = mData['faceImage'] ?? '';
+              memberDetailMap[mUid]!['name'] =
+                  mData['name'] ??
+                  mData['username'] ??
+                  memberDetailMap[mUid]!['name'];
+            }
+          } catch (_) {}
+        }
+      }
+
+      // Populate Other Members (Level 2+ ONLY based on exact depth)
+      List<Map<String, dynamic>> otherList = [];
+      for (var entry in memberDetailMap.values) {
+        // ✅ FIX: Check karen k kahin ye user already Direct list mein to nahi hai?
+        bool isAlreadyDirect = directMembersList.any(
+          (d) => d['uid'] == entry['uid'],
+        );
+
+        // Agar direct nahi hai, tabhi Other network mein daalo
+        if (!isAlreadyDirect && (entry['level'] as int) > 1) {
+          otherList.add(Map<String, dynamic>.from(entry));
+        }
+      }
+      otherList.sort(
+        (a, b) => (b['amount'] as double).compareTo(a['amount'] as double),
+      );
+      otherMembersList.assignAll(otherList);
     } catch (e) {
       debugPrint("Level earnings error: $e");
     }
@@ -329,23 +603,27 @@ class CustomerDetailController extends GetxController {
 
   Future<void> fetchStatsForDateRange() async {
     try {
-      final Timestamp start = Timestamp.fromDate(startDate.value);
-      final Timestamp end = Timestamp.fromDate(
-        endDate.value.add(const Duration(hours: 23, minutes: 59)),
-      );
-
-      final ordersSnap = await _db
+      Query ordersQuery = _db
           .collection('orders')
-          .where('userId', isEqualTo: uid)
-          .where('createdAt', isGreaterThanOrEqualTo: start)
-          .where('createdAt', isLessThanOrEqualTo: end)
-          .get();
+          .where('userId', isEqualTo: uid);
+
+      if (!isAllTime.value) {
+        final Timestamp start = Timestamp.fromDate(startDate.value);
+        final Timestamp end = Timestamp.fromDate(
+          endDate.value.add(const Duration(hours: 23, minutes: 59)),
+        );
+        ordersQuery = ordersQuery
+            .where('createdAt', isGreaterThanOrEqualTo: start)
+            .where('createdAt', isLessThanOrEqualTo: end);
+      }
+
+      final ordersSnap = await ordersQuery.get();
 
       double sale = 0.0;
       final List<Map<String, dynamic>> fetchedOrders = [];
 
       for (var doc in ordersSnap.docs) {
-        final d = doc.data();
+        final d = doc.data() as Map<String, dynamic>;
         final status = d['status'] ?? '';
         if (status != 'rejected' && status != 'cancelled') {
           sale += (d['grandTotal'] ?? d['totalAmount'] ?? 0.0).toDouble();
@@ -372,26 +650,6 @@ class CustomerDetailController extends GetxController {
         raw['paymentMethod'] =
             d['paymentMethod'] ?? d['paymentType'] ?? 'Unknown';
 
-        final items = raw['items'] as List? ?? [];
-        for (var item in items) {
-          String? productId = item['productId'];
-          if (productId != null) {
-            final productDoc = await _db
-                .collection('products')
-                .doc(productId)
-                .get();
-            if (productDoc.exists) {
-              String? img = productDoc.data()?['image'];
-              if (img != null && img.isNotEmpty) item['image'] = img;
-              if ((item['price'] ?? 0) == 0) {
-                item['price'] = productDoc.data()?['price'] ?? 0;
-              }
-            }
-          }
-          if ((item['price'] ?? 0) == 0) {
-            item['price'] = item['unitPrice'] ?? item['salePrice'] ?? 0;
-          }
-        }
         fetchedOrders.add(raw);
       }
 
@@ -406,55 +664,88 @@ class CustomerDetailController extends GetxController {
       receiptCount.value = ordersSnap.docs.length;
       ordersList.assignAll(fetchedOrders);
 
-      final commSnap = await _db
+      Query commQuery = _db
           .collection('users')
           .doc(uid)
-          .collection('commission_history')
-          .where('timestamp', isGreaterThanOrEqualTo: start)
-          .where('timestamp', isLessThanOrEqualTo: end)
-          .get();
+          .collection('commission_history');
+
+      if (!isAllTime.value) {
+        final start = Timestamp.fromDate(startDate.value);
+        final end = Timestamp.fromDate(
+          endDate.value.add(const Duration(hours: 23, minutes: 59)),
+        );
+        commQuery = commQuery
+            .where('timestamp', isGreaterThanOrEqualTo: start)
+            .where('timestamp', isLessThanOrEqualTo: end);
+      }
+
+      final commSnap = await commQuery.get();
 
       double allEarnings = 0.0;
       double refSalesEst = 0.0;
       for (var doc in commSnap.docs) {
-        final d = doc.data();
-        final double amt = (d['amount'] ?? 0.0).toDouble();
-        allEarnings += amt;
-        refSalesEst += (d['baseAmount'] ?? amt) * 10;
+        final d = doc.data() as Map<String, dynamic>;
+        final String type = d['type'] ?? '';
+        if (type == 'direct_sale_bonus' ||
+            type == 'commission' ||
+            type == 'downline_purchase') {
+          final double amt = (d['amount'] ?? 0.0).toDouble();
+          allEarnings += amt;
+          refSalesEst += (d['baseAmount'] ?? amt) * 10;
+        }
       }
       allLevelEarnings.value = allEarnings;
       referralSaleTotal.value = refSalesEst;
 
-      final walletHistSnap = await _db
+      Query walletQuery = _db
           .collection('users')
           .doc(uid)
-          .collection('wallet_history')
-          .where('timestamp', isGreaterThanOrEqualTo: start)
-          .where('timestamp', isLessThanOrEqualTo: end)
-          .get();
+          .collection('wallet_history');
+
+      if (!isAllTime.value) {
+        final start = Timestamp.fromDate(startDate.value);
+        final end = Timestamp.fromDate(
+          endDate.value.add(const Duration(hours: 23, minutes: 59)),
+        );
+        walletQuery = walletQuery
+            .where('timestamp', isGreaterThanOrEqualTo: start)
+            .where('timestamp', isLessThanOrEqualTo: end);
+      }
+
+      final walletHistSnap = await walletQuery.get();
 
       double cb = 0.0;
       for (var doc in walletHistSnap.docs) {
-        final d = doc.data();
+        final d = doc.data() as Map<String, dynamic>;
         if (d['type'] == 'cashback') {
           cb += (d['amount'] ?? 0.0).toDouble();
         }
       }
       cashbackEarned.value = cb;
 
-      final withdrawSnap = await _db
+      Query withdrawQuery = _db
           .collection('finances')
           .where('userId', isEqualTo: uid)
           .where('type', isEqualTo: 'withdrawal')
-          .where('status', isEqualTo: 'approved')
-          .where('processedAt', isGreaterThanOrEqualTo: start)
-          .where('processedAt', isLessThanOrEqualTo: end)
-          .get();
+          .where('status', isEqualTo: 'approved');
+
+      if (!isAllTime.value) {
+        final start = Timestamp.fromDate(startDate.value);
+        final end = Timestamp.fromDate(
+          endDate.value.add(const Duration(hours: 23, minutes: 59)),
+        );
+        withdrawQuery = withdrawQuery
+            .where('processedAt', isGreaterThanOrEqualTo: start)
+            .where('processedAt', isLessThanOrEqualTo: end);
+      }
+
+      final withdrawSnap = await withdrawQuery.get();
 
       double wTotal = 0.0;
       for (var doc in withdrawSnap.docs) {
-        wTotal += (doc.data()['amountToReceive'] ?? doc.data()['amount'] ?? 0.0)
-            .toDouble();
+        final data = doc.data() as Map<String, dynamic>?;
+        if (data == null) continue;
+        wTotal += (data['amountToReceive'] ?? data['amount'] ?? 0.0).toDouble();
       }
       totalWithdrawn.value = wTotal;
     } catch (e) {
@@ -466,38 +757,69 @@ class CustomerDetailController extends GetxController {
     double amount,
     String reason,
     bool isDeduction,
+    String? selectedBankId,
+    String? selectedBankName,
   ) async {
     try {
       final double finalAmount = isDeduction ? -amount : amount;
+
       await _db.collection('users').doc(uid).update({
         'walletBalance': FieldValue.increment(finalAmount),
       });
+
       await _db.collection('users').doc(uid).collection('wallet_history').add({
         'amount': finalAmount,
         'type': isDeduction ? 'admin_deduction' : 'admin_credit',
         'description': 'Admin Adjust: $reason',
         'timestamp': FieldValue.serverTimestamp(),
       });
+
+      if (!isDeduction && selectedBankId != null && selectedBankId.isNotEmpty) {
+        await _db.collection('banks').doc(selectedBankId).update({
+          'balance': FieldValue.increment(-amount),
+        });
+        await _db
+            .collection('banks')
+            .doc(selectedBankId)
+            .collection('transactions')
+            .add({
+              'amount': -amount,
+              'type': 'admin_wallet_credit',
+              'description': 'Admin credited to user wallet: $reason',
+              'userId': uid,
+              'timestamp': FieldValue.serverTimestamp(),
+            });
+      } else if (isDeduction) {
+        await _db.collection('company_finances').doc('balance').set({
+          'totalCompanyBalance': FieldValue.increment(amount),
+        }, SetOptions(merge: true));
+
+        await _db
+            .collection('company_finances')
+            .doc('balance')
+            .collection('history')
+            .add({
+              'amount': amount,
+              'source': 'Admin Deduction from user wallet',
+              'userId': uid,
+              'reason': reason,
+              'timestamp': FieldValue.serverTimestamp(),
+            });
+      }
+
+      await _db.collection('users').doc(uid).collection('notifications').add({
+        'title': isDeduction ? 'Wallet Deduction 💳' : 'Wallet Credit 💰',
+        'body': isDeduction
+            ? 'Rs. ${amount.toStringAsFixed(0)} has been deducted from your wallet. Reason: $reason'
+            : 'Rs. ${amount.toStringAsFixed(0)} has been added to your wallet${selectedBankName != null ? ' from $selectedBankName' : ''}. Reason: $reason',
+        'type': 'wallet_adjustment',
+        'isRead': false,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+
       final c = customer.value!;
-      customer.value = CustomerModel(
-        uid: c.uid,
-        name: c.name,
-        email: c.email,
-        phone: c.phone,
-        country: c.country,
-        address: c.address,
-        myReferralCode: c.myReferralCode,
-        referralCode: c.referralCode,
-        faceImage: c.faceImage,
-        cnicNumber: c.cnicNumber,
-        walletBalance: c.walletBalance + finalAmount,
-        shoppingWalletBalance: c.shoppingWalletBalance,
-        totalPoints: c.totalPoints,
-        totalCashbackEarned: c.totalCashbackEarned,
-        membershipStatus: c.membershipStatus,
-        isMLMActive: c.isMLMActive,
-        createdAt: c.createdAt,
-      );
+      customer.value = c.copyWith(walletBalance: c.walletBalance + finalAmount);
+
       Get.back();
       Get.snackbar(
         "Success",
@@ -543,6 +865,31 @@ class CustomerDetailController extends GetxController {
         backgroundColor: Colors.red,
         colorText: Colors.white,
       );
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> fetchMemberCommissionHistory(
+    String memberUid,
+  ) async {
+    try {
+      final snap = await _db
+          .collection('users')
+          .doc(uid)
+          .collection('commission_history')
+          .where('fromUid', isEqualTo: memberUid)
+          .orderBy('timestamp', descending: true)
+          .get();
+
+      return snap.docs.map((doc) {
+        final d = Map<String, dynamic>.from(doc.data());
+        if (d['timestamp'] is Timestamp) {
+          d['timestamp'] = (d['timestamp'] as Timestamp).toDate();
+        }
+        return d;
+      }).toList();
+    } catch (e) {
+      debugPrint("Member commission history error: $e");
+      return [];
     }
   }
 }

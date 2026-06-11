@@ -1,8 +1,10 @@
 import 'dart:convert';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 import '../../controller/customers_controller.dart';
 import '../../models/customer_model.dart';
 import 'customer_detail_screen.dart';
@@ -115,7 +117,7 @@ class CustomersScreen extends StatelessWidget {
           ),
           const SizedBox(height: 8),
 
-          // ── Active / Inactive / All Status Filters ───────────────────
+          // ── Active / Inactive Status Filters ───────────────────
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 15),
@@ -149,6 +151,53 @@ class CustomersScreen extends StatelessWidget {
               ),
             ),
           ),
+          const SizedBox(height: 8),
+
+          // ── ✅ NEW: Location Filter ───────────────────
+          Obx(() {
+            if (controller.availableLocations.length <= 1)
+              return const SizedBox.shrink();
+            return SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 15),
+              child: Row(
+                children: controller.availableLocations.map((location) {
+                  bool isSel =
+                      controller.selectedLocationFilter.value == location;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.location_on,
+                            size: 14,
+                            color: isSel ? Colors.white : Colors.indigo,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            location,
+                            style: TextStyle(
+                              color: isSel ? Colors.white : Colors.indigo,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                      selected: isSel,
+                      selectedColor: Colors.indigo,
+                      backgroundColor: Colors.indigo.shade50,
+                      side: BorderSide(color: Colors.indigo.shade200),
+                      onSelected: (_) =>
+                          controller.applyLocationFilter(location),
+                    ),
+                  );
+                }).toList(),
+              ),
+            );
+          }),
           const SizedBox(height: 10),
 
           // ── Count indicator ──────────────────────────────────────────
@@ -176,11 +225,12 @@ class CustomersScreen extends StatelessWidget {
           // ── List ─────────────────────────────────────────────────────
           Expanded(
             child: Obx(() {
-              if (controller.isLoading.value)
+              if (controller.isLoading.value) {
                 return const Center(
                   child: CircularProgressIndicator(color: Colors.black),
                 );
-              if (controller.filteredList.isEmpty)
+              }
+              if (controller.filteredList.isEmpty) {
                 return Center(
                   child: Text(
                     "No users found.",
@@ -191,12 +241,14 @@ class CustomersScreen extends StatelessWidget {
                     ),
                   ),
                 );
+              }
 
               return ListView.builder(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 15,
                   vertical: 5,
                 ),
+                physics: const BouncingScrollPhysics(),
                 itemCount: controller.filteredList.length,
                 itemBuilder: (context, index) {
                   final customer = controller.filteredList[index];
@@ -211,8 +263,9 @@ class CustomersScreen extends StatelessWidget {
       // ── Bulk Message FAB ─────────────────────────────────────────────
       floatingActionButton: Obx(() {
         if (!controller.isSelectionMode.value ||
-            controller.selectedUids.isEmpty)
+            controller.selectedUids.isEmpty) {
           return const SizedBox.shrink();
+        }
         return FloatingActionButton.extended(
           backgroundColor: Colors.indigo,
           icon: const Icon(Icons.send, color: Colors.white),
@@ -305,6 +358,9 @@ class CustomersScreen extends StatelessWidget {
 
     final bool isActive = customer.isMLMActive;
 
+    // ✅ Retrieve Pre-computed referrals count
+    int referralsCount = controller.getReferralsCount(customer.uid);
+
     return Obx(() {
       bool isSelected = controller.selectedUids.contains(customer.uid);
 
@@ -343,6 +399,7 @@ class CustomersScreen extends StatelessWidget {
             ],
           ),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
@@ -354,7 +411,7 @@ class CustomersScreen extends StatelessWidget {
                           controller.toggleUserSelection(customer.uid),
                     ),
 
-                  // Profile Image with active indicator ring
+                  // Profile Image with Lazy Loading from Subcollection
                   Stack(
                     children: [
                       Container(
@@ -370,9 +427,7 @@ class CustomersScreen extends StatelessWidget {
                             width: 2.5,
                           ),
                         ),
-                        child: ClipOval(
-                          child: _buildBase64Image(customer.faceImage),
-                        ),
+                        child: ClipOval(child: _buildProfileImage(customer)),
                       ),
                       Positioned(
                         bottom: 2,
@@ -462,8 +517,8 @@ class CustomersScreen extends StatelessWidget {
                                 customer.phone,
                                 style: GoogleFonts.comicNeue(
                                   fontSize: 15,
+                                  fontWeight: FontWeight.w900,
                                   color: Colors.blue.shade700,
-                                  fontWeight: FontWeight.bold,
                                 ),
                               ),
                               const SizedBox(width: 4),
@@ -505,10 +560,91 @@ class CustomersScreen extends StatelessWidget {
                   ),
                 ],
               ),
+
+              const SizedBox(height: 8),
+
+              // ✅ NEW: Points, Join Date & Referrals Row
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade100,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.amber.shade400),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.star,
+                          size: 14,
+                          color: Colors.amber.shade800,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          "Pts: ${customer.totalPoints.toStringAsFixed(0)}",
+                          style: GoogleFonts.comicNeue(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: Colors.amber.shade900,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // ✅ NEW: Total Referrals Badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.indigo.shade50,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.indigo.shade200),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.people,
+                          size: 14,
+                          color: Colors.indigo.shade700,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          "Refers: $referralsCount",
+                          style: GoogleFonts.comicNeue(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: Colors.indigo.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  Text(
+                    "Joined: ${DateFormat('dd MMM yyyy').format(customer.createdAt ?? DateTime.now())}",
+                    style: GoogleFonts.comicNeue(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black45,
+                    ),
+                  ),
+                ],
+              ),
+
               Divider(
                 color: isActive ? Colors.green.shade200 : Colors.red.shade200,
                 thickness: 1,
-                height: 20,
+                height: 15,
               ),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -546,35 +682,76 @@ class CustomersScreen extends StatelessWidget {
     );
   }
 
-  // NAYA — yeh lagao
-  Widget _buildBase64Image(String imageData) {
-    // ── URL hai to seedha Network ─────────────────────────────
-    if (imageData.startsWith('http')) {
-      return Image.network(
-        imageData,
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) =>
-            const Icon(Icons.person, color: Colors.black, size: 30),
-      );
+  Widget _buildProfileImage(CustomerModel customer) {
+    if (customer.faceImage.isNotEmpty) {
+      return _buildSmartImage(customer.faceImage);
     }
-    // ── Base64 hai ────────────────────────────────────────────
-    if (imageData.isNotEmpty) {
-      try {
-        final clean = imageData.contains(',')
-            ? imageData.split(',').last
-            : imageData;
-        return Image.memory(
-          base64Decode(clean),
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) =>
-              const Icon(Icons.person, color: Colors.black, size: 30),
-        );
-      } catch (_) {}
-    }
-    return const Icon(Icons.person, color: Colors.black, size: 30);
+
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance
+          .collection('users')
+          .doc(customer.uid)
+          .collection('profile_data')
+          .doc('image')
+          .get(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: SizedBox(
+              height: 20,
+              width: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.black26,
+              ),
+            ),
+          );
+        }
+
+        String fetchedImage = '';
+        if (snapshot.hasData && snapshot.data!.exists) {
+          final data = snapshot.data!.data() as Map<String, dynamic>?;
+          fetchedImage = data?['faceImage'] ?? '';
+        }
+        return _buildSmartImage(fetchedImage);
+      },
+    );
   }
 
-  // ── Broadcast Dialog — fixed text colors ─────────────────────────────
+  Widget _buildSmartImage(String imageData) {
+    if (imageData.trim().isEmpty) {
+      return const Icon(Icons.person, color: Colors.black26, size: 35);
+    }
+    try {
+      String cleanData = imageData.trim();
+
+      if (cleanData.startsWith('http')) {
+        return Image.network(
+          cleanData,
+          fit: BoxFit.cover,
+          cacheWidth: 150,
+          errorBuilder: (_, __, ___) =>
+              const Icon(Icons.person, color: Colors.black26, size: 35),
+        );
+      } else {
+        if (cleanData.contains(',')) {
+          cleanData = cleanData.split(',').last;
+        }
+        cleanData = cleanData.replaceAll(RegExp(r'\s+'), '');
+
+        return Image.memory(
+          base64Decode(cleanData),
+          fit: BoxFit.cover,
+          cacheWidth: 150,
+          errorBuilder: (_, __, ___) =>
+              const Icon(Icons.person, color: Colors.black26, size: 35),
+        );
+      }
+    } catch (_) {
+      return const Icon(Icons.person, color: Colors.black26, size: 35);
+    }
+  }
+
   void _showMessageDialog(
     BuildContext context,
     CustomersController controller,
@@ -607,7 +784,6 @@ class CustomersScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 15),
 
-                  // ✅ FIX: style with black text explicitly
                   TextField(
                     controller: titleCtrl,
                     style: const TextStyle(
@@ -683,14 +859,7 @@ class CustomersScreen extends StatelessWidget {
                               ),
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(10),
-                                child: Image.memory(
-                                  base64Decode(selectedImageBase64!),
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => const Icon(
-                                    Icons.broken_image,
-                                    color: Colors.red,
-                                  ),
-                                ),
+                                child: _buildSmartImage(selectedImageBase64!),
                               ),
                             ),
                             Positioned(

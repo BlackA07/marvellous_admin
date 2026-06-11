@@ -16,7 +16,8 @@ import '../widgets/order_card.dart';
 import 'order_detail_screen.dart';
 
 class OrdersDashboardScreen extends StatelessWidget {
-  const OrdersDashboardScreen({Key? key}) : super(key: key);
+  OrdersDashboardScreen({Key? key}) : super(key: key);
+  final RxString orderFilter = 'all'.obs;
 
   @override
   Widget build(BuildContext context) {
@@ -397,34 +398,98 @@ class OrdersDashboardScreen extends StatelessWidget {
   }
 
   Widget _buildOrdersTab(OrdersController controller) {
-    return Obx(() {
-      if (controller.isLoading.value)
-        return const Center(
-          child: CircularProgressIndicator(color: Colors.redAccent),
-        );
-      if (controller.pendingOrders.isEmpty)
-        return _buildEmptyState("No COD Orders", Icons.shopping_bag_outlined);
-      return ListView.builder(
-        padding: const EdgeInsets.all(12),
-        itemCount: controller.pendingOrders.length,
-        itemBuilder: (context, index) {
-          final order = controller.pendingOrders[index];
-          return CommonListCard(
-            title: order.productName,
-            subtitle:
-                "User: ${order.customerName}\nStatus: ${order.status.toUpperCase()}\nPayment: ${order.paymentMethod}",
-            imageUrl: order.productImage,
-            price: "PKR ${order.price.toStringAsFixed(0)}",
-            onView: () => Get.to(() => OrderDetailScreen(order: order)),
-            onAccept: () => _showCenteredStatusDialog(context, order),
-            onReject: () => _showRejectOrderDialog(
-              order.id,
-              controller,
-            ), // REASON DIALOG USE HOGA YAHAN
-          );
-        },
-      );
-    });
+    return Column(
+      children: [
+        // ✅ NEW: Filter Chips
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          color: const Color(0xFF1E1E1E),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Obx(
+              () => Row(
+                children: [
+                  _filterChip('All', 'all'),
+                  _filterChip('Pending', 'pending'),
+                  _filterChip('Confirmed', 'confirmed'),
+                  _filterChip('Shipped', 'shipped'),
+                ],
+              ),
+            ),
+          ),
+        ),
+
+        Expanded(
+          child: Obx(() {
+            if (controller.isLoading.value) {
+              return const Center(
+                child: CircularProgressIndicator(color: Colors.redAccent),
+              );
+            }
+
+            // ✅ NAYA: Filter logic
+            var list = controller.pendingOrders.toList();
+            if (orderFilter.value != 'all') {
+              list = list
+                  .where((o) => o.status.toLowerCase() == orderFilter.value)
+                  .toList();
+            }
+
+            if (list.isEmpty) {
+              return _buildEmptyState(
+                "No Orders Found",
+                Icons.shopping_bag_outlined,
+              );
+            }
+
+            return ListView.builder(
+              padding: const EdgeInsets.all(12),
+              itemCount: list.length,
+              itemBuilder: (context, index) {
+                final order = list[index];
+                return CommonListCard(
+                  title: order.productName,
+                  subtitle:
+                      "User: ${order.customerName}\nStatus: ${order.status.toUpperCase()}\nPayment: ${order.paymentMethod}",
+                  imageUrl: order.productImage,
+                  price: "PKR ${order.price.toStringAsFixed(0)}",
+                  onView: () => Get.to(() => OrderDetailScreen(order: order)),
+                  onAccept: () => _showCenteredStatusDialog(context, order),
+                  onReject: () => _showRejectOrderDialog(order.id, controller),
+                );
+              },
+            );
+          }),
+        ),
+      ],
+    );
+  }
+
+  // ✅ NAYA: Chip UI Builder
+  Widget _filterChip(String label, String value) {
+    final bool isActive = orderFilter.value == value;
+    return GestureDetector(
+      onTap: () => orderFilter.value = value,
+      child: Container(
+        margin: const EdgeInsets.only(right: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isActive ? Colors.redAccent.withOpacity(0.2) : Colors.white10,
+          border: Border.all(
+            color: isActive ? Colors.redAccent : Colors.transparent,
+          ),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.comicNeue(
+            color: isActive ? Colors.redAccent : Colors.white54,
+            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+            fontSize: 13,
+          ),
+        ),
+      ),
+    );
   }
 
   void _showCenteredStatusDialog(BuildContext context, OrderModel order) {
@@ -457,21 +522,35 @@ class OrdersDashboardScreen extends StatelessWidget {
                   style: const TextStyle(color: Colors.white54, fontSize: 10),
                 ),
                 const SizedBox(height: 25),
-                _dialogBtn(
-                  "CONFIRM ORDER",
-                  Colors.blue,
-                  () => _handleUpdate(order.id, 'confirmed'),
-                ),
-                _dialogBtn(
-                  "MARK AS SHIPPED",
-                  Colors.orange,
-                  () => _handleUpdate(order.id, 'shipped'),
-                ),
-                _dialogBtn(
-                  "MARK AS DELIVERED",
-                  Colors.green,
-                  () => _handleUpdate(order.id, 'delivered'),
-                ),
+
+                // ✅ CONDITIONAL BUTTONS BASED ON CURRENT STATUS
+                if (order.status.toLowerCase() == 'pending') ...[
+                  _dialogBtn(
+                    "CONFIRM ORDER",
+                    Colors.blue,
+                    () => _handleUpdate(order.id, 'confirmed'),
+                  ),
+                  _dialogBtn("REJECT ORDER", Colors.red, () {
+                    Get.back(); // Close this dialog first
+                    _showRejectOrderDialog(
+                      order.id,
+                      Get.find<OrdersController>(),
+                    );
+                  }),
+                ] else if (order.status.toLowerCase() == 'confirmed') ...[
+                  _dialogBtn(
+                    "MARK AS SHIPPED",
+                    Colors.orange,
+                    () => _handleUpdate(order.id, 'shipped'),
+                  ),
+                ] else if (order.status.toLowerCase() == 'shipped') ...[
+                  _dialogBtn(
+                    "MARK AS DELIVERED",
+                    Colors.green,
+                    () => _handleUpdate(order.id, 'delivered'),
+                  ),
+                ],
+
                 const SizedBox(height: 15),
                 TextButton(
                   onPressed: () => Get.back(),
