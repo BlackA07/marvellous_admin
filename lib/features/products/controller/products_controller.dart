@@ -1139,6 +1139,7 @@ class ProductsController extends GetxController {
 
       // ✅ SMART APPROVE LOGIC FOR PENDING VENDOR REQUESTS
       if (product.status == 'pending') {
+        _showNotificationAudienceDialog(product, isUpdate: false);
         product.status = 'approved';
         String requestId = product.id!;
 
@@ -1161,6 +1162,19 @@ class ProductsController extends GetxController {
           colorText: Colors.white,
         );
         // NOTE: No notification dialog for vendor approval flow (intentional)
+        // Vendor ko notification bhejo
+        await _db
+            .collection('vendors')
+            .doc(product.vendorId)
+            .collection('notifications')
+            .add({
+              'title': '✅ Product Approved',
+              'body': '${product.name} approved ho gaya aur ab live hai.',
+              'type': 'product_approved',
+              'isRead': false,
+              'timestamp': FieldValue.serverTimestamp(),
+              'data': {'productId': product.id, 'productName': product.name},
+            });
       } else {
         // ── Normal Edit/Update Flow ───────────────────────────────
         await _repository.updateProduct(product);
@@ -1242,6 +1256,59 @@ class ProductsController extends GetxController {
       );
     } finally {
       isLoading(false);
+    }
+  }
+
+  Future<void> holdRequest(String requestId, String reason) async {
+    try {
+      // Product request ka vendorId fetch karo
+      var reqDoc = await _db
+          .collection('product_requests')
+          .doc(requestId)
+          .get();
+      String vendorId =
+          (reqDoc.data() as Map<String, dynamic>)['vendorId'] ?? '';
+      String productName =
+          (reqDoc.data() as Map<String, dynamic>)['name'] ?? 'Product';
+
+      await _db.collection('product_requests').doc(requestId).update({
+        'status': 'hold',
+        'holdReason': reason,
+      });
+
+      // ✅ Vendor ko notification
+      if (vendorId.isNotEmpty) {
+        await _db
+            .collection('vendors')
+            .doc(vendorId)
+            .collection('notifications')
+            .add({
+              'title': '⏸ Product On Hold',
+              'body': '$productName hold pe hai. Reason: $reason',
+              'type': 'product_hold',
+              'isRead': false,
+              'timestamp': FieldValue.serverTimestamp(),
+              'data': {
+                'requestId': requestId,
+                'productName': productName,
+                'holdReason': reason,
+              },
+            });
+      }
+
+      Get.snackbar(
+        "On Hold",
+        "Request put on hold.",
+        backgroundColor: Colors.orange,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      Get.snackbar(
+        "Error",
+        "$e",
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
     }
   }
 

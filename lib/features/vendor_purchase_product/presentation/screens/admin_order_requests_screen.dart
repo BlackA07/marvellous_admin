@@ -5,6 +5,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'vendor_purchase_screen.dart';
+import '../../controller/order_request_controller.dart'; // Ensure this path is correct for your project
+import 'create_order_request_screen.dart'; // Ensure this path is correct for your project
 
 class AdminOrderRequestsScreen extends StatelessWidget {
   const AdminOrderRequestsScreen({super.key});
@@ -158,6 +160,8 @@ class AdminOrderRequestsScreen extends StatelessWidget {
               if (status == 'received') statusColor = Colors.teal.shade700;
               if (status == 'completed') statusColor = Colors.green.shade900;
               if (status == 'rejected') statusColor = Colors.red.shade900;
+              if (status == 'hold')
+                statusColor = Colors.amber.shade900; // ✅ Hold status color
 
               return Card(
                 color: Colors.white,
@@ -274,7 +278,44 @@ class AdminOrderRequestsScreen extends StatelessWidget {
                         ),
                       ),
 
-                    // ✅ Items list WITH product image
+                    // ✅ Hold Reason (New Feature)
+                    if (status == 'hold' && req['holdReason'] != null)
+                      Container(
+                        width: double.infinity,
+                        margin: const EdgeInsets.all(15),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade50,
+                          border: Border.all(
+                            color: Colors.amber.shade900,
+                            width: 2,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "⚠️ HOLD REASON BY VENDOR:",
+                              style: GoogleFonts.comicNeue(
+                                fontWeight: FontWeight.w900,
+                                color: Colors.amber.shade900,
+                              ),
+                            ),
+                            const SizedBox(height: 5),
+                            Text(
+                              req['holdReason'],
+                              style: GoogleFonts.comicNeue(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: Colors.black87,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                    // ✅ Items list WITH product image and custom admin price
                     ListView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
@@ -312,14 +353,50 @@ class AdminOrderRequestsScreen extends StatelessWidget {
                                         color: Colors.black,
                                       ),
                                     ),
+                                    // ✅ FIX: Company Name Added
+                                    if ((item['brand'] ?? '')
+                                        .toString()
+                                        .isNotEmpty)
+                                      Text(
+                                        item['brand'],
+                                        style: GoogleFonts.comicNeue(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.deepPurple,
+                                        ),
+                                      ),
                                     Text(
-                                      "Qty: ${item['requestQty']}  |  Model: ${item['model']}",
+                                      "Qty: ${item['requestQty']}  |  Price: PKR ${item['purchasePrice'] ?? 0}  |  Model: ${item['model']}",
                                       style: GoogleFonts.comicNeue(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 14,
                                         color: Colors.black54,
                                       ),
                                     ),
+                                    // ✅ FIX: RAM / ROM Added
+                                    if ((item['ram'] ?? '')
+                                            .toString()
+                                            .isNotEmpty ||
+                                        (item['storage'] ?? '')
+                                            .toString()
+                                            .isNotEmpty)
+                                      Text(
+                                        [
+                                          if ((item['ram'] ?? '')
+                                              .toString()
+                                              .isNotEmpty)
+                                            'RAM: ${item['ram']}',
+                                          if ((item['storage'] ?? '')
+                                              .toString()
+                                              .isNotEmpty)
+                                            'ROM: ${item['storage']}',
+                                        ].join('  |  '),
+                                        style: GoogleFonts.comicNeue(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.teal.shade700,
+                                        ),
+                                      ),
                                   ],
                                 ),
                               ),
@@ -439,6 +516,47 @@ class AdminOrderRequestsScreen extends StatelessWidget {
                                   Get.to(
                                     () => const VendorPurchaseScreen(),
                                     arguments: {'orderRequest': req},
+                                  );
+                                },
+                              ),
+                            ),
+
+                          // ✅ Edit Button for Hold state: Yeh purane document ko load karega aur update karega
+                          if (status == 'hold')
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.amber.shade900,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
+                                ),
+                                icon: const Icon(
+                                  Icons.edit_note_rounded,
+                                  color: Colors.white,
+                                  size: 24,
+                                ),
+                                label: Text(
+                                  "EDIT & RESUBMIT REQUEST",
+                                  style: GoogleFonts.comicNeue(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                onPressed: () {
+                                  final createController = Get.put(
+                                    OrderRequestController(),
+                                  );
+                                  createController.populateForEditing(
+                                    req,
+                                    reqId,
+                                  );
+                                  Get.to(
+                                    () => const CreateOrderRequestScreen(),
                                   );
                                 },
                               ),

@@ -45,7 +45,10 @@ class _VendorManageBillsScreenState extends State<VendorManageBillsScreen> {
   }
 
   void _fetchVendors() async {
-    var snap = await _db.collection('vendors').get();
+    var snap = await _db
+        .collection('vendors')
+        .where('status', isEqualTo: 'approved')
+        .get();
     setState(() {
       cachedVendorDocs = snap.docs;
       cachedVendorList = cachedVendorDocs.map((e) {
@@ -628,7 +631,28 @@ class _VendorManageBillsScreenState extends State<VendorManageBillsScreen> {
 
                       List items = billData['items'] ?? [];
                       String productsStr = items.isNotEmpty
-                          ? items.map((e) => e['productName']).join(", ")
+                          ? items
+                                .map((e) {
+                                  String name = e['productName'] ?? '';
+                                  String brand = e['brand'] ?? '';
+                                  String ram = e['ram'] ?? '';
+                                  String storage = e['storage'] ?? '';
+                                  List<String> parts = [
+                                    if (brand.isNotEmpty) brand,
+                                  ];
+                                  if (ram.isNotEmpty || storage.isNotEmpty) {
+                                    parts.add(
+                                      [
+                                        if (ram.isNotEmpty) 'RAM:$ram',
+                                        if (storage.isNotEmpty) 'ROM:$storage',
+                                      ].join('/'),
+                                    );
+                                  }
+                                  return parts.isEmpty
+                                      ? name
+                                      : '$name (${parts.join(' • ')})';
+                                })
+                                .join(", ")
                           : "N/A";
 
                       String status = _getBillStatus(

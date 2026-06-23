@@ -116,8 +116,10 @@ class PurchaseController extends GetxController {
     addedItems.add({
       'productId': product['id'],
       'productName': product['name'],
-      'brand': product['brand'],
+      'brand': product['brand'] ?? '',
       'model': product['modelNumber'],
+      'ram': product['ram'] ?? '',
+      'storage': product['storage'] ?? '',
       'image': prodImg,
       'quantity': qty,
       'unitPrice': price,
@@ -298,38 +300,7 @@ class PurchaseController extends GetxController {
 
       List<Map<String, dynamic>> realSchedule = [];
 
-      Future<void> _recordPaymentHistory(
-        String docIdNote,
-        DateTime payDate,
-        double amt,
-        String noteText,
-      ) async {
-        var historyData = {
-          'vendorId': selectedVendor.value!['id'],
-          'vendorName':
-              "${selectedVendor.value!['storeName']} (${selectedVendor.value!['ownerName']})",
-          'dueDocId': docIdNote,
-          'billNumber': generatedBillNumber,
-          'paidAmount': amt,
-          'paymentDate': Timestamp.fromDate(payDate),
-          'paymentMode': transactionMode,
-          'note': noteText,
-          'createdAt': Timestamp.now(),
-        };
-
-        if (transactionMode == 'Bank Transfer') {
-          historyData['bankId'] = bankId ?? '';
-          historyData['bankName'] = bankName ?? '';
-          historyData['screenshot'] = screenshotBase64 ?? '';
-        } else if (transactionMode == 'Cheque') {
-          historyData['chequeNumber'] = chequeNumber ?? '';
-          historyData['chequeDate'] = chequeDate != null
-              ? Timestamp.fromDate(chequeDate)
-              : null;
-        }
-
-        await _db.collection('vendor_payment_history').add(historyData);
-      }
+      // ✅ FIX: _recordPaymentHistory yahan se HATA diya gaya hai, wo ab sirf Repository handle karegi taake double entry na ho
 
       if (paymentMode == "Cash") {
         realSchedule.add({
@@ -340,13 +311,6 @@ class PurchaseController extends GetxController {
           'isPaid': true,
           'paidAmount': cashPaid,
         });
-
-        await _recordPaymentHistory(
-          'CASH_PAYMENT',
-          billDate.value,
-          cashPaid,
-          'Cash Payment Full for Bill #$generatedBillNumber',
-        );
       } else if (paymentMode == "Credit" || paymentMode == "Both") {
         double scheduleRemaining = remainingForThisBill;
         if (firstPaymentAmount > 0 && firstPaymentDate != null) {
@@ -359,15 +323,6 @@ class PurchaseController extends GetxController {
             'isPaid': false,
             'paidAmount': 0.0,
           });
-
-          if (cashPaid > 0) {
-            await _recordPaymentHistory(
-              'ADVANCE_PAYMENT',
-              firstPaymentDate,
-              cashPaid,
-              'Advance Payment for Bill #$generatedBillNumber',
-            );
-          }
         }
 
         if (creditType != "Custom") {
@@ -419,53 +374,24 @@ class PurchaseController extends GetxController {
       for (var item in addedItems) {
         String productId = item['productId'];
         int qty = item['quantity'];
-
         if (productId.isNotEmpty) {
           try {
-            // Pehle products collection mein stock update karo
             await _db.collection('products').doc(productId).update({
               'stockQuantity': FieldValue.increment(qty),
-              'stockIn': FieldValue.increment(qty), // ✅ Ye line add kar lein
+              'stockIn': FieldValue.increment(qty),
             });
           } catch (e) {
-            // Agar product package hai to packages collection mein update karo
             try {
               await _db.collection('packages').doc(productId).update({
                 'stockQuantity': FieldValue.increment(qty),
-                'stockIn': FieldValue.increment(qty), // ✅ Ye line add kar lein
+                'stockIn': FieldValue.increment(qty),
               });
             } catch (_) {}
           }
         }
       }
 
-      // ✅ FIX: BANK AND CASH DEDUCTION LOGIC
-      if (cashPaid > 0) {
-        if (transactionMode == 'Bank Transfer' &&
-            bankId != null &&
-            bankId.isNotEmpty) {
-          DocumentReference bankRef = _db
-              .collection('company_finances')
-              .doc('main_finances')
-              .collection('banks')
-              .doc(bankId);
-          await bankRef.update({'balance': FieldValue.increment(-cashPaid)});
-        } else if (transactionMode == 'Cash') {
-          // Cash bank se deduct karo jahan name 'Cash' ho
-          var cashBankQuery = await _db
-              .collection('company_finances')
-              .doc('main_finances')
-              .collection('banks')
-              .where('bankName', isEqualTo: 'Cash')
-              .limit(1)
-              .get();
-          if (cashBankQuery.docs.isNotEmpty) {
-            await cashBankQuery.docs.first.reference.update({
-              'balance': FieldValue.increment(-cashPaid),
-            });
-          }
-        }
-      }
+      // ✅ FIX: Bank deduction manually bhi HATA diya yahan se, ab Repository sambhalay gi.
 
       if (Get.arguments != null && Get.arguments['orderRequest'] != null) {
         String reqId = Get.arguments['orderRequest']['requestId'];

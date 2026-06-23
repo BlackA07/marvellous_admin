@@ -1,18 +1,18 @@
+// lib/features/reports/shared/models/dashboard_stats_model.dart
+
 import 'package:flutter/material.dart';
 
 class DashboardStatsModel {
   final String title;
   final String value;
-  final String change;
-  final bool isIncrease;
+  final String subtitle;
   final IconData icon;
   final Color color;
 
   DashboardStatsModel({
     required this.title,
     required this.value,
-    required this.change,
-    required this.isIncrease,
+    this.subtitle = '',
     required this.icon,
     required this.color,
   });

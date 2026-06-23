@@ -116,26 +116,35 @@ class VendorPaymentController extends GetxController {
         }
       }
 
+      // ✅ FIX: Determine if it's a cheque payment
+      bool isCheque = paymentMode == 'Cheque';
+
       DocumentReference transactionRef = _db
           .collection('vendor_payment_history')
           .doc();
-      PaymentTransactionModel transaction = PaymentTransactionModel(
-        vendorId: vendorId,
-        vendorName: vendorName,
-        dueDocId: "BILL_PAYMENT",
-        billNumber: billNumber,
-        paidAmount: payingAmount,
-        paymentDate: paymentDate,
-        paymentMode: paymentMode,
-        note: note,
-        createdAt: DateTime.now(),
-        bankId: bankId,
-        bankName: bankName,
-        screenshot: screenshotBase64,
-        chequeNumber: chequeNumber,
-        chequeDate: chequeDate,
-      );
-      batch.set(transactionRef, transaction.toMap());
+
+      // ✅ Using regular map instead of model to force isCleared field
+      batch.set(transactionRef, {
+        'vendorId': vendorId,
+        'vendorName': vendorName,
+        'dueDocId': "BILL_PAYMENT",
+        'billNumber': billNumber,
+        'paidAmount': payingAmount,
+        'paymentDate': Timestamp.fromDate(paymentDate),
+        'paymentMode': paymentMode,
+        'note': note,
+        'createdAt': FieldValue.serverTimestamp(),
+        'bankId': bankId,
+        'bankName': bankName,
+        'screenshot': screenshotBase64,
+        'chequeNumber': chequeNumber,
+        'chequeDate': chequeDate != null
+            ? Timestamp.fromDate(chequeDate)
+            : null,
+        'chequeBankId': isCheque ? bankId : null,
+        'chequeBankName': isCheque ? bankName : null,
+        'isCleared': isCheque ? false : true, // NAYA LOGIC
+      });
 
       // --- NEW LEDGER HOOK: VENDOR PAYMENT ---
       DocumentReference ledgerRef = _db
@@ -154,6 +163,7 @@ class VendorPaymentController extends GetxController {
         'chequeDate': chequeDate != null
             ? Timestamp.fromDate(chequeDate)
             : null,
+        'billNumber': billNumber, // ✅ NAYA FIELD ADD KIYA
         'description': 'Payment to Vendor ($vendorName) for Bill #$billNumber',
         'linkedVendorId': vendorId,
         'linkedVendorName': vendorName,
@@ -161,6 +171,7 @@ class VendorPaymentController extends GetxController {
         'createdBy': isEditMode ? 'admin' : 'system',
         'date': Timestamp.fromDate(paymentDate),
         'createdAt': FieldValue.serverTimestamp(),
+        'isCleared': isCheque ? false : true, // NAYA LOGIC
       });
 
       DocumentReference vendorRef = _db.collection('vendors').doc(vendorId);
@@ -168,28 +179,32 @@ class VendorPaymentController extends GetxController {
         'beginningBalance': FieldValue.increment(-payingAmount),
       });
 
-      // ✅ FIX: REAL DEDUCTION FROM BANK OR CASH WITH CORRECT PATH
-      if (paymentMode == 'Bank Transfer' &&
-          bankId != null &&
-          bankId.isNotEmpty) {
-        DocumentReference bankRef = _db
-            .collection('company_finances')
-            .doc('main_finances')
-            .collection('banks')
-            .doc(bankId);
-        batch.update(bankRef, {'balance': FieldValue.increment(-payingAmount)});
-      } else if (paymentMode == 'Cash') {
-        var cashBankQuery = await _db
-            .collection('company_finances')
-            .doc('main_finances')
-            .collection('banks')
-            .where('name', isEqualTo: 'Cash')
-            .limit(1)
-            .get();
-        if (cashBankQuery.docs.isNotEmpty) {
-          batch.update(cashBankQuery.docs.first.reference, {
+      // ✅ FIX: REAL DEDUCTION FROM BANK OR CASH WITH CORRECT PATH AND CHEQUE CHECK
+      if (!isCheque) {
+        if (paymentMode == 'Bank Transfer' &&
+            bankId != null &&
+            bankId.isNotEmpty) {
+          DocumentReference bankRef = _db
+              .collection('company_finances')
+              .doc('main_finances')
+              .collection('banks')
+              .doc(bankId);
+          batch.update(bankRef, {
             'balance': FieldValue.increment(-payingAmount),
           });
+        } else if (paymentMode == 'Cash') {
+          var cashBankQuery = await _db
+              .collection('company_finances')
+              .doc('main_finances')
+              .collection('banks')
+              .where('name', isEqualTo: 'Cash')
+              .limit(1)
+              .get();
+          if (cashBankQuery.docs.isNotEmpty) {
+            batch.update(cashBankQuery.docs.first.reference, {
+              'balance': FieldValue.increment(-payingAmount),
+            });
+          }
         }
       }
 
@@ -231,6 +246,7 @@ class VendorPaymentController extends GetxController {
     String? bankId,
     String? bankName,
     String? screenshotBase64,
+
     String? chequeNumber,
     DateTime? chequeDate,
   }) async {
@@ -262,36 +278,41 @@ class VendorPaymentController extends GetxController {
       WriteBatch batch = _db.batch();
 
       // ── REVERSAL PROCESS (Undoing the old payment) ──
-
-      // ✅ FIX: Revert Old Bank Balance OR Cash Balance using correct path
       var oldPaySnap = await _db
           .collection('vendor_payment_history')
           .doc(paymentDocId)
           .get();
+
       if (oldPaySnap.exists) {
         var oldData = oldPaySnap.data() as Map<String, dynamic>;
-        if (oldData['paymentMode'] == 'Bank Transfer' &&
-            oldData['bankId'] != null) {
-          batch.update(
-            _db
+
+        // ✅ FIX: Agar old payment Cheque thi aur wo clear nahi hui thi, tou refund ki zaroorat nahi.
+        bool oldIsCleared = oldData['isCleared'] ?? true;
+
+        if (oldIsCleared) {
+          if (oldData['paymentMode'] == 'Bank Transfer' &&
+              oldData['bankId'] != null) {
+            batch.update(
+              _db
+                  .collection('company_finances')
+                  .doc('main_finances')
+                  .collection('banks')
+                  .doc(oldData['bankId']),
+              {'balance': FieldValue.increment(oldAmount)},
+            );
+          } else if (oldData['paymentMode'] == 'Cash') {
+            var cashBankQuery = await _db
                 .collection('company_finances')
                 .doc('main_finances')
                 .collection('banks')
-                .doc(oldData['bankId']),
-            {'balance': FieldValue.increment(oldAmount)},
-          );
-        } else if (oldData['paymentMode'] == 'Cash') {
-          var cashBankQuery = await _db
-              .collection('company_finances')
-              .doc('main_finances')
-              .collection('banks')
-              .where('bankName', isEqualTo: 'Cash')
-              .limit(1)
-              .get();
-          if (cashBankQuery.docs.isNotEmpty) {
-            batch.update(cashBankQuery.docs.first.reference, {
-              'balance': FieldValue.increment(oldAmount),
-            });
+                .where('name', isEqualTo: 'Cash')
+                .limit(1)
+                .get();
+            if (cashBankQuery.docs.isNotEmpty) {
+              batch.update(cashBankQuery.docs.first.reference, {
+                'balance': FieldValue.increment(oldAmount),
+              });
+            }
           }
         }
       }
@@ -306,6 +327,7 @@ class VendorPaymentController extends GetxController {
       });
 
       batch.delete(_db.collection('vendor_payment_history').doc(paymentDocId));
+
       // --- NEW LEDGER HOOK: VENDOR PAYMENT REVERSAL (EDIT) ---
       DocumentReference ledgerReversalRef = _db
           .collection('admin_ledger_transactions')
@@ -313,6 +335,7 @@ class VendorPaymentController extends GetxController {
       batch.set(ledgerReversalRef, {
         'type': 'in', // Reversing an 'out' payment makes it an 'in'
         'category': 'vendor_payment_refund',
+        'billNumber': billNumber,
         'amount': oldAmount,
         'paymentMethod': paymentMode == 'Cash'
             ? 'cash'
@@ -477,7 +500,7 @@ class VendorPaymentController extends GetxController {
         "Delete Error",
         "Failed to delete bill: $e",
         backgroundColor: Colors.red.shade900,
-        colorText: Colors.white,
+        colorText: const Color.fromRGBO(255, 255, 255, 1),
       );
       return false;
     }

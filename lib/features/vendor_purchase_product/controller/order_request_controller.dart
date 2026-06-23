@@ -12,6 +12,7 @@ class OrderRequestController extends GetxController {
 
   var selectedVendor = Rxn<Map<String, dynamic>>();
   var cartItems = <Map<String, dynamic>>[].obs;
+  String? editingRequestId;
 
   // ✅ Product Search aur Totals k variables
   var productSearchQuery = "".obs;
@@ -27,7 +28,10 @@ class OrderRequestController extends GetxController {
   void loadInitialData() async {
     isLoading.value = true;
     try {
-      var vDocs = await _db.collection('vendors').get();
+      var vDocs = await _db
+          .collection('vendors')
+          .where('status', isEqualTo: 'approved')
+          .get();
       vendors.assignAll(
         vDocs.docs
             .map((e) => {'id': e.id, ...e.data() as Map<String, dynamic>})
@@ -36,9 +40,10 @@ class OrderRequestController extends GetxController {
 
       var pDocs = await _db.collection('products').get();
       products.assignAll(
-        pDocs.docs
-            .map((e) => {'id': e.id, ...e.data() as Map<String, dynamic>})
-            .toList(),
+        pDocs.docs.map((e) {
+          var data = e.data() as Map<String, dynamic>;
+          return {'id': e.id, ...data};
+        }).toList(),
       );
     } catch (e) {
       Get.snackbar(
@@ -65,9 +70,19 @@ class OrderRequestController extends GetxController {
 
   void handleProductSelection(String val) {
     try {
-      var product = products.firstWhere(
-        (e) => "${e['name']} - ${e['modelNumber']}" == val,
-      );
+      var product = products.firstWhere((e) {
+        String label = "${e['name']} - ${e['modelNumber']}";
+        String brand = e['brand'] ?? '';
+        String ram = e['ram'] ?? '';
+        String storage = e['storage'] ?? '';
+        List<String> extra = [
+          if (brand.isNotEmpty) brand,
+          if (ram.isNotEmpty) 'RAM:$ram',
+          if (storage.isNotEmpty) 'ROM:$storage',
+        ];
+        if (extra.isNotEmpty) label += ' (${extra.join(' | ')})';
+        return label == val;
+      });
 
       int existingIndex = cartItems.indexWhere(
         (item) => item['productId'] == product['id'],
@@ -85,9 +100,11 @@ class OrderRequestController extends GetxController {
         cartItems.add({
           'productId': product['id'],
           'productName': product['name'],
-          'brand': product['brand'] ?? 'N/A',
+          'brand': product['brand'] ?? '',
           'model': product['modelNumber'] ?? 'N/A',
-          'image': prodImg, // ✅ Image store
+          'ram': product['ram'] ?? '',
+          'storage': product['storage'] ?? '',
+          'image': prodImg,
           'purchasePrice': product['purchasePrice'] ?? 0,
           'requestQty': 1,
           'isAvailable': true,
@@ -120,6 +137,14 @@ class OrderRequestController extends GetxController {
     cartItems.refresh();
   }
 
+  void updateItemPrice(String productId, double newPrice) {
+    final index = cartItems.indexWhere((i) => i['productId'] == productId);
+    if (index != -1) {
+      cartItems[index]['purchasePrice'] = newPrice;
+      calculateTotals();
+    }
+  }
+
   Future<void> sendOrderRequest() async {
     if (selectedVendor.value == null || cartItems.isEmpty) {
       Get.snackbar(
@@ -131,7 +156,7 @@ class OrderRequestController extends GetxController {
       return;
     }
 
-    // ✅ FIX: Check if any item has 0 quantity
+    // ✅ Check if any item has 0 quantity
     if (cartItems.any((item) => item['requestQty'] <= 0)) {
       Get.snackbar(
         "Invalid Quantity",
@@ -144,29 +169,48 @@ class OrderRequestController extends GetxController {
 
     isLoading.value = true;
     try {
+      // ✅ Vendor ID theek se uthana taake Vendor app mein show ho
+      String correctVendorId =
+          selectedVendor.value!['uid'] ??
+          selectedVendor.value!['userId'] ??
+          selectedVendor.value!['id'];
+
       OrderRequestModel request = OrderRequestModel(
-        vendorId: selectedVendor.value!['id'],
+        vendorId: correctVendorId,
         vendorName:
             "${selectedVendor.value!['storeName']} (${selectedVendor.value!['ownerName']})",
         items: cartItems,
         createdAt: orderDate.value,
-        status: 'pending',
+        status: 'pending', // Edit hone ke baad status dubara pending hojayega
       );
 
-      await _db.collection('order_requests').add(request.toMap());
+      if (editingRequestId != null) {
+        // 🔥 EDIT MODE: Purana document update hoga (naya card nahi banega)
+        await _db
+            .collection('order_requests')
+            .doc(editingRequestId)
+            .update(request.toMap());
+        editingRequestId = null; // Edit mode reset kar diya
+      } else {
+        // 🔥 NEW MODE: Naya order create hoga
+        await _db.collection('order_requests').add(request.toMap());
+      }
 
+      // State reset kar do
       selectedVendor.value = null;
       cartItems.clear();
       grandTotal.value = 0.0;
       orderDate.value = DateTime.now();
 
       Get.defaultDialog(
-        title: "Request Sent!",
-        middleText:
-            "Order Request has been sent to the vendor successfully. Waiting for their confirmation.",
+        title: "Success!",
+        middleText: "Order Request has been sent to the vendor successfully.",
         confirm: ElevatedButton(
           style: ElevatedButton.styleFrom(backgroundColor: Colors.black),
-          onPressed: () => Get.back(),
+          onPressed: () {
+            Get.back(); // Dialog close karega
+            Get.back(); // Wapis All Orders wali screen par bheje ga taake user edit ke baad list dekh sake
+          },
           child: const Text("OK", style: TextStyle(color: Colors.white)),
         ),
       );
@@ -179,5 +223,31 @@ class OrderRequestController extends GetxController {
       );
     }
     isLoading.value = false;
+  }
+
+  void populateForEditing(Map<String, dynamic> data, String id) {
+    editingRequestId = id;
+    orderDate.value = (data['createdAt'] as Timestamp).toDate();
+
+    // Find vendor from list or set manually
+    var v = vendors.firstWhereOrNull(
+      (element) => element['id'] == data['vendorId'],
+    );
+    if (v != null) {
+      selectedVendor.value = v;
+    } else {
+      selectedVendor.value = {
+        'id': data['vendorId'],
+        'storeName': data['vendorName'].toString().split(' (')[0],
+        'ownerName': data['vendorName'].toString().contains('(')
+            ? data['vendorName'].toString().split('(')[1].replaceAll(')', '')
+            : '',
+      };
+    }
+
+    // Load existing items into cart
+    cartItems.assignAll(List<Map<String, dynamic>>.from(data['items'] ?? []));
+    calculateTotals();
+    cartItems.refresh();
   }
 }

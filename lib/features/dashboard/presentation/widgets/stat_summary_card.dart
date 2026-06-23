@@ -1,9 +1,10 @@
+// lib/features/reports/shared/widgets/stat_summary_card.dart
+
 import 'package:flutter/material.dart';
 import '../../models/dashboard_stats_model.dart';
 
 class StatSummaryCard extends StatefulWidget {
   final DashboardStatsModel info;
-
   const StatSummaryCard({Key? key, required this.info}) : super(key: key);
 
   @override
@@ -27,7 +28,7 @@ class _StatSummaryCardState extends State<StatSummaryCard> {
         transform: isHovered
             ? Matrix4.identity().scaled(1.05)
             : Matrix4.identity(),
-        padding: const EdgeInsets.all(10),
+        padding: const EdgeInsets.all(15),
         decoration: BoxDecoration(
           color: isHovered
               ? widget.info.color.withOpacity(0.15)
@@ -50,102 +51,55 @@ class _StatSummaryCardState extends State<StatSummaryCard> {
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Top Row
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(5),
-                  decoration: BoxDecoration(
-                    color: widget.info.color.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Icon(
-                    widget.info.icon,
-                    color: widget.info.color,
-                    size: isDesktop ? 20 : 16,
-                  ),
-                ),
-                Icon(
-                  Icons.more_vert,
-                  color: Colors.white54,
-                  size: isDesktop ? 20 : 16,
-                ),
-              ],
+            // Icon without forward arrow
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: widget.info.color.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(widget.info.icon, color: widget.info.color, size: 24),
             ),
-
             const Spacer(),
-
-            // Value
             FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(
                 widget.info.value,
-                style: TextStyle(
+                style: const TextStyle(
                   fontFamily: 'Comic Sans MS',
                   color: Colors.white,
-                  fontSize: isDesktop ? 24 : 18,
+                  fontSize: 24,
                   fontWeight: FontWeight.bold,
                 ),
               ),
             ),
-
-            // Title
+            const SizedBox(height: 4),
             Text(
               widget.info.title,
-              style: TextStyle(
+              style: const TextStyle(
                 fontFamily: 'Comic Sans MS',
                 color: Colors.white70,
-                fontSize: isDesktop ? 14 : 11,
+                fontSize: 13,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-
-            const SizedBox(height: 6),
-
-            // Bottom Row: Percent Change
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Row(
-                children: [
-                  Icon(
-                    widget.info.isIncrease
-                        ? Icons.arrow_upward
-                        : Icons.arrow_downward,
-                    color: widget.info.isIncrease
-                        ? Colors.greenAccent
-                        : Colors.redAccent,
-                    size: isDesktop ? 12 : 10,
-                  ),
-                  const SizedBox(width: 2),
-                  Text(
-                    widget.info.change,
-                    style: TextStyle(
-                      fontFamily: 'Comic Sans MS',
-                      color: widget.info.isIncrease
-                          ? Colors.greenAccent
-                          : Colors.redAccent,
-                      fontSize: isDesktop ? 12 : 8,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    "vs last month",
-                    style: TextStyle(
-                      fontFamily: 'Comic Sans MS',
-                      color: const Color.fromARGB(97, 245, 6, 6),
-                      fontSize: isDesktop ? 11 : 8,
-                    ),
-                  ),
-                ],
+            if (widget.info.subtitle.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                widget.info.subtitle,
+                style: TextStyle(
+                  fontFamily: 'Comic Sans MS',
+                  color: widget.info.color,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-            ),
+            ],
           ],
         ),
       ),

@@ -60,6 +60,12 @@ class AdminFinanceController extends GetxController {
   var overviewTotalOut = 0.0.obs;
   var isOverviewLoading = false.obs;
 
+  // ✅ NAYI VARIABLES: User Wallets and Fees tracking
+  var totalWalletBalance = 0.0.obs;
+  var totalShoppingBalance = 0.0.obs;
+  var totalPaidFees = 0.0.obs;
+  var totalRemainingFees = 0.0.obs;
+
   void _bindBanksStream() {
     _repo.getBanksStream().listen((list) {
       banks.assignAll(list);
@@ -71,12 +77,22 @@ class AdminFinanceController extends GetxController {
 
   Future<void> fetchOverviewTotals() async {
     isOverviewLoading.value = true;
+
+    // Ledger sums
     final totals = await _repo.getLedgerTotals(
       startDate: startDate.value,
       endDate: endDate.value,
     );
     overviewTotalIn.value = totals['totalIn'] ?? 0.0;
     overviewTotalOut.value = totals['totalOut'] ?? 0.0;
+
+    // Fetching Customer Aggregates
+    final customerStats = await _repo.getCustomerAggregates();
+    totalWalletBalance.value = customerStats['totalWalletBalance'] ?? 0.0;
+    totalShoppingBalance.value = customerStats['totalShoppingBalance'] ?? 0.0;
+    totalPaidFees.value = customerStats['totalPaidFees'] ?? 0.0;
+    totalRemainingFees.value = customerStats['totalRemainingFees'] ?? 0.0;
+
     isOverviewLoading.value = false;
   }
 
@@ -125,7 +141,7 @@ class AdminFinanceController extends GetxController {
           .toList();
     }
 
-    // Search filter — name, phone, email, vendor, order, description
+    // Search filter
     final q = searchQuery.value.trim().toLowerCase();
     if (q.isNotEmpty) {
       list = list.where((e) {
@@ -168,13 +184,9 @@ class AdminFinanceController extends GetxController {
   // ─────────────────────────────────────────────────────────
 
   var isSadqaSubmitting = false.obs;
-
-  // Sadqa history — ledger se category filter se milega
   var sadqaEntries = <LedgerTransactionModel>[].obs;
 
   void _bindSadqaFromLedger() {
-    // Sadqa entries ledger stream se already aa rahi hain
-    // Sirf filter karke alag list banao
     ever(allLedgerEntries, (_) {
       sadqaEntries.assignAll(
         allLedgerEntries.where((e) => e.category == kCatSadqa).toList(),
@@ -363,7 +375,7 @@ class AdminFinanceController extends GetxController {
   }
 
   // ─────────────────────────────────────────────────────────
-  // HELPERS
+  // HELPERS — ✅ YEH WAPIS AA GAYE HAIN (DO NOT REMOVE)
   // ─────────────────────────────────────────────────────────
 
   /// Human-readable category label

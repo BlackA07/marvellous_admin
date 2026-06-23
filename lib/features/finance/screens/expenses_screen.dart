@@ -57,7 +57,6 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
           selectedSubcategory = null;
         }
 
-        // Selected subcategory model (for type/fixedAmount info)
         final selectedSubModel = catModel?.subcategories.firstWhereOrNull(
           (s) => s.name == selectedSubcategory,
         );
@@ -128,7 +127,6 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                               fontSize: 18,
                             ),
                           ),
-                          // ✅ Fixed/Variable badge
                           if (selectedSubModel != null)
                             Container(
                               padding: const EdgeInsets.symmetric(
@@ -206,7 +204,6 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                             DataColumn(label: Text('Date')),
                             DataColumn(label: Text('Description')),
                             DataColumn(label: Text('Bank/Cash')),
-                            DataColumn(label: Text('Prev Balance')),
                             DataColumn(label: Text('Amount')),
                             DataColumn(label: Text('Actions')),
                           ],
@@ -225,11 +222,8 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   }
 
   List<DataRow> _buildRows(List<ExpenseModel> sortedData) {
-    double runningBalance = 0.0;
     List<DataRow> rows = [];
     for (var exp in sortedData) {
-      final prev = runningBalance;
-      runningBalance += exp.amount;
       final bankName =
           controller.banks.firstWhereOrNull((b) => b.id == exp.bankId)?.name ??
           'Unknown';
@@ -239,7 +233,6 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
             DataCell(Text(exp.date.toString().substring(0, 10))),
             DataCell(Text(exp.description)),
             DataCell(Text(bankName)),
-            DataCell(Text(prev.toStringAsFixed(0))),
             DataCell(
               Text(
                 exp.amount.toStringAsFixed(0),
@@ -296,9 +289,6 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     );
   }
 
-  // ─────────────────────────────────────────────
-  // MANAGE CATEGORIES DIALOG
-  // ─────────────────────────────────────────────
   void _manageCategoriesDialog() {
     Get.defaultDialog(
       backgroundColor: const Color(0xFF2C2C2C),
@@ -372,13 +362,8 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     );
   }
 
-  // ─────────────────────────────────────────────
-  // ADD / EDIT CATEGORY DIALOG
-  // ─────────────────────────────────────────────
   void _addCategoryDialog({ExpenseCategoryModel? cat}) {
     final nameCtrl = TextEditingController(text: cat?.name);
-
-    // Local copy of subcategories for editing
     List<SubcategoryModel> subcategories =
         cat?.subcategories
             .map(
@@ -391,7 +376,6 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
             .toList() ??
         [];
 
-    // Controllers for new subcategory input
     final newSubNameCtrl = TextEditingController();
     String newSubType = 'variable';
     final newSubAmtCtrl = TextEditingController();
@@ -408,7 +392,6 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Category name
                 TextField(
                   controller: nameCtrl,
                   style: const TextStyle(color: Colors.white),
@@ -421,8 +404,6 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-
-                // ✅ Existing subcategories list
                 const Text(
                   'Subcategories:',
                   style: TextStyle(
@@ -496,10 +477,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                     ),
                   );
                 }).toList(),
-
                 const Divider(color: Colors.white24),
-
-                // ✅ Add new subcategory section
                 const Text(
                   'Nai Subcategory Add Karo:',
                   style: TextStyle(
@@ -527,8 +505,6 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
-
-                // ✅ Fixed / Variable toggle
                 Row(
                   children: [
                     const Text(
@@ -562,8 +538,6 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                     ),
                   ],
                 ),
-
-                // ✅ Fixed amount field (sirf fixed type ke liye)
                 if (newSubType == 'fixed') ...[
                   const SizedBox(height: 8),
                   TextField(
@@ -587,8 +561,6 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                   ),
                 ],
                 const SizedBox(height: 10),
-
-                // ✅ Add subcategory button
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
@@ -652,12 +624,8 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     );
   }
 
-  // ─────────────────────────────────────────────
-  // ADD / EDIT EXPENSE ENTRY DIALOG
-  // ─────────────────────────────────────────────
   void _expenseDialog({ExpenseModel? expToEdit, double? fixedAmount}) {
     final descCtrl = TextEditingController(text: expToEdit?.description);
-    // ✅ Agar fixed expense hai to amount pre-fill karo
     final amtCtrl = TextEditingController(
       text:
           expToEdit?.amount.toStringAsFixed(0) ??
@@ -693,7 +661,6 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                 decoration: InputDecoration(
                   hintText: 'Amount',
                   hintStyle: const TextStyle(color: Colors.white54),
-                  // ✅ Agar fixed amount hai to badge dikhao
                   suffixIcon: fixedAmount != null && fixedAmount > 0
                       ? Tooltip(
                           message: 'Fixed expense',
@@ -707,8 +674,6 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                 ),
               ),
               const SizedBox(height: 10),
-
-              // ✅ Bank dropdown with available balance
               DropdownButtonFormField<String>(
                 decoration: const InputDecoration(
                   filled: true,
@@ -727,7 +692,6 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                   return DropdownMenuItem(
                     value: b.id,
                     child: Text(
-                      // ✅ Bank name ke saath balance bhi
                       '${b.name}  (PKR ${b.balance.toStringAsFixed(0)})',
                       style: const TextStyle(color: Colors.white, fontSize: 13),
                     ),
@@ -735,7 +699,6 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                 }).toList(),
                 onChanged: (val) => setDState(() => bankId = val),
               ),
-
               ListTile(
                 title: Text(
                   d.toString().substring(0, 10),
@@ -772,10 +735,12 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
             date: d,
             bankId: bankId!,
           );
-          if (expToEdit == null)
+          if (expToEdit == null) {
             await controller.createExpense(e);
-          else
+          } else {
             await controller.editExpense(expToEdit, e);
+          }
+
           Get.back();
         },
         child: const Text('Save', style: TextStyle(color: Colors.black)),

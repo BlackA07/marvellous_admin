@@ -134,6 +134,59 @@ class AdminFinanceRepository {
   }
 
   // ─────────────────────────────────────────────────────────
+  // ✅ NEW: CUSTOMER AGGREGATES (For Liability Cards)
+  // ─────────────────────────────────────────────────────────
+
+  Future<Map<String, double>> getCustomerAggregates() async {
+    try {
+      final snap = await _db.collection('users').get();
+
+      double totalWallet = 0.0;
+      double totalShopping = 0.0;
+      double paidFees = 0.0;
+      double remainingFees = 0.0;
+
+      for (var doc in snap.docs) {
+        var data = doc.data();
+
+        // Accumulate fields directly from all users
+        totalWallet += ((data['walletBalance'] ?? 0.0) as num).toDouble();
+        totalShopping += ((data['shoppingWalletBalance'] ?? 0.0) as num)
+            .toDouble();
+        paidFees += ((data['paidFees'] ?? 0.0) as num).toDouble();
+
+        // For remaining fees, calculate based on membership status
+        String mStatus = (data['membershipStatus'] ?? 'pending')
+            .toString()
+            .toLowerCase();
+        double rFee = 15000.0; // Standard total fee limit
+        double uPaid = ((data['paidFees'] ?? 0.0) as num).toDouble();
+
+        if (mStatus == "approved") {
+          remainingFees += 0.0; // Approved means fully paid
+        } else {
+          double due = (rFee - uPaid).clamp(0, double.infinity);
+          remainingFees += due;
+        }
+      }
+
+      return {
+        'totalWalletBalance': totalWallet,
+        'totalShoppingBalance': totalShopping,
+        'totalPaidFees': paidFees,
+        'totalRemainingFees': remainingFees,
+      };
+    } catch (e) {
+      return {
+        'totalWalletBalance': 0.0,
+        'totalShoppingBalance': 0.0,
+        'totalPaidFees': 0.0,
+        'totalRemainingFees': 0.0,
+      };
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────
   // CUSTOMER SEARCH (for reward & fine screens)
   // ─────────────────────────────────────────────────────────
 

@@ -1,3 +1,5 @@
+// lib/features/reports/shared/repository/dashboard_repository.dart
+
 import 'package:flutter/material.dart';
 import '../models/dashboard_model.dart';
 import '../models/dashboard_stats_model.dart';
@@ -5,7 +7,6 @@ import '../models/recent_activity_model.dart';
 
 class DashboardRepository {
   Future<DashboardModel> fetchDashboardData() async {
-    // Simulate API delay
     await Future.delayed(const Duration(seconds: 1));
 
     return DashboardModel(
@@ -13,32 +14,24 @@ class DashboardRepository {
         DashboardStatsModel(
           title: "Total Revenue",
           value: "\$45,231.89",
-          change: "+20.1%",
-          isIncrease: true,
           icon: Icons.monetization_on_outlined,
           color: Colors.cyanAccent,
         ),
         DashboardStatsModel(
           title: "Active Users",
           value: "2,350",
-          change: "+15.2%",
-          isIncrease: true,
           icon: Icons.people_outline,
           color: Colors.purpleAccent,
         ),
         DashboardStatsModel(
           title: "Bounce Rate",
           value: "12.5%",
-          change: "-4.5%",
-          isIncrease: false, // Good for bounce rate
           icon: Icons.show_chart,
           color: Colors.orangeAccent,
         ),
         DashboardStatsModel(
           title: "New Orders",
           value: "456",
-          change: "+8.3%",
-          isIncrease: true,
           icon: Icons.shopping_cart_outlined,
           color: Colors.greenAccent,
         ),

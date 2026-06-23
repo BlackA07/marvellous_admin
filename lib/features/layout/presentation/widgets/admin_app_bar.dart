@@ -19,6 +19,8 @@ import '../../../products/controller/products_controller.dart';
 import '../../../orders/presentation/screens/orders_dashboard_screen.dart';
 import '../../../profile/presentation/screens/admin_profile_screen.dart';
 import '../../../products/presentation/screens/pending_requests_screen.dart';
+import '../../../vendor_purchase_product/presentation/screens/ApproveChequesScreen.dart';
+import '../../../vendor_purchase_product/presentation/screens/admin_order_requests_screen.dart';
 
 // ✅ NAYA CONTROLLER: Jo login hone wale user ki permissions check karega
 class CurrentUserController extends GetxController {
@@ -210,6 +212,118 @@ class AdminAppBar extends StatelessWidget {
                   ),
                   const SizedBox(width: 15),
                 ],
+              );
+            }),
+
+            // ✅ NAYA: Sent Order Requests Badge (Real-time tracking of vendor status changes)
+            Obx(() {
+              if (!currentUserCtrl.hasPermission('Orders')) {
+                return const SizedBox.shrink();
+              }
+
+              return StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('order_requests')
+                    // ✅ Sirf wo requests dikhao jinpar vendor ne action le liya he (ya pending he)
+                    .where(
+                      'status',
+                      whereIn: [
+                        'pending',
+                        'confirmed',
+                        'shipped',
+                        'hold',
+                        'rejected',
+                      ],
+                    )
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  int actionCount = 0;
+                  if (snapshot.hasData) {
+                    actionCount = snapshot.data!.docs.length;
+                  }
+
+                  return Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      badges.Badge(
+                        showBadge: actionCount > 0,
+                        badgeContent: Text(
+                          '$actionCount',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                          ),
+                        ),
+                        badgeStyle: const badges.BadgeStyle(
+                          badgeColor: Colors.deepPurpleAccent,
+                          elevation: 0,
+                        ),
+                        position: badges.BadgePosition.topEnd(top: -5, end: -2),
+                        child: _AppBarIcon(
+                          icon: Icons
+                              .local_shipping_outlined, // Delivery/Order Icon
+                          tooltip: "Vendor Order Requests Status",
+                          onTap: () {
+                            // ✅ Apne file path k hisaab se sahi screen ka naam den yahan
+                            Get.to(() => const AdminOrderRequestsScreen());
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 15),
+                    ],
+                  );
+                },
+              );
+            }),
+
+            // ✅ NAYA: Pending Cheques Badge
+            Obx(() {
+              if (!currentUserCtrl.hasPermission('Finance')) {
+                return const SizedBox.shrink();
+              }
+
+              return StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('vendor_payment_history')
+                    .where('paymentMode', isEqualTo: 'Cheque')
+                    .where('isCleared', isEqualTo: false)
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  int chequeCount = 0;
+                  if (snapshot.hasData)
+                    chequeCount = snapshot.data!.docs.length;
+
+                  return Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      badges.Badge(
+                        showBadge: chequeCount > 0,
+                        badgeContent: Text(
+                          '$chequeCount',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                          ),
+                        ),
+                        badgeStyle: const badges.BadgeStyle(
+                          badgeColor: Colors.amber,
+                          elevation: 0,
+                        ),
+                        position: badges.BadgePosition.topEnd(top: -5, end: -2),
+                        child: _AppBarIcon(
+                          icon: Icons.account_balance_wallet_outlined,
+                          tooltip: "Pending Cheques for Clearance",
+                          onTap: () {
+                            Get.to(
+                              () => const ApproveChequesScreen(),
+                            ); // New Screen
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 15),
+                    ],
+                  );
+                },
               );
             }),
 

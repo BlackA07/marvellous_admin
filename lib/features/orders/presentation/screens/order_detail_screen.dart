@@ -120,6 +120,9 @@ class OrderDetailScreen extends StatelessWidget {
                             item['image'] ?? item['productImage'] ?? '';
                         String name =
                             item['name'] ?? item['productName'] ?? 'Unknown';
+                        String brand = item['brand'] ?? '';
+                        String ram = item['ram'] ?? '';
+                        String storage = item['storage'] ?? '';
                         int qty =
                             int.tryParse(item['quantity']?.toString() ?? '1') ??
                             1;
@@ -157,6 +160,30 @@ class OrderDetailScreen extends StatelessWidget {
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
                                     ),
+                                    // ✅ Brand
+                                    if (brand.isNotEmpty)
+                                      Text(
+                                        brand,
+                                        style: TextStyle(
+                                          color: Colors.deepPurple,
+                                          fontSize: bodySize - 2,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    // ✅ RAM/ROM
+                                    if (ram.isNotEmpty || storage.isNotEmpty)
+                                      Text(
+                                        [
+                                          if (ram.isNotEmpty) 'RAM: $ram',
+                                          if (storage.isNotEmpty)
+                                            'ROM: $storage',
+                                        ].join('  |  '),
+                                        style: TextStyle(
+                                          color: Colors.teal.shade700,
+                                          fontSize: bodySize - 3,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
                                     const SizedBox(height: 4),
                                     Text(
                                       "Qty: $qty  •  Rs. ${sp.toStringAsFixed(0)}",
