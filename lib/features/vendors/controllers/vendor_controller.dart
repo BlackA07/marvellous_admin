@@ -142,4 +142,82 @@ class VendorController extends GetxController {
       );
     }
   }
+
+  // Approve Vendor
+  Future<void> approveVendor(String docId) async {
+    isSaving.value = true;
+    try {
+      await _firestore.collection('vendors').doc(docId).update({
+        'status': 'approved',
+        'approvedAt': FieldValue.serverTimestamp(),
+        'rejectionReason': '',
+        'holdReason': '',
+      });
+      Get.snackbar(
+        "Approved",
+        "Vendor approved successfully.",
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      Get.snackbar(
+        "Error",
+        e.toString(),
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
+    isSaving.value = false;
+  }
+
+  // Hold Vendor
+  Future<void> holdVendor(String docId, String reason) async {
+    isSaving.value = true;
+    try {
+      await _firestore.collection('vendors').doc(docId).update({
+        'status': 'hold',
+        'holdReason': reason,
+      });
+      Get.snackbar(
+        "On Hold",
+        "Vendor put on hold.",
+        backgroundColor: Colors.orange,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      Get.snackbar(
+        "Error",
+        e.toString(),
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
+    isSaving.value = false;
+  }
+
+  // Reject Vendor
+  Future<void> rejectVendor(String docId, String reason) async {
+    isSaving.value = true;
+    try {
+      await _firestore.collection('vendors').doc(docId).update({
+        'status': 'rejected',
+        'rejectionReason': reason,
+        'rejectedAt': FieldValue.serverTimestamp(),
+      });
+      Get.snackbar(
+        "Rejected",
+        "Vendor rejected.",
+        backgroundColor: Colors.redAccent,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      Get.snackbar(
+        "Error",
+        e.toString(),
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
+    isSaving.value = false;
+  }
 }

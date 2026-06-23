@@ -33,6 +33,7 @@ class LedgerTransactionModel {
   // Bank details (agar online/cheque)
   final String? bankId;
   final String? bankName;
+  final String? billNumber; // ✅ NAYA FIELD ADDED
 
   // Cheque details
   final String? chequeNumber;
@@ -79,6 +80,7 @@ class LedgerTransactionModel {
     required this.category,
     required this.amount,
     required this.paymentMethod,
+    this.billNumber, // ✅ ADDED
     this.bankId,
     this.bankName,
     this.chequeNumber,
@@ -117,6 +119,8 @@ class LedgerTransactionModel {
 
     // Optional fields — sirf tab add karo jab value ho
     if (bankId != null && bankId!.isNotEmpty) map['bankId'] = bankId;
+    if (billNumber != null && billNumber!.isNotEmpty)
+      map['billNumber'] = billNumber; // ✅ ADDED
     if (bankName != null && bankName!.isNotEmpty) map['bankName'] = bankName;
     if (chequeNumber != null && chequeNumber!.isNotEmpty) {
       map['chequeNumber'] = chequeNumber;
@@ -194,6 +198,7 @@ class LedgerTransactionModel {
       linkedVendorName: map['linkedVendorName'],
       linkedStaffId: map['linkedStaffId'],
       linkedStaffName: map['linkedStaffName'],
+      billNumber: map['billNumber'], // ✅ ADDED
       linkedOrderId: map['linkedOrderId'],
       subTotal: map['subTotal'] != null
           ? (map['subTotal'] as num).toDouble()

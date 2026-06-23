@@ -196,16 +196,23 @@ class CreateOrderRequestScreen extends StatelessWidget {
               SearchableSelectionField(
                 label: "Step 1: Select Vendor",
                 hint: "Search Store or Owner...",
+                // ✅ FIX: Dropdown men same name ki wajah se crash bachane k liye unique identifier add kardia he
                 selectedValue: controller.selectedVendor.value == null
                     ? null
-                    : "${controller.selectedVendor.value!['storeName']} (${controller.selectedVendor.value!['ownerName']})",
-                items: controller.vendors
-                    .map((e) => "${e['storeName']} (${e['ownerName']})")
-                    .toList(),
+                    : "${controller.selectedVendor.value!['storeName']} (${controller.selectedVendor.value!['ownerName']}) - ${controller.selectedVendor.value!['storePhone'] ?? controller.selectedVendor.value!['id'].toString().substring(0, 4)}",
+                items: controller.vendors.map((e) {
+                  String uniqueSuffix =
+                      e['storePhone'] ?? e['id'].toString().substring(0, 4);
+                  return "${e['storeName']} (${e['ownerName']}) - $uniqueSuffix";
+                }).toList(),
                 onSelected: (val) {
-                  var v = controller.vendors.firstWhere(
-                    (e) => "${e['storeName']} (${e['ownerName']})" == val,
-                  );
+                  var v = controller.vendors.firstWhere((e) {
+                    String uniqueSuffix =
+                        e['storePhone'] ?? e['id'].toString().substring(0, 4);
+                    String label =
+                        "${e['storeName']} (${e['ownerName']}) - $uniqueSuffix";
+                    return label == val;
+                  });
                   controller.setVendor(v);
                 },
               ),
@@ -297,9 +304,19 @@ class CreateOrderRequestScreen extends StatelessWidget {
                 selectedValue: controller.productSearchQuery.value.isEmpty
                     ? null
                     : controller.productSearchQuery.value,
-                items: controller.products
-                    .map((e) => "${e['name']} - ${e['modelNumber']}")
-                    .toList(),
+                items: controller.products.map((e) {
+                  String label = "${e['name']} - ${e['modelNumber']}";
+                  String brand = e['brand'] ?? '';
+                  String ram = e['ram'] ?? '';
+                  String storage = e['storage'] ?? '';
+                  List<String> extra = [
+                    if (brand.isNotEmpty) brand,
+                    if (ram.isNotEmpty) 'RAM:$ram',
+                    if (storage.isNotEmpty) 'ROM:$storage',
+                  ];
+                  if (extra.isNotEmpty) label += ' (${extra.join(' | ')})';
+                  return label;
+                }).toList(),
                 onSelected: (val) {
                   controller.handleProductSelection(val);
                 },
@@ -513,11 +530,15 @@ class CartItemTile extends StatefulWidget {
 
 class _CartItemTileState extends State<CartItemTile> {
   late TextEditingController qtyCtrl;
+  late TextEditingController _unitPriceCtrl;
 
   @override
   void initState() {
     super.initState();
     qtyCtrl = TextEditingController(text: widget.item['requestQty'].toString());
+    _unitPriceCtrl = TextEditingController(
+      text: (widget.item['purchasePrice'] ?? 0).toString(),
+    );
   }
 
   @override
@@ -533,6 +554,7 @@ class _CartItemTileState extends State<CartItemTile> {
   @override
   void dispose() {
     qtyCtrl.dispose();
+    _unitPriceCtrl.dispose();
     super.dispose();
   }
 
@@ -540,6 +562,11 @@ class _CartItemTileState extends State<CartItemTile> {
   Widget build(BuildContext context) {
     double unitPrice = (widget.item['purchasePrice'] ?? 0).toDouble();
     double itemTotal = unitPrice * widget.item['requestQty'];
+
+    // ✅ Mobile fields
+    String ram = widget.item['ram'] ?? '';
+    String storage = widget.item['storage'] ?? '';
+    String brand = widget.item['brand'] ?? '';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -559,7 +586,6 @@ class _CartItemTileState extends State<CartItemTile> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // ✅ Product Image
           widget.buildImage(widget.item['image'], 65),
           const SizedBox(width: 12),
 
@@ -577,22 +603,86 @@ class _CartItemTileState extends State<CartItemTile> {
                     color: Colors.black,
                   ),
                 ),
-                const SizedBox(height: 4),
+                // ✅ Company name
+                if (brand.isNotEmpty)
+                  Text(
+                    brand,
+                    style: GoogleFonts.comicNeue(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.deepPurple,
+                    ),
+                  ),
                 Text(
                   "Model: ${widget.item['model']}",
                   style: GoogleFonts.comicNeue(
-                    fontSize: 14,
+                    fontSize: 13,
                     fontWeight: FontWeight.bold,
                     color: Colors.black54,
                   ),
                 ),
+                // ✅ RAM / ROM
+                if (ram.isNotEmpty || storage.isNotEmpty)
+                  Text(
+                    [
+                      if (ram.isNotEmpty) 'RAM: $ram',
+                      if (storage.isNotEmpty) 'ROM: $storage',
+                    ].join('  |  '),
+                    style: GoogleFonts.comicNeue(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.teal.shade700,
+                    ),
+                  ),
                 const SizedBox(height: 6),
-                Text(
-                  "Unit: PKR $unitPrice",
-                  style: GoogleFonts.comicNeue(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blue.shade900,
+                // ✅ Editable unit price
+                SizedBox(
+                  width: 130,
+                  height: 36,
+                  child: TextField(
+                    controller: _unitPriceCtrl,
+                    keyboardType: TextInputType.number,
+                    style: GoogleFonts.comicNeue(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue.shade900,
+                    ),
+                    decoration: InputDecoration(
+                      prefixText: 'PKR ',
+                      prefixStyle: GoogleFonts.comicNeue(
+                        fontSize: 13,
+                        color: Colors.blue.shade900,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 6,
+                      ),
+                      border: OutlineInputBorder(
+                        borderSide: const BorderSide(
+                          color: Colors.black,
+                          width: 1.5,
+                        ),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderSide: const BorderSide(
+                          color: Colors.blue,
+                          width: 2,
+                        ),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                    onChanged: (val) {
+                      double newPrice = double.tryParse(val) ?? 0;
+                      setState(() {
+                        widget.item['purchasePrice'] = newPrice;
+                      });
+                      widget.controller.updateItemPrice(
+                        widget.item['productId'],
+                        newPrice,
+                      );
+                    },
                   ),
                 ),
               ],
@@ -648,7 +738,7 @@ class _CartItemTileState extends State<CartItemTile> {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  "Total: PKR ${itemTotal.toStringAsFixed(0)}",
+                  "Total: PKR ${((widget.item['purchasePrice'] ?? 0).toDouble() * (widget.item['requestQty'] as num).toDouble()).toStringAsFixed(0)}",
                   style: GoogleFonts.comicNeue(
                     fontSize: 15,
                     fontWeight: FontWeight.w900,
@@ -661,7 +751,6 @@ class _CartItemTileState extends State<CartItemTile> {
 
           const SizedBox(width: 5),
 
-          // -- Delete Icon --
           IconButton(
             padding: EdgeInsets.zero,
             alignment: Alignment.topRight,

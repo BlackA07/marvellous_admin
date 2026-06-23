@@ -49,10 +49,13 @@ class ProductsRepository {
     }
   }
 
-  // ✅ NEW: Fetch Pending Requests
+  // ✅ FIX: Ab sirf 'pending' aur 'hold' fetch hongay. 'rejected' wale admin ki screen se hat jayenge.
   Stream<List<ProductModel>> getPendingRequestsStream() {
     return _productRequests
-        .where('status', isEqualTo: 'pending')
+        .where(
+          'status',
+          whereIn: ['pending', 'hold'],
+        ) // 'rejected' hata diya gaya hai
         .snapshots()
         .map((snapshot) {
           return snapshot.docs

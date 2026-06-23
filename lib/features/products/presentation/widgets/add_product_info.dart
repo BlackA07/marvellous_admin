@@ -9,6 +9,7 @@ class AddProductInfo extends StatelessWidget {
       brandCtrl,
       modelCtrl,
       descCtrl,
+      tiktokUrlCtrl, // ✅ NAYA FIELD
       ramCtrl,
       storageCtrl;
   final bool isMobile;
@@ -25,6 +26,7 @@ class AddProductInfo extends StatelessWidget {
     required this.brandCtrl,
     required this.modelCtrl,
     required this.descCtrl,
+    required this.tiktokUrlCtrl, // ✅ NAYA FIELD
     required this.ramCtrl,
     required this.storageCtrl,
     required this.isMobile,
@@ -127,6 +129,37 @@ class AddProductInfo extends StatelessWidget {
 
         const SizedBox(height: 15),
         _buildTextField("Description", "Details...", descCtrl, maxLines: 4),
+        const SizedBox(height: 15),
+
+        // ✅ NAYA FIELD: TikTok URL
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "TikTok Video URL (Optional)",
+              style: GoogleFonts.comicNeue(
+                color: textColor,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 5),
+            TextFormField(
+              controller: tiktokUrlCtrl,
+              style: const TextStyle(color: Colors.black),
+              cursorColor: Colors.black,
+              decoration: InputDecoration(
+                hintText: "https://www.tiktok.com/@user/video/...",
+                hintStyle: const TextStyle(color: Colors.grey),
+                filled: true,
+                fillColor: cardColor,
+                prefixIcon: const Icon(Icons.link, color: Colors.blueAccent),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+          ],
+        ),
       ],
     );
   }

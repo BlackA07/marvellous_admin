@@ -50,7 +50,10 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
   }
 
   void _fetchVendors() async {
-    var snap = await _db.collection('vendors').get();
+    var snap = await _db
+        .collection('vendors')
+        .where('status', isEqualTo: 'approved')
+        .get();
     setState(() {
       cachedVendorDocs = snap.docs;
       cachedVendorList = cachedVendorDocs.map((e) {
@@ -696,12 +699,105 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            // ✅ Bank select
+                            Text(
+                              "Select Bank",
+                              style: GoogleFonts.comicNeue(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black,
+                                fontSize: 16,
+                              ),
+                            ),
+                            const SizedBox(height: 5),
+                            FutureBuilder<QuerySnapshot>(
+                              future: _db
+                                  .collection('company_finances')
+                                  .doc('main_finances')
+                                  .collection('banks')
+                                  .get(),
+                              builder: (context, snapshot) {
+                                if (snapshot.connectionState ==
+                                    ConnectionState.waiting)
+                                  return const LinearProgressIndicator(
+                                    color: Colors.black,
+                                  );
+                                if (!snapshot.hasData ||
+                                    snapshot.data!.docs.isEmpty)
+                                  return const Text(
+                                    "No Banks Found.",
+                                    style: TextStyle(
+                                      color: Colors.red,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  );
+                                var bankDocs = snapshot.data!.docs;
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    border: Border.all(color: Colors.black45),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: DropdownButtonHideUnderline(
+                                    child: DropdownButton<String>(
+                                      isExpanded: true,
+                                      hint: Text(
+                                        "Choose a Bank...",
+                                        style: GoogleFonts.comicNeue(
+                                          color: Colors.black54,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      value: selectedBankId,
+                                      items: bankDocs.map((doc) {
+                                        var d =
+                                            doc.data() as Map<String, dynamic>;
+                                        String name =
+                                            d['name'] ?? 'Unknown Bank';
+                                        if (d['accountTitle'] != null &&
+                                            d['accountTitle']
+                                                .toString()
+                                                .isNotEmpty) {
+                                          name = "$name - ${d['accountTitle']}";
+                                        }
+                                        return DropdownMenuItem(
+                                          value: doc.id,
+                                          child: Text(
+                                            name,
+                                            style: GoogleFonts.comicNeue(
+                                              color: Colors.black,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        );
+                                      }).toList(),
+                                      onChanged: (v) {
+                                        setModalState(() {
+                                          selectedBankId = v;
+                                          var bDoc = bankDocs.firstWhere(
+                                            (doc) => doc.id == v,
+                                          );
+                                          var d =
+                                              bDoc.data()
+                                                  as Map<String, dynamic>;
+                                          selectedBankName =
+                                              "${d['name']} - ${d['accountTitle']}";
+                                        });
+                                      },
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 15),
+                            // Cheque number
                             Text(
                               "Cheque Number",
                               style: GoogleFonts.comicNeue(
                                 fontWeight: FontWeight.bold,
-                                color: Colors
-                                    .black, // ✅ Ensure color is explicitly black
+                                color: Colors.black,
                                 fontSize: 16,
                               ),
                             ),
@@ -725,12 +821,12 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                               ),
                             ),
                             const SizedBox(height: 15),
+                            // ✅ Sirf ek cheque date
                             Text(
                               "Cheque Date",
                               style: GoogleFonts.comicNeue(
                                 fontWeight: FontWeight.bold,
-                                color: Colors
-                                    .black, // ✅ Ensure color is explicitly black
+                                color: Colors.black,
                                 fontSize: 16,
                               ),
                             ),
@@ -1345,10 +1441,105 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            // ✅ Bank select
+                            Text(
+                              "Select Bank",
+                              style: GoogleFonts.comicNeue(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black,
+                                fontSize: 16,
+                              ),
+                            ),
+                            const SizedBox(height: 5),
+                            FutureBuilder<QuerySnapshot>(
+                              future: _db
+                                  .collection('company_finances')
+                                  .doc('main_finances')
+                                  .collection('banks')
+                                  .get(),
+                              builder: (context, snapshot) {
+                                if (snapshot.connectionState ==
+                                    ConnectionState.waiting)
+                                  return const LinearProgressIndicator(
+                                    color: Colors.black,
+                                  );
+                                if (!snapshot.hasData ||
+                                    snapshot.data!.docs.isEmpty)
+                                  return const Text(
+                                    "No Banks Found.",
+                                    style: TextStyle(
+                                      color: Colors.red,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  );
+                                var bankDocs = snapshot.data!.docs;
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    border: Border.all(color: Colors.black45),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: DropdownButtonHideUnderline(
+                                    child: DropdownButton<String>(
+                                      isExpanded: true,
+                                      hint: Text(
+                                        "Choose a Bank...",
+                                        style: GoogleFonts.comicNeue(
+                                          color: Colors.black54,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      value: selectedBankId,
+                                      items: bankDocs.map((doc) {
+                                        var d =
+                                            doc.data() as Map<String, dynamic>;
+                                        String name =
+                                            d['name'] ?? 'Unknown Bank';
+                                        if (d['accountTitle'] != null &&
+                                            d['accountTitle']
+                                                .toString()
+                                                .isNotEmpty) {
+                                          name = "$name - ${d['accountTitle']}";
+                                        }
+                                        return DropdownMenuItem(
+                                          value: doc.id,
+                                          child: Text(
+                                            name,
+                                            style: GoogleFonts.comicNeue(
+                                              color: Colors.black,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        );
+                                      }).toList(),
+                                      onChanged: (v) {
+                                        setModalState(() {
+                                          selectedBankId = v;
+                                          var bDoc = bankDocs.firstWhere(
+                                            (doc) => doc.id == v,
+                                          );
+                                          var d =
+                                              bDoc.data()
+                                                  as Map<String, dynamic>;
+                                          selectedBankName =
+                                              "${d['name']} - ${d['accountTitle']}";
+                                        });
+                                      },
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 15),
+                            // Cheque number
                             Text(
                               "Cheque Number",
                               style: GoogleFonts.comicNeue(
                                 fontWeight: FontWeight.bold,
+                                color: Colors.black,
                                 fontSize: 16,
                               ),
                             ),
@@ -1372,10 +1563,12 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                               ),
                             ),
                             const SizedBox(height: 15),
+                            // ✅ Sirf ek cheque date
                             Text(
                               "Cheque Date",
                               style: GoogleFonts.comicNeue(
                                 fontWeight: FontWeight.bold,
+                                color: Colors.black,
                                 fontSize: 16,
                               ),
                             ),
@@ -2701,6 +2894,7 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                   'credit': 0.0,
                   'balance': runningBalance,
                   'rawMap': null,
+                  'isPending': false, // ✅ Not Pending
                 });
 
                 if (initialAdvance > 0.01) {
@@ -2713,9 +2907,11 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                     'credit': initialAdvance,
                     'balance': runningBalance,
                     'rawMap': null,
+                    'isPending': false,
                   });
                 }
 
+                // ✅ MAIN LOGIC: Process each payment and check if it's a pending cheque
                 for (var payDoc in billPayments) {
                   var payMap = payDoc.data() as Map<String, dynamic>;
                   double pAmt =
@@ -2725,16 +2921,34 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                       0.0;
                   String mode = payMap['paymentMode'] ?? 'Cash';
                   DateTime payD = _parseDate(payMap['paymentDate']);
-                  runningBalance -= pAmt;
-                  billLedgerRows.add({
-                    'docId': payDoc.id,
-                    'date': payD,
-                    'details': "Payment ($mode)",
-                    'debit': 0.0,
-                    'credit': pAmt,
-                    'balance': runningBalance,
-                    'rawMap': payMap,
-                  });
+                  bool isCleared = payMap['isCleared'] ?? true;
+
+                  if (mode == 'Cheque' && !isCleared) {
+                    // Agar cheque pending hai toh balance se minus NAHI karna
+                    billLedgerRows.add({
+                      'docId': payDoc.id,
+                      'date': payD,
+                      'details': "Payment (Cheque - Pending)",
+                      'debit': 0.0,
+                      'credit': pAmt,
+                      'balance': runningBalance, // ✅ Balance Wese hi rahega
+                      'rawMap': payMap,
+                      'isPending': true, // ✅ Custom flag for Orange UI
+                    });
+                  } else {
+                    // Agar cash/online ya cleared cheque hai toh minus karo
+                    runningBalance -= pAmt;
+                    billLedgerRows.add({
+                      'docId': payDoc.id,
+                      'date': payD,
+                      'details': "Payment ($mode)",
+                      'debit': 0.0,
+                      'credit': pAmt,
+                      'balance': runningBalance,
+                      'rawMap': payMap,
+                      'isPending': false,
+                    });
+                  }
                 }
 
                 bool isFullyPaid = runningBalance <= 0.01;
@@ -2743,6 +2957,7 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                   color: isFullyPaid ? Colors.green.shade50 : Colors.white,
                   elevation: 3,
                   margin: const EdgeInsets.only(bottom: 20),
+                  // ✅ Card shape mein border lagaya gaya hai
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                     side: BorderSide(
@@ -2758,7 +2973,6 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // ✅ Product image in ledger card
                             if (firstProductImage.isNotEmpty)
                               Container(
                                 width: 52,
@@ -2793,7 +3007,6 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                                       color: Colors.black,
                                     ),
                                   ),
-                                  // ✅ Type badge with prefix in ledger
                                   Container(
                                     margin: const EdgeInsets.only(
                                       top: 2,
@@ -2992,11 +3205,18 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                                   ...billLedgerRows.map((row) {
                                     bool isBillGen =
                                         row['details'] == "Bill Generated";
+                                    bool isPending =
+                                        row['isPending'] ??
+                                        false; // ✅ Check if pending
+
                                     return Container(
                                       decoration: BoxDecoration(
+                                        // ✅ Orange highlight for pending cheques
                                         color: isBillGen
                                             ? Colors.orange.withOpacity(0.07)
-                                            : Colors.white,
+                                            : (isPending
+                                                  ? Colors.amber.shade50
+                                                  : Colors.white),
                                         border: const Border(
                                           top: BorderSide(
                                             color: Colors.black26,
@@ -3039,9 +3259,11 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                                                   ),
                                               child: Text(
                                                 row['details'],
-                                                style: const TextStyle(
+                                                style: TextStyle(
                                                   fontWeight: FontWeight.bold,
-                                                  color: Colors.black,
+                                                  color: isPending
+                                                      ? Colors.amber.shade900
+                                                      : Colors.black,
                                                   fontSize: 10,
                                                 ),
                                                 textAlign: TextAlign.center,
@@ -3087,7 +3309,9 @@ class _VendorPaymentDashboardState extends State<VendorPaymentDashboard>
                                                     : "-",
                                                 style: TextStyle(
                                                   fontWeight: FontWeight.w900,
-                                                  color: Colors.green.shade900,
+                                                  color: isPending
+                                                      ? Colors.amber.shade900
+                                                      : Colors.green.shade900,
                                                   fontSize: 11,
                                                 ),
                                                 textAlign: TextAlign.center,

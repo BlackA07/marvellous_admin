@@ -57,6 +57,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final TextEditingController nameCtrl = TextEditingController();
   final TextEditingController modelCtrl = TextEditingController();
   final TextEditingController descCtrl = TextEditingController();
+  final TextEditingController tiktokUrlCtrl =
+      TextEditingController(); // ✅ NAYA FIELD
   final TextEditingController brandCtrl = TextEditingController();
   final TextEditingController ramCtrl = TextEditingController();
   final TextEditingController storageCtrl = TextEditingController();
@@ -122,6 +124,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
     nameCtrl.dispose();
     modelCtrl.dispose();
     descCtrl.dispose();
+    tiktokUrlCtrl.dispose(); // ✅ NAYA FIELD
     brandCtrl.dispose();
     ramCtrl.dispose();
     storageCtrl.dispose();
@@ -136,7 +139,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
   // ✅ Fetch all vendors for the dropdown
   Future<void> _fetchVendors() async {
     try {
-      var snap = await FirebaseFirestore.instance.collection('vendors').get();
+      var snap = await FirebaseFirestore.instance
+          .collection('vendors')
+          .where('status', isEqualTo: 'approved')
+          .get();
       List<Map<String, dynamic>> fetchedVendors = [];
       for (var doc in snap.docs) {
         fetchedVendors.add({
@@ -178,6 +184,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
     _checkIfMobile(product.name);
     modelCtrl.text = product.modelNumber;
     descCtrl.text = product.description;
+    tiktokUrlCtrl.text = product.tiktokVideoUrl ?? ""; // ✅ NAYA FIELD
     brandCtrl.text = product.brand;
     purchaseCtrl.text = product.purchasePrice.toString();
     saleCtrl.text = product.salePrice.toString();
@@ -405,6 +412,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
         name: nameCtrl.text,
         modelNumber: modelCtrl.text,
         description: descCtrl.text,
+        tiktokVideoUrl: tiktokUrlCtrl.text.trim(), // ✅ NAYA FIELD
         category: selectedCategory!,
         subCategory: selectedSubCategory ?? "General",
         brand: brandCtrl.text == "" ? "Generic" : brandCtrl.text,
@@ -560,6 +568,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                           brandCtrl: brandCtrl,
                           modelCtrl: modelCtrl,
                           descCtrl: descCtrl,
+                          tiktokUrlCtrl: tiktokUrlCtrl, // ✅ NAYA FIELD
                           ramCtrl: ramCtrl,
                           storageCtrl: storageCtrl,
                           isMobile: _isMobile,
@@ -642,7 +651,16 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                 ),
                               ),
                               CheckboxListTile(
-                                title: const Text("Company Warranty"),
+                                // ✅ FIX: Text par style apply kar diya gaya hai takay dark aur waazay nazar aaye
+                                title: Text(
+                                  "Company Warranty",
+                                  style: GoogleFonts.comicNeue(
+                                    color: Colors.black87,
+                                    fontWeight:
+                                        FontWeight.w900, // Zyada dark aur bold
+                                    fontSize: 16,
+                                  ),
+                                ),
                                 value: hasCompanyWarranty == true,
                                 activeColor: accentColor,
                                 controlAffinity:
@@ -653,7 +671,15 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                 ),
                               ),
                               CheckboxListTile(
-                                title: const Text("Shop Warranty"),
+                                // ✅ FIX: Yahan bhi same style apply kar diya hai
+                                title: Text(
+                                  "Shop Warranty",
+                                  style: GoogleFonts.comicNeue(
+                                    color: Colors.black87,
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 16,
+                                  ),
+                                ),
                                 value: hasShopWarranty == true,
                                 activeColor: accentColor,
                                 controlAffinity:

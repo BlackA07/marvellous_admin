@@ -63,8 +63,10 @@ class PurchaseRepository {
       }
     }
 
-    // ✅ 5. INITIAL PAYMENT DEDUCTION LOGIC (Bank / Cash Deduction & Payment History)
+    // ✅ 5. INITIAL PAYMENT DEDUCTION LOGIC
     if (purchase.cashPaid > 0) {
+      bool isCheque = purchase.initialTransactionMode == 'Cheque';
+
       // 5A. Save Payment History Record
       DocumentReference transactionRef = _db
           .collection('vendor_payment_history')
@@ -86,33 +88,44 @@ class PurchaseRepository {
         'chequeDate': purchase.initialChequeDate != null
             ? Timestamp.fromDate(purchase.initialChequeDate!)
             : null,
+        'chequeBankId': purchase.initialChequeDate != null
+            ? purchase.initialBankId
+            : null,
+        'chequeBankName': purchase.initialChequeDate != null
+            ? purchase.initialBankName
+            : null,
+        'isCleared': isCheque
+            ? false
+            : true, // ✅ NAYA: Cheque clear nahi hua abhi
       });
 
-      // 5B. Real-Time Bank/Cash Money Deduction
-      if (purchase.initialTransactionMode == 'Bank Transfer' &&
-          purchase.initialBankId != null &&
-          purchase.initialBankId!.isNotEmpty) {
-        DocumentReference bankRef = _db
-            .collection('company_finances')
-            .doc('main_finances')
-            .collection('banks')
-            .doc(purchase.initialBankId);
-        batch.update(bankRef, {
-          'balance': FieldValue.increment(-purchase.cashPaid),
-        });
-      } else if (purchase.initialTransactionMode == 'Cash' ||
-          purchase.initialTransactionMode == null) {
-        var cashBankQuery = await _db
-            .collection('company_finances')
-            .doc('main_finances')
-            .collection('banks')
-            .where('name', isEqualTo: 'Cash')
-            .limit(1)
-            .get();
-        if (cashBankQuery.docs.isNotEmpty) {
-          batch.update(cashBankQuery.docs.first.reference, {
+      // 5B. Real-Time Bank/Cash Money Deduction (Sirf Agar Cheque NAHI hai)
+      if (!isCheque) {
+        if (purchase.initialTransactionMode == 'Bank Transfer' &&
+            purchase.initialBankId != null &&
+            purchase.initialBankId!.isNotEmpty) {
+          DocumentReference bankRef = _db
+              .collection('company_finances')
+              .doc('main_finances')
+              .collection('banks')
+              .doc(purchase.initialBankId);
+          batch.update(bankRef, {
             'balance': FieldValue.increment(-purchase.cashPaid),
           });
+        } else if (purchase.initialTransactionMode == 'Cash' ||
+            purchase.initialTransactionMode == null) {
+          var cashBankQuery = await _db
+              .collection('company_finances')
+              .doc('main_finances')
+              .collection('banks')
+              .where('name', isEqualTo: 'Cash')
+              .limit(1)
+              .get();
+          if (cashBankQuery.docs.isNotEmpty) {
+            batch.update(cashBankQuery.docs.first.reference, {
+              'balance': FieldValue.increment(-purchase.cashPaid),
+            });
+          }
         }
       }
     }

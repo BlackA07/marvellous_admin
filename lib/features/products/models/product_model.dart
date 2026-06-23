@@ -13,7 +13,7 @@ class ProductModel {
   double originalPrice;
   int stockQuantity; // Available Stock (Left)
   int stockOut; // Total Sold
-  int stockIn; // ✅ ADDED: Total Bought (In)
+  int stockIn; // Total Bought (In)
   String vendorId;
   String vendorName;
   List<String> images;
@@ -22,6 +22,7 @@ class ProductModel {
   String deliveryLocation;
   String warranty;
   double productPoints;
+  String? tiktokVideoUrl; // ✅ NAYA FIELD ADDED
 
   Map<String, double> deliveryFeesMap;
   Map<String, String> deliveryTimeMap;
@@ -35,6 +36,7 @@ class ProductModel {
   String? ram;
   String? storage;
   String status;
+  String? holdReason; // ✅ NAYA FIELD ADDED
 
   ProductModel({
     this.id,
@@ -43,13 +45,14 @@ class ProductModel {
     required this.description,
     required this.category,
     required this.subCategory,
+    this.tiktokVideoUrl, // ✅ ADDED
     required this.brand,
     required this.purchasePrice,
     required this.salePrice,
     required this.originalPrice,
     required this.stockQuantity,
     this.stockOut = 0,
-    this.stockIn = 0, // ✅ ADDED
+    this.stockIn = 0,
     required this.vendorId,
     this.vendorName = 'Admin',
     required this.images,
@@ -69,6 +72,7 @@ class ProductModel {
     this.ram,
     this.storage,
     this.status = 'approved',
+    this.holdReason, // ✅ ADDED
   });
 
   Map<String, dynamic> toMap() {
@@ -84,8 +88,9 @@ class ProductModel {
       'salePrice': salePrice,
       'originalPrice': originalPrice,
       'stockQuantity': stockQuantity,
+      'tiktokVideoUrl': tiktokVideoUrl, // ✅ ADDED
       'stockOut': stockOut,
-      'stockIn': stockIn, // ✅ ADDED
+      'stockIn': stockIn,
       'vendorId': vendorId,
       'vendorName': vendorName,
       'images': images,
@@ -105,44 +110,61 @@ class ProductModel {
       'ram': ram,
       'storage': storage,
       'status': status,
+      'holdReason': holdReason, // ✅ ADDED
     };
   }
 
   factory ProductModel.fromMap(Map<String, dynamic> map, String docId) {
     return ProductModel(
       id: docId,
-      name: map['name'] ?? '',
-      modelNumber: map['modelNumber'] ?? '',
-      description: map['description'] ?? '',
-      category: map['category'] ?? '',
-      subCategory: map['subCategory'] ?? '',
-      brand: map['brand'] ?? '',
-      purchasePrice: (map['purchasePrice'] ?? 0).toDouble(),
-      salePrice: (map['salePrice'] ?? 0).toDouble(),
-      originalPrice: (map['originalPrice'] ?? 0).toDouble(),
-      stockQuantity: map['stockQuantity'] ?? 0,
-      stockOut: map['stockOut'] ?? 0,
-      // ✅ Fallback to stockQuantity for older products that didn't have stockIn
-      stockIn: map['stockIn'] ?? map['stockQuantity'] ?? 0,
-      vendorId: map['vendorId'] ?? '',
-      vendorName: map['vendorName'] ?? 'Admin',
-      images: List<String>.from(map['images'] ?? []),
-      video: map['video'],
-      dateAdded: (map['dateAdded'] as Timestamp).toDate(),
-      deliveryLocation: map['deliveryLocation'] ?? 'Worldwide',
-      warranty: map['warranty'] ?? 'No Warranty',
-      productPoints: (map['productPoints'] ?? 0).toDouble(),
-      deliveryFeesMap: Map<String, double>.from(map['deliveryFeesMap'] ?? {}),
-      deliveryTimeMap: Map<String, String>.from(map['deliveryTimeMap'] ?? {}),
-      codFee: (map['codFee'] ?? 0.0).toDouble(),
-      averageRating: (map['averageRating'] ?? 0.0).toDouble(),
-      totalReviews: map['totalReviews'] ?? 0,
+      name: map['name']?.toString() ?? '',
+      modelNumber: map['modelNumber']?.toString() ?? '',
+      description: map['description']?.toString() ?? '',
+      category: map['category']?.toString() ?? '',
+      subCategory: map['subCategory']?.toString() ?? '',
+      brand: map['brand']?.toString() ?? '',
+      purchasePrice: (map['purchasePrice'] as num?)?.toDouble() ?? 0.0,
+      tiktokVideoUrl: map['tiktokVideoUrl']?.toString(), // ✅ ADDED
+      salePrice: (map['salePrice'] as num?)?.toDouble() ?? 0.0,
+      originalPrice: (map['originalPrice'] as num?)?.toDouble() ?? 0.0,
+      stockQuantity: (map['stockQuantity'] as num?)?.toInt() ?? 0,
+      stockOut: (map['stockOut'] as num?)?.toInt() ?? 0,
+      stockIn: (map['stockIn'] ?? map['stockQuantity'] as num?)?.toInt() ?? 0,
+      vendorId: map['vendorId']?.toString() ?? '',
+      vendorName: map['vendorName']?.toString() ?? 'Admin',
+      images: map['images'] is List
+          ? (map['images'] as List).map((e) => e.toString()).toList()
+          : [],
+      video: map['video']?.toString(),
+      dateAdded: map['dateAdded'] is Timestamp
+          ? (map['dateAdded'] as Timestamp).toDate()
+          : DateTime.now(),
+      deliveryLocation: map['deliveryLocation']?.toString() ?? 'Worldwide',
+      warranty: map['warranty']?.toString() ?? 'No Warranty',
+      productPoints: (map['productPoints'] as num?)?.toDouble() ?? 0.0,
+      deliveryFeesMap: map['deliveryFeesMap'] is Map
+          ? (map['deliveryFeesMap'] as Map).map(
+              (key, value) =>
+                  MapEntry(key.toString(), (value as num).toDouble()),
+            )
+          : {},
+      deliveryTimeMap: map['deliveryTimeMap'] is Map
+          ? (map['deliveryTimeMap'] as Map).map(
+              (key, value) => MapEntry(key.toString(), value.toString()),
+            )
+          : {},
+      codFee: (map['codFee'] as num?)?.toDouble() ?? 0.0,
+      averageRating: (map['averageRating'] as num?)?.toDouble() ?? 0.0,
+      totalReviews: (map['totalReviews'] as num?)?.toInt() ?? 0,
       isPackage: map['isPackage'] ?? false,
-      includedItemIds: List<String>.from(map['includedItemIds'] ?? []),
+      includedItemIds: map['includedItemIds'] is List
+          ? (map['includedItemIds'] as List).map((e) => e.toString()).toList()
+          : [],
       showDecimalPoints: map['showDecimalPoints'] ?? true,
-      ram: map['ram'],
-      storage: map['storage'],
-      status: map['status'] ?? 'approved',
+      ram: map['ram']?.toString(),
+      storage: map['storage']?.toString(),
+      status: map['status']?.toString() ?? 'approved',
+      holdReason: map['holdReason']?.toString(), // ✅ ADDED
     );
   }
 }

@@ -1,6 +1,9 @@
-import 'package:fl_chart/fl_chart.dart'; // Ensure fl_chart is in pubspec.yaml
+// lib/features/reports/shared/widgets/sales_chart_card.dart
+
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:intl/intl.dart';
 import '../../controller/dashboard_controller.dart';
 
 class SalesChartCard extends StatelessWidget {
@@ -13,24 +16,22 @@ class SalesChartCard extends StatelessWidget {
     double width = MediaQuery.of(context).size.width;
     bool isDesktop = width > 1100;
 
-    // Metallic Gradient from TextField
     const faceGradient = LinearGradient(
       begin: Alignment.topRight,
       end: Alignment.bottomLeft,
       colors: [
-        Colors.white, // Top Highlight
-        Color.fromARGB(255, 218, 221, 227), // Light Silver
-        Color(0xFF98A2B3), // Darker Silver
-        Color(0xFF667085), // Shadow Base
+        Colors.white,
+        Color(0xFFDADDE3),
+        Color(0xFF98A2B3),
+        Color(0xFF667085),
       ],
       stops: [0.0, 0.2, 0.6, 1.0],
     );
 
     return Container(
-      height: 350,
+      height: 380,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        // Applied Gradient Here
         gradient: faceGradient,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white.withOpacity(0.6)),
@@ -49,28 +50,61 @@ class SalesChartCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Expanded(
-                child: Text(
-                  "Sales Overview (PKR)",
-                  style: TextStyle(
-                    fontFamily: 'Comic Sans MS',
-                    color: Colors.black87, // Font Black
-                    fontSize: isDesktop ? 16 : 13,
-                    fontWeight:
-                        FontWeight.w900, // Thora aur bold metallic look k liye
-                  ),
-                  overflow: TextOverflow.ellipsis,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Revenue vs Expenses (PKR)",
+                      style: TextStyle(
+                        fontFamily: 'Comic Sans MS',
+                        color: Colors.black87,
+                        fontSize: isDesktop ? 18 : 14,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        _legendDot(Colors.blueAccent, "Sales"),
+                        const SizedBox(width: 10),
+                        _legendDot(Colors.redAccent, "Expenses"),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-              // Filter Buttons
+              // ✅ NAYA: Custom button added in the list
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
-                  children: ["Day", "Week", "Month", "Year"].map((filter) {
+                  children: ["Day", "Week", "Month", "Year", "Custom"].map((
+                    filter,
+                  ) {
                     return Obx(() {
                       bool isSelected =
                           controller.selectedFilter.value == filter;
+
+                      // Agar custom select hai toh button pe date range show karwa dein
+                      String buttonText = filter;
+                      if (filter == 'Custom' &&
+                          isSelected &&
+                          controller.customStartDate.value != null) {
+                        String sDate = DateFormat(
+                          'dd MMM',
+                        ).format(controller.customStartDate.value!);
+                        String eDate = DateFormat(
+                          'dd MMM',
+                        ).format(controller.customEndDate.value!);
+                        buttonText = "$sDate - $eDate";
+                      }
+
                       return InkWell(
-                        onTap: () => controller.updateFilter(filter),
+                        onTap: () {
+                          if (filter == 'Custom') {
+                            controller.selectCustomDateRange(context);
+                          } else {
+                            controller.updateFilter(filter);
+                          }
+                        },
                         child: Container(
                           margin: const EdgeInsets.only(left: 5),
                           padding: const EdgeInsets.symmetric(
@@ -78,23 +112,20 @@ class SalesChartCard extends StatelessWidget {
                             vertical: 5,
                           ),
                           decoration: BoxDecoration(
-                            // Selected: Cyan bg, Unselected: Transparent
                             color: isSelected
                                 ? Colors.cyanAccent.withOpacity(0.3)
                                 : Colors.transparent,
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(
                               color: isSelected
-                                  ? Colors
-                                        .cyan[700]! // Darker border for visibility
+                                  ? Colors.cyan[700]!
                                   : Colors.black12,
                             ),
                           ),
                           child: Text(
-                            filter,
+                            buttonText,
                             style: TextStyle(
                               fontFamily: 'Comic Sans MS',
-                              // Font Black
                               color: isSelected ? Colors.black : Colors.black54,
                               fontSize: isDesktop ? 13 : 10,
                               fontWeight: FontWeight.bold,
@@ -108,133 +139,198 @@ class SalesChartCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 30),
+          const SizedBox(height: 20),
 
           // GRAPH SECTION
           Expanded(
-            child: LineChart(
-              LineChartData(
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: false,
-                  getDrawingHorizontalLine: (value) {
-                    // Grid lines dark taake silver pe dikhen
-                    return FlLine(color: Colors.black12, strokeWidth: 1);
-                  },
-                ),
-                titlesData: FlTitlesData(
-                  show: true,
-                  rightTitles: AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
+            child: Obx(
+              () => LineChart(
+                LineChartData(
+                  gridData: FlGridData(
+                    show: true,
+                    drawVerticalLine: false,
+                    getDrawingHorizontalLine: (value) =>
+                        FlLine(color: Colors.black12, strokeWidth: 1),
                   ),
-                  topTitles: AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 30,
-                      interval: 1,
-                      getTitlesWidget: (value, meta) {
-                        const style = TextStyle(
-                          color: Colors.black87, // Font Black
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        );
-                        String text;
-                        switch (value.toInt()) {
-                          case 0:
-                            text = 'Mon';
-                            break;
-                          case 2:
-                            text = 'Wed';
-                            break;
-                          case 4:
-                            text = 'Fri';
-                            break;
-                          case 6:
-                            text = 'Sun';
-                            break;
-                          default:
-                            return Container();
-                        }
-                        return SideTitleWidget(
-                          meta: meta, // Updated for newer fl_chart
-                          space: 8.0,
-                          child: Text(text, style: style),
-                        );
-                      },
+                  titlesData: FlTitlesData(
+                    show: true,
+                    rightTitles: AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
                     ),
-                  ),
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      interval: 10000,
-                      getTitlesWidget: (value, meta) {
-                        return Text(
-                          "${(value / 1000).toStringAsFixed(0)}k",
-                          style: const TextStyle(
-                            color: Colors.black87, // Font Black
-                            fontSize: 10,
+                    topTitles: AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 30,
+                        interval: 1,
+                        getTitlesWidget: (value, meta) {
+                          const style = TextStyle(
+                            color: Colors.black87,
                             fontWeight: FontWeight.bold,
-                          ),
-                        );
-                      },
-                      reservedSize: 40,
+                            fontSize: 10,
+                          );
+                          String text = '';
+                          String filter = controller.selectedFilter.value;
+
+                          if (filter == 'Day' && value % 4 == 0)
+                            text = '${value.toInt()}h';
+                          else if (filter == 'Week') {
+                            List<String> days = [
+                              '',
+                              'Mon',
+                              'Tue',
+                              'Wed',
+                              'Thu',
+                              'Fri',
+                              'Sat',
+                              'Sun',
+                            ];
+                            if (value > 0 && value <= 7)
+                              text = days[value.toInt()];
+                          } else if ((filter == 'Month' ||
+                                  (filter == 'Custom' &&
+                                      controller.customEndDate.value!
+                                              .difference(
+                                                controller
+                                                    .customStartDate
+                                                    .value!,
+                                              )
+                                              .inDays <=
+                                          31)) &&
+                              value % 5 == 0) {
+                            text = value.toInt().toString();
+                          } else if (filter == 'Year' ||
+                              (filter == 'Custom' &&
+                                  controller.customEndDate.value!
+                                          .difference(
+                                            controller.customStartDate.value!,
+                                          )
+                                          .inDays >
+                                      31)) {
+                            List<String> m = [
+                              '',
+                              'Jan',
+                              'Feb',
+                              'Mar',
+                              'Apr',
+                              'May',
+                              'Jun',
+                              'Jul',
+                              'Aug',
+                              'Sep',
+                              'Oct',
+                              'Nov',
+                              'Dec',
+                            ];
+                            if (value > 0 && value <= 12)
+                              text = m[value.toInt()];
+                          }
+
+                          return SideTitleWidget(
+                            meta: meta,
+                            space: 8.0,
+                            child: Text(text, style: style),
+                          );
+                        },
+                      ),
                     ),
-                  ),
-                ),
-                borderData: FlBorderData(
-                  show: true,
-                  // L-Shape Border Dark
-                  border: const Border(
-                    bottom: BorderSide(color: Colors.black26, width: 1),
-                    left: BorderSide(color: Colors.black26, width: 1),
-                    top: BorderSide(color: Colors.transparent),
-                    right: BorderSide(color: Colors.transparent),
-                  ),
-                ),
-                minX: 0,
-                maxX: 6,
-                minY: 0,
-                maxY: 50000,
-                lineBarsData: [
-                  LineChartBarData(
-                    spots: const [
-                      FlSpot(0, 5000),
-                      FlSpot(1, 15000),
-                      FlSpot(2, 10000),
-                      FlSpot(3, 25000),
-                      FlSpot(4, 18000),
-                      FlSpot(5, 35000),
-                      FlSpot(6, 42000),
-                    ],
-                    isCurved: true,
-                    // Line Gradient thora dark kiya taake silver pe shine kare
-                    gradient: const LinearGradient(
-                      colors: [Colors.blueAccent, Colors.purpleAccent],
-                    ),
-                    barWidth: 3,
-                    isStrokeCapRound: true,
-                    dotData: FlDotData(show: false),
-                    belowBarData: BarAreaData(
-                      show: true,
-                      gradient: LinearGradient(
-                        colors: [
-                          Colors.blueAccent.withOpacity(0.3),
-                          Colors.purpleAccent.withOpacity(0.0),
-                        ],
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 45,
+                        getTitlesWidget: (value, meta) {
+                          return Text(
+                            "${(value / 1000).toStringAsFixed(0)}k",
+                            style: const TextStyle(
+                              color: Colors.black87,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          );
+                        },
                       ),
                     ),
                   ),
-                ],
+                  borderData: FlBorderData(
+                    show: true,
+                    border: const Border(
+                      bottom: BorderSide(color: Colors.black26, width: 1),
+                      left: BorderSide(color: Colors.black26, width: 1),
+                      top: BorderSide(color: Colors.transparent),
+                      right: BorderSide(color: Colors.transparent),
+                    ),
+                  ),
+                  minX: controller.selectedFilter.value == 'Day' ? 0 : 1,
+                  maxX: controller.selectedFilter.value == 'Day'
+                      ? 23
+                      : (controller.selectedFilter.value == 'Week'
+                            ? 7
+                            : (controller.selectedFilter.value == 'Month' ||
+                                      (controller.selectedFilter.value ==
+                                              'Custom' &&
+                                          controller.customEndDate.value!
+                                                  .difference(
+                                                    controller
+                                                        .customStartDate
+                                                        .value!,
+                                                  )
+                                                  .inDays <=
+                                              31)
+                                  ? 31
+                                  : 12)),
+                  minY: 0,
+                  maxY: controller.chartMaxY.value,
+                  lineBarsData: [
+                    LineChartBarData(
+                      spots: controller.salesSpots,
+                      isCurved: true,
+                      color: Colors.blueAccent,
+                      barWidth: 3,
+                      isStrokeCapRound: true,
+                      dotData: FlDotData(show: false),
+                      belowBarData: BarAreaData(
+                        show: true,
+                        color: Colors.blueAccent.withOpacity(0.2),
+                      ),
+                    ),
+                    LineChartBarData(
+                      spots: controller.expenseSpots,
+                      isCurved: true,
+                      color: Colors.redAccent,
+                      barWidth: 3,
+                      isStrokeCapRound: true,
+                      dotData: FlDotData(show: false),
+                      belowBarData: BarAreaData(
+                        show: true,
+                        color: Colors.redAccent.withOpacity(0.2),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _legendDot(Color color, String text) {
+    return Row(
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          text,
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+        ),
+      ],
     );
   }
 }

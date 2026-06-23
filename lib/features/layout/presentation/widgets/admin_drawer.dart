@@ -20,6 +20,11 @@ import '../../../finance/screens/admin_finance_home_screen.dart';
 import '../../../finance/screens/banks_screen.dart';
 import '../../../finance/screens/expenses_screen.dart';
 import '../../../finance/screens/taxes_screen.dart';
+import '../../../reports/customers/screens/customer_report_screen.dart';
+import '../../../reports/finance/screens/finance_report_screen.dart';
+import '../../../reports/products/screens/product_report_screen.dart';
+import '../../../reports/staff/screens/staff_report_screen.dart';
+import '../../../reports/vendors/screens/vendor_report_screen.dart';
 import '../../../staff/presentation/add_staff_screen.dart';
 import '../../../staff/presentation/staff_list/staff_list_screen.dart';
 import '../../../user_settings/views/user_settings_screen.dart';
@@ -144,7 +149,18 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
         "Taxes",
       ], // ✅ Vendor stuff removed from Finance
     ),
-    AdminMenuItem(title: "Reports", icon: Icons.bar_chart_outlined),
+    AdminMenuItem(
+      title: "Reports",
+      icon: Icons.bar_chart_outlined,
+      hasSubmenu: true,
+      subItems: [
+        "Customers Report",
+        "Products Report",
+        "Vendors Report",
+        "Finance Report",
+        "Staff Report",
+      ],
+    ),
     AdminMenuItem(title: "Profile", icon: Icons.person_outlined),
   ];
 
@@ -516,6 +532,23 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
                                       targetScreen = ExpensesScreen();
                                     } else if (subItem == "Taxes") {
                                       targetScreen = TaxesScreen();
+                                    }
+                                  }
+                                  //Reports
+                                  else if (item.title == "Reports") {
+                                    if (subItem == "Customers Report") {
+                                      targetScreen =
+                                          const CustomerReportScreen();
+                                    } else if (subItem == "Products Report") {
+                                      targetScreen =
+                                          const ProductReportScreen();
+                                    } else if (subItem == "Vendors Report") {
+                                      targetScreen = const VendorReportScreen();
+                                    } else if (subItem == "Finance Report") {
+                                      targetScreen =
+                                          const FinanceReportScreen();
+                                    } else if (subItem == "Staff Report") {
+                                      targetScreen = const StaffReportScreen();
                                     }
                                   }
                                   // ─── ORDERS ───────────────────────────────

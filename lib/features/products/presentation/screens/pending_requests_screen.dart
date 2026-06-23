@@ -86,12 +86,46 @@ class PendingRequestsScreen extends StatelessWidget {
                       ? const Icon(Icons.image, color: Colors.grey)
                       : null,
                 ),
-                title: Text(
-                  product.name,
-                  style: GoogleFonts.orbitron(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
+                // ✅ FIX: Title mein Product Name ke sath Live Status Badge add kar diya hai
+                title: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        product.name,
+                        style: GoogleFonts.orbitron(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: product.status == 'hold'
+                            ? Colors.amber.shade100
+                            : (product.status == 'rejected'
+                                  ? Colors.red.shade100
+                                  : Colors.orange.shade100),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        product.status.toUpperCase(),
+                        style: TextStyle(
+                          color: product.status == 'hold'
+                              ? Colors.amber.shade900
+                              : (product.status == 'rejected'
+                                    ? Colors.red.shade900
+                                    : Colors.orange.shade900),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -108,12 +142,52 @@ class PendingRequestsScreen extends StatelessWidget {
                       "Category: ${product.category} > ${product.subCategory}",
                       style: const TextStyle(fontSize: 12, color: Colors.grey),
                     ),
+                    const SizedBox(height: 6),
+                    Text(
+                      "Purchase Price: PKR ${product.purchasePrice.toStringAsFixed(0)}",
+                      style: TextStyle(
+                        color: Colors.green.shade400,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 14,
+                      ),
+                    ),
+                    if (product.brand.isNotEmpty ||
+                        product.modelNumber.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2.0),
+                        child: Text(
+                          [
+                            if (product.brand.isNotEmpty)
+                              "Brand: ${product.brand}",
+                            if (product.modelNumber.isNotEmpty)
+                              "Model: ${product.modelNumber}",
+                          ].join("  |  "),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    // ✅ FIX: Admin ko ab actual hold reason nazar aayega!
+                    if (product.status == 'hold')
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6.0),
+                        child: Text(
+                          "Hold Reason: ${product.holdReason ?? 'Reason not provided'}",
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.amber.shade400,
+                          ),
+                        ),
+                      ),
                   ],
                 ),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Review / Approve Button
+                    // Review Button (same)
                     ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.green,
@@ -127,16 +201,32 @@ class PendingRequestsScreen extends StatelessWidget {
                         "Review",
                         style: TextStyle(color: Colors.white),
                       ),
-                      onPressed: () {
-                        // ✅ IS SE WAHI ADD PRODUCT SCREEN KHULEGI, LAIKIN DATA BARA HUA HOGA
-                        Get.to(() => AddProductScreen(productToEdit: product));
-                      },
+                      onPressed: () => Get.to(
+                        () => AddProductScreen(productToEdit: product),
+                      ),
                     ),
-                    const SizedBox(width: 10),
-                    // Reject Button
+                    const SizedBox(width: 6),
+                    // Hold Button (same)
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange,
+                      ),
+                      icon: const Icon(
+                        Icons.pause_circle,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                      label: const Text(
+                        "Hold",
+                        style: TextStyle(color: Colors.white),
+                      ),
+                      onPressed: () =>
+                          _showHoldDialog(context, controller, product.id!),
+                    ),
+                    const SizedBox(width: 6),
+                    // Delete/Reject Button (same)
                     IconButton(
                       icon: const Icon(Icons.delete, color: Colors.red),
-                      tooltip: "Reject Request",
                       onPressed: () {
                         Get.defaultDialog(
                           title: "Reject Request?",
@@ -162,4 +252,43 @@ class PendingRequestsScreen extends StatelessWidget {
       }),
     );
   }
+}
+
+void _showHoldDialog(
+  BuildContext context,
+  ProductsController controller,
+  String productId,
+) {
+  final reasonCtrl = TextEditingController();
+  Get.defaultDialog(
+    title: "Hold Request",
+    content: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: TextField(
+        controller: reasonCtrl,
+        maxLines: 3,
+        decoration: const InputDecoration(
+          hintText: "Reason for holding (e.g. price zyada hai...)",
+          border: OutlineInputBorder(),
+        ),
+      ),
+    ),
+    textConfirm: "Hold",
+    confirmTextColor: Colors.white,
+    buttonColor: Colors.orange,
+    onConfirm: () {
+      if (reasonCtrl.text.trim().isEmpty) {
+        Get.snackbar(
+          "Required",
+          "Please enter a reason",
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
+        return;
+      }
+      controller.holdRequest(productId, reasonCtrl.text.trim());
+      Get.back();
+    },
+    onCancel: () {},
+  );
 }

@@ -66,12 +66,29 @@ class _VendorPurchaseScreenState extends State<VendorPurchaseScreen> {
       return;
     }
 
-    controller.addItemToBill(tempSelectedProduct.value!, qty.toInt(), price);
+    var product = tempSelectedProduct.value!;
+    controller.addItemToBill(product, qty.toInt(), price);
+
+    // ✅ FIX: Agar controller RAM/ROM ko list mein add karna bhool gaya hai,
+    // toh hum yahan forcefully usay inject karwa rahay hain taake UI par show ho jaye.
+    if (controller.addedItems.isNotEmpty) {
+      var lastItem = controller.addedItems.last;
+      lastItem['ram'] = product['ram'] ?? '';
+      lastItem['storage'] = product['storage'] ?? '';
+      lastItem['brand'] = product['brand'] ?? '';
+      lastItem['model'] = product['modelNumber'] ?? product['model'] ?? 'N/A';
+      controller.addedItems[controller.addedItems.length - 1] = lastItem;
+    }
 
     tempSelectedProduct.value = null;
     qtyCtrl.text = "1";
     priceCtrl.clear();
     FocusScope.of(context).unfocus();
+
+    // Payment terms refresh karo
+    setState(() {
+      _paymentTermsKey = UniqueKey();
+    });
   }
 
   void _showSuccessPopup() {
@@ -318,24 +335,28 @@ class _VendorPurchaseScreenState extends State<VendorPurchaseScreen> {
               ),
               const Divider(height: 35, color: Colors.black, thickness: 2),
 
-              Obx(
-                () => SearchableSelectionField(
+              Obx(() {
+                // ✅ FIX: Duplicate vendors ko remove karne ke liye .toSet() use kiya gaya hai
+                var uniqueVendorItems = controller.vendors
+                    .map((e) => "${e['storeName']} (${e['ownerName']})")
+                    .toSet()
+                    .toList();
+
+                return SearchableSelectionField(
                   label: "Select Vendor / Store Name",
                   hint: "Search Store or Owner...",
                   selectedValue: controller.selectedVendor.value == null
                       ? null
                       : "${controller.selectedVendor.value?['storeName']} (${controller.selectedVendor.value?['ownerName']})",
-                  items: controller.vendors
-                      .map((e) => "${e['storeName']} (${e['ownerName']})")
-                      .toList(),
+                  items: uniqueVendorItems,
                   onSelected: (val) {
                     var v = controller.vendors.firstWhere(
                       (e) => "${e['storeName']} (${e['ownerName']})" == val,
                     );
                     controller.setVendor(v);
                   },
-                ),
-              ),
+                );
+              }),
 
               // ✅ NEW: Vendor Details Table
               if (controller.selectedVendor.value != null) ...[
@@ -446,13 +467,35 @@ class _VendorPurchaseScreenState extends State<VendorPurchaseScreen> {
                         selectedValue: tempSelectedProduct.value == null
                             ? null
                             : "${tempSelectedProduct.value?['name']} - ${tempSelectedProduct.value?['modelNumber']}",
-                        items: controller.products
-                            .map((e) => "${e['name']} - ${e['modelNumber']}")
-                            .toList(),
+                        items: controller.products.map((e) {
+                          String label = "${e['name']} - ${e['modelNumber']}";
+                          String brand = e['brand'] ?? '';
+                          String ram = e['ram'] ?? '';
+                          String storage = e['storage'] ?? '';
+                          List<String> extra = [
+                            if (brand.isNotEmpty) brand,
+                            if (ram.isNotEmpty) 'RAM:$ram',
+                            if (storage.isNotEmpty) 'ROM:$storage',
+                          ];
+                          if (extra.isNotEmpty)
+                            label += ' (${extra.join(' | ')})';
+                          return label;
+                        }).toList(),
                         onSelected: (val) {
-                          var p = controller.products.firstWhere(
-                            (e) => "${e['name']} - ${e['modelNumber']}" == val,
-                          );
+                          var p = controller.products.firstWhere((e) {
+                            String label = "${e['name']} - ${e['modelNumber']}";
+                            String brand = e['brand'] ?? '';
+                            String ram = e['ram'] ?? '';
+                            String storage = e['storage'] ?? '';
+                            List<String> extra = [
+                              if (brand.isNotEmpty) brand,
+                              if (ram.isNotEmpty) 'RAM:$ram',
+                              if (storage.isNotEmpty) 'ROM:$storage',
+                            ];
+                            if (extra.isNotEmpty)
+                              label += ' (${extra.join(' | ')})';
+                            return label == val;
+                          });
                           tempSelectedProduct.value = p;
                           priceCtrl.text = p['purchasePrice'].toString();
                         },
@@ -540,11 +583,20 @@ class _VendorPurchaseScreenState extends State<VendorPurchaseScreen> {
                         itemCount: controller.addedItems.length,
                         itemBuilder: (ctx, i) {
                           var item = controller.addedItems[i];
+
+                          // ✅ FIX: Har value string mein convert kar li hai
+                          String ram = (item['ram'] ?? '').toString();
+                          String storage = (item['storage'] ?? '').toString();
+                          String brand = (item['brand'] ?? '').toString();
+
+                          final unitPriceCtrl = TextEditingController(
+                            text: item['unitPrice'].toString(),
+                          );
+
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 12.0),
                             child: Row(
                               children: [
-                                // ✅ NEW: Product Image in Cart
                                 _buildBase64Image(item['image'], 60),
                                 const SizedBox(width: 15),
                                 Expanded(
@@ -553,19 +605,88 @@ class _VendorPurchaseScreenState extends State<VendorPurchaseScreen> {
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        "${item['productName']} (${item['model']})",
+                                        "${item['productName']} (${item['model'] ?? 'N/A'})",
                                         style: GoogleFonts.comicNeue(
                                           fontWeight: FontWeight.w900,
                                           fontSize: 18,
                                           color: Colors.black,
                                         ),
                                       ),
-                                      Text(
-                                        "${item['quantity']} x PKR ${item['unitPrice']}",
-                                        style: GoogleFonts.comicNeue(
-                                          color: Colors.black87,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16,
+                                      if (brand.isNotEmpty)
+                                        Text(
+                                          brand,
+                                          style: GoogleFonts.comicNeue(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.deepPurple,
+                                          ),
+                                        ),
+                                      // ✅ FIX: RAM aur ROM ab perfectly show hoga
+                                      if (ram.isNotEmpty || storage.isNotEmpty)
+                                        Text(
+                                          [
+                                            if (ram.isNotEmpty) 'RAM: $ram',
+                                            if (storage.isNotEmpty)
+                                              'ROM: $storage',
+                                          ].join('  |  '),
+                                          style: GoogleFonts.comicNeue(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.teal.shade700,
+                                          ),
+                                        ),
+                                      const SizedBox(height: 6),
+                                      // Editable unit price
+                                      SizedBox(
+                                        width: 150,
+                                        height: 36,
+                                        child: TextField(
+                                          controller: unitPriceCtrl,
+                                          keyboardType: TextInputType.number,
+                                          style: GoogleFonts.comicNeue(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.blue.shade900,
+                                          ),
+                                          decoration: InputDecoration(
+                                            prefixText: 'PKR ',
+                                            prefixStyle: GoogleFonts.comicNeue(
+                                              fontSize: 13,
+                                              color: Colors.blue.shade900,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                            contentPadding:
+                                                const EdgeInsets.symmetric(
+                                                  horizontal: 8,
+                                                  vertical: 6,
+                                                ),
+                                            border: OutlineInputBorder(
+                                              borderSide: const BorderSide(
+                                                color: Colors.black,
+                                                width: 1.5,
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                            ),
+                                            focusedBorder: OutlineInputBorder(
+                                              borderSide: const BorderSide(
+                                                color: Colors.blue,
+                                                width: 2,
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                            ),
+                                          ),
+                                          onChanged: (val) {
+                                            double newPrice =
+                                                double.tryParse(val) ?? 0;
+                                            controller
+                                                    .addedItems[i]['unitPrice'] =
+                                                newPrice;
+                                            controller
+                                                    .addedItems[i]['totalItemPrice'] =
+                                                newPrice * item['quantity'];
+                                          },
                                         ),
                                       ),
                                     ],
@@ -673,12 +794,10 @@ class _VendorPurchaseScreenState extends State<VendorPurchaseScreen> {
 
               const SizedBox(height: 40),
 
-              Obx(
-                () => PaymentTermsSection(
-                  key: _paymentTermsKey,
-                  totalBill: controller.calculateGrandTotal(),
-                  onSaveSuccess: _showSuccessPopup,
-                ),
+              PaymentTermsSection(
+                key: _paymentTermsKey,
+                totalBill: controller.calculateGrandTotal(),
+                onSaveSuccess: _showSuccessPopup,
               ),
 
               const SizedBox(height: 100),

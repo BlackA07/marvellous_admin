@@ -504,9 +504,12 @@ class _LedgerTileState extends State<_LedgerTile> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min, // ✅ Overflow Fix
                       crossAxisAlignment: CrossAxisAlignment.start,
+                      // ✅ FIX: Ab agar bill number mojood hai to wo wazeh (clear) highlight ho kar dikhega
                       children: [
                         Text(
-                          e.description,
+                          e.billNumber != null
+                              ? "Bill #${e.billNumber} | ${e.description}"
+                              : e.description,
                           style: GoogleFonts.comicNeue(
                             color: Colors.white,
                             fontSize: 13,
@@ -580,6 +583,8 @@ class _LedgerTileState extends State<_LedgerTile> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 10),
+                  if (e.billNumber != null)
+                    _detailRow('Bill #', e.billNumber!), // ✅ ADDED
                   if (e.linkedUserName != null)
                     _detailRow('User', e.linkedUserName!),
                   if (e.linkedUserPhone != null)
