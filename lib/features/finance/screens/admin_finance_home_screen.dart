@@ -28,12 +28,17 @@ class _AdminFinanceHomeScreenState extends State<AdminFinanceHomeScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
 
-    // Controllers register karo agar pehle se nahi hain
-    _ctrl = Get.isRegistered<AdminFinanceController>()
-        ? Get.find<AdminFinanceController>()
-        : Get.put(AdminFinanceController());
+    // ✅ FIX: Tab change hone par UI update karein taake Date Picker hide/show ho sake
+    _tabController.addListener(() {
+      if (mounted) setState(() {});
+    });
+
+    if (Get.isRegistered<AdminFinanceController>()) {
+      Get.delete<AdminFinanceController>();
+    }
+    _ctrl = Get.put(AdminFinanceController());
 
     _salaryCtrl = Get.isRegistered<SalaryDisplayController>()
         ? Get.find<SalaryDisplayController>()
@@ -62,25 +67,26 @@ class _AdminFinanceHomeScreenState extends State<AdminFinanceHomeScreen>
           ),
         ),
         actions: [
-          // Date range button — shared across all tabs
-          Obx(
-            () => TextButton.icon(
-              onPressed: () => _showDateRangePicker(context),
-              icon: const Icon(
-                Icons.calendar_today,
-                color: Colors.cyanAccent,
-                size: 16,
-              ),
-              label: Text(
-                _dateRangeLabel(),
-                style: GoogleFonts.comicNeue(
+          // ✅ FIX: Date picker sirf Overview, Ledger aur Salaries tab (index 0, 1, 2) par show hoga
+          if (_tabController.index < 3)
+            Obx(
+              () => TextButton.icon(
+                onPressed: () => _showDateRangePicker(context),
+                icon: const Icon(
+                  Icons.calendar_today,
                   color: Colors.cyanAccent,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
+                  size: 16,
+                ),
+                label: Text(
+                  _dateRangeLabel(),
+                  style: GoogleFonts.comicNeue(
+                    color: Colors.cyanAccent,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ),
-          ),
           const SizedBox(width: 8),
         ],
         bottom: TabBar(
@@ -131,16 +137,6 @@ class _AdminFinanceHomeScreenState extends State<AdminFinanceHomeScreen>
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.volunteer_activism_outlined, size: 15),
-                  SizedBox(width: 6),
-                  Text('Sadqa'),
-                ],
-              ),
-            ),
-            Tab(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
                   Icon(Icons.card_giftcard_outlined, size: 15),
                   SizedBox(width: 6),
                   Text('Rewards'),
@@ -162,22 +158,16 @@ class _AdminFinanceHomeScreenState extends State<AdminFinanceHomeScreen>
       ),
       body: TabBarView(
         controller: _tabController,
-        // physics: NeverScrollableScrollPhysics() — remove kiya taake swipe kaam kare
         children: [
           ov.OverviewTab(controller: _ctrl),
           ml.MasterLedgerTab(controller: _ctrl),
           s.SalariesTab(controller: _salaryCtrl),
-          sa.SadqaTab(controller: _ctrl),
           cr.CustomerRewardsTab(controller: _ctrl),
           fh.FinesHistoryTab(controller: _ctrl),
         ],
       ),
     );
   }
-
-  // ─────────────────────────────────────────────────────────
-  // DATE RANGE LABEL
-  // ─────────────────────────────────────────────────────────
 
   String _dateRangeLabel() {
     final start = _ctrl.startDate.value;
@@ -199,10 +189,6 @@ class _AdminFinanceHomeScreenState extends State<AdminFinanceHomeScreen>
     ];
     return '${start.day} ${months[start.month]} – ${end.day} ${months[end.month]}';
   }
-
-  // ─────────────────────────────────────────────────────────
-  // DATE RANGE PICKER
-  // ─────────────────────────────────────────────────────────
 
   Future<void> _showDateRangePicker(BuildContext context) async {
     final picked = await showDateRangePicker(

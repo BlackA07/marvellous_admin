@@ -290,7 +290,17 @@ class AddProductInfo extends StatelessWidget {
             fillColor: cardColor,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
           ),
-          validator: (val) => val!.isEmpty ? "Required" : null,
+          validator: (val) {
+            if (label.contains("Optional") ||
+                label.contains("Warranty") ||
+                label.contains("COD") ||
+                label == "Original Price" ||
+                label == "Fake Discounted Price")
+              return null;
+            return (val == null || val.trim().isEmpty)
+                ? "⚠ $label is required"
+                : null;
+          },
         ),
       ],
     );

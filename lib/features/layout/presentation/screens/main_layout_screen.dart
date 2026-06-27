@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:get/get.dart';
 
 // Layout Components
+import '../../../customers/controller/customers_controller.dart';
+import '../../../products/controller/products_controller.dart';
+import '../../../vendors/controllers/vendor_controller.dart';
 import '../../controller/layout_controller.dart';
 import '../widgets/admin_app_bar.dart';
 import '../widgets/admin_drawer.dart';
@@ -13,6 +17,15 @@ class MainLayoutScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (!Get.isRegistered<ProductsController>()) {
+      Get.put(ProductsController());
+    }
+    if (!Get.isRegistered<VendorController>()) {
+      Get.put(VendorController());
+    }
+    if (!Get.isRegistered<CustomersController>()) {
+      Get.put(CustomersController());
+    }
     // Watch the current content widget
     final currentScreen = ref.watch(currentContentProvider);
     final size = MediaQuery.of(context).size;

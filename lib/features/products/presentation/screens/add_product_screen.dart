@@ -404,6 +404,49 @@ class _AddProductScreenState extends State<AddProductScreen> {
         );
         return;
       }
+      if (deliveryFeesMap["Karachi"] == null ||
+          deliveryFeesMap["Karachi"] == 0.0) {
+        Get.snackbar(
+          "Required",
+          "Karachi shipping fee fill karein",
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
+        return;
+      }
+      if (selectedLocation != "Karachi Only") {
+        if (deliveryFeesMap["Pakistan"] == null ||
+            deliveryFeesMap["Pakistan"] == 0.0) {
+          Get.snackbar(
+            "Required",
+            "Pakistan shipping fee fill karein",
+            backgroundColor: Colors.red,
+            colorText: Colors.white,
+          );
+          return;
+        }
+      }
+      if (selectedLocation == "Worldwide") {
+        if (deliveryFeesMap["Worldwide"] == null ||
+            deliveryFeesMap["Worldwide"] == 0.0) {
+          Get.snackbar(
+            "Required",
+            "Worldwide shipping fee fill karein",
+            backgroundColor: Colors.red,
+            colorText: Colors.white,
+          );
+          return;
+        }
+      }
+      if (codFee == 0.0) {
+        Get.snackbar(
+          "Required",
+          "COD fee fill karein",
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
+        return;
+      }
 
       productController.isLoading.value = true;
 
@@ -801,10 +844,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
               ),
               const SizedBox(height: 10),
               OutlinedButton.icon(
-                onPressed: () => Get.off(() => const ProductsHomeScreen()),
-                icon: const Icon(Icons.list, color: Colors.black),
+                onPressed: () => Get.back(),
+                icon: const Icon(Icons.arrow_back, color: Colors.black),
                 label: const Text(
-                  "All Products",
+                  "Go Back",
                   style: TextStyle(color: Colors.black),
                 ),
                 style: OutlinedButton.styleFrom(

@@ -111,7 +111,7 @@ class FinanceRepository {
   Future<void> deleteExpenseCategory(String id) async =>
       await _expenseCategories.doc(id).delete();
 
-  // ✅ NEW: Bank to Bank Transfer - Firestore atomic transaction
+  // ✅ Bank to Bank Transfer
   Future<bool> transferFunds({
     required BankModel fromBank,
     required BankModel toBank,
@@ -135,18 +135,15 @@ class FinanceRepository {
         final fromBalance = (fromData['balance'] ?? 0.0) as num;
         final toBalance = (toData['balance'] ?? 0.0) as num;
 
-        // ✅ Insufficient balance check
         if (fromBalance.toDouble() < amount) {
           throw Exception("Insufficient balance in ${fromBank.name}");
         }
 
-        // ✅ Update both bank balances
         tx.update(fromRef, {'balance': fromBalance.toDouble() - amount});
         tx.update(toRef, {'balance': toBalance.toDouble() + amount});
 
         final now = DateTime.now();
 
-        // ✅ Transaction record: From bank (OUT)
         final fromTransRef = _transactions.doc();
         tx.set(fromTransRef, {
           'bankId': fromBank.id,
@@ -156,7 +153,6 @@ class FinanceRepository {
           'description': 'Transfer to ${toBank.name}: $description',
         });
 
-        // ✅ Transaction record: To bank (IN)
         final toTransRef = _transactions.doc();
         tx.set(toTransRef, {
           'bankId': toBank.id,
@@ -166,9 +162,37 @@ class FinanceRepository {
           'description': 'Transfer from ${fromBank.name}: $description',
         });
 
-        // ✅ Agar fromBank Internal hai to totalCompanyBalance update nahi karo
-        // (Internal balance auto-sync hoti hai totalCompanyBalance se)
-        // Agar regular bank se Internal mein transfer ho to totalCompanyBalance bhi update
+        // ✅ FIX: Master ledger mein Bank Transfer show karne ke liye
+        final ledgerOutRef = _firestore
+            .collection('admin_ledger_transactions')
+            .doc();
+        tx.set(ledgerOutRef, {
+          'type': 'out',
+          'category': 'bank_transfer',
+          'amount': amount,
+          'bankId': fromBank.id,
+          'bankName': fromBank.name,
+          'description': 'Transfer to ${toBank.name}: $description',
+          'createdBy': 'admin',
+          'date': now,
+          'createdAt': now,
+        });
+
+        final ledgerInRef = _firestore
+            .collection('admin_ledger_transactions')
+            .doc();
+        tx.set(ledgerInRef, {
+          'type': 'in',
+          'category': 'bank_transfer',
+          'amount': amount,
+          'bankId': toBank.id,
+          'bankName': toBank.name,
+          'description': 'Transfer from ${fromBank.name}: $description',
+          'createdBy': 'admin',
+          'date': now,
+          'createdAt': now,
+        });
+
         final fromIsInternal =
             (fromData['isSystem'] ?? false) &&
             (fromData['name'] ?? '').toString().toLowerCase().contains(
@@ -180,12 +204,7 @@ class FinanceRepository {
               'internal',
             );
 
-        // Sirf tab update karo jab koi ek Internal ho aur doosra na ho
-        // (dono internal nahin ho sakte normally)
         if (toIsInternal && !fromIsInternal) {
-          // Regular -> Internal: totalCompanyBalance mein add (internal balance already update hua)
-          // Note: Internal bank ka balance Firestore mein separately hai;
-          // totalCompanyBalance alag doc hai. Dono sync karo.
           final balRef = _firestore
               .collection('company_finances')
               .doc('balance');
@@ -199,7 +218,6 @@ class FinanceRepository {
             tx.update(balRef, {'totalCompanyBalance': tcb.toDouble() + amount});
           }
         } else if (fromIsInternal && !toIsInternal) {
-          // Internal -> Regular: totalCompanyBalance se minus
           final balRef = _firestore
               .collection('company_finances')
               .doc('balance');
@@ -213,7 +231,6 @@ class FinanceRepository {
             tx.update(balRef, {'totalCompanyBalance': tcb.toDouble() - amount});
           }
         }
-        // Regular -> Regular ya Internal -> Internal: totalCompanyBalance unchanged
       });
       return true;
     } catch (e) {
@@ -264,6 +281,24 @@ class FinanceRepository {
           'date': expense.date,
           'description':
               'Expense: ${expense.category} - ${expense.subcategory} (${expense.description})',
+        });
+
+        // ✅ FIX: ADD TO MASTER LEDGER (So it shows in Overview!)
+        final ledgerRef = _firestore
+            .collection('admin_ledger_transactions')
+            .doc();
+        tx.set(ledgerRef, {
+          'type': 'out',
+          'category': 'expense',
+          'amount': expense.amount,
+          'paymentMethod': 'bank',
+          'bankId': expense.bankId,
+          'bankName': bData['name'] ?? 'Bank',
+          'description':
+              'Expense: ${expense.category} - ${expense.subcategory} (${expense.description})',
+          'createdBy': 'admin',
+          'date': expense.date,
+          'createdAt': DateTime.now(),
         });
       });
       return true;
@@ -361,18 +396,35 @@ class FinanceRepository {
             });
           }
         }
+
+        tx.delete(_expenses.doc(expense.id));
+
+        final transRef = _transactions.doc();
+        tx.set(transRef, {
+          'bankId': expense.bankId,
+          'type': 'in',
+          'amount': expense.amount,
+          'date': DateTime.now(),
+          'description': 'Expense Deleted Refund',
+        });
+
+        // ✅ FIX: ADD TO MASTER LEDGER (Refund)
+        final ledgerRef = _firestore
+            .collection('admin_ledger_transactions')
+            .doc();
+        tx.set(ledgerRef, {
+          'type': 'in',
+          'category': 'expense',
+          'amount': expense.amount,
+          'paymentMethod': 'bank',
+          'bankId': expense.bankId,
+          'bankName': bankName,
+          'description': 'Expense Deleted Refund: ${expense.description}',
+          'createdBy': 'admin',
+          'date': DateTime.now(),
+          'createdAt': DateTime.now(),
+        });
       }
-
-      tx.delete(_expenses.doc(expense.id));
-
-      final transRef = _transactions.doc();
-      tx.set(transRef, {
-        'bankId': expense.bankId,
-        'type': 'in',
-        'amount': expense.amount,
-        'date': DateTime.now(),
-        'description': 'Expense Deleted Refund',
-      });
     });
   }
 
@@ -382,4 +434,100 @@ class FinanceRepository {
       await _taxes.doc(tax.id).update(tax.toMap());
 
   Future<void> deleteTax(String id) async => await _taxes.doc(id).delete();
+
+  // ─────────────────────────────────────────────────────────
+  // ✅ NEW: UPDATE & TRANSFER LOGIC FOR SPLIT CARDS
+  // ─────────────────────────────────────────────────────────
+
+  Future<void> updateSplitBalance(String field, double newBalance) async {
+    await _financeDoc.set({
+      field: newBalance.toStringAsFixed(2),
+    }, SetOptions(merge: true));
+  }
+
+  Future<bool> transferFromSplit({
+    required String field,
+    required double amount,
+    required BankModel toBank,
+    required String description,
+  }) async {
+    try {
+      await _firestore.runTransaction((tx) async {
+        final mainDoc = await tx.get(_financeDoc);
+        double currentSplitBal = 0.0;
+        if (mainDoc.exists && mainDoc.data() != null) {
+          final data = mainDoc.data() as Map<String, dynamic>;
+          currentSplitBal =
+              double.tryParse(data[field]?.toString() ?? '0') ?? 0.0;
+        }
+
+        if (currentSplitBal < amount) {
+          throw Exception("Insufficient balance in $field");
+        }
+
+        final toBankRef = _banks.doc(toBank.id);
+        final toBankDoc = await tx.get(toBankRef);
+        if (!toBankDoc.exists) throw Exception("Destination account not found");
+
+        final toBankData = toBankDoc.data() as Map<String, dynamic>;
+        final toBalance = (toBankData['balance'] ?? 0.0) as num;
+
+        tx.set(_financeDoc, {
+          field: (currentSplitBal - amount).toStringAsFixed(2),
+        }, SetOptions(merge: true));
+
+        tx.update(toBankRef, {'balance': toBalance.toDouble() + amount});
+
+        final txRef = _transactions.doc();
+        tx.set(txRef, {
+          'bankId': toBank.id,
+          'type': 'in',
+          'amount': amount,
+          'date': DateTime.now(),
+          'description':
+              'Transferred from Gross Profit Split ($field): $description',
+        });
+
+        // ✅ FIX: ADD TO MASTER LEDGER (So it's captured in Overview)
+        final ledgerRef = _firestore
+            .collection('admin_ledger_transactions')
+            .doc();
+        tx.set(ledgerRef, {
+          'type': 'in', // Funds officially entering active bank
+          'category': 'bank_transfer',
+          'amount': amount,
+          'bankId': toBank.id,
+          'bankName': toBank.name,
+          'description': 'Transferred from Split Pool ($field): $description',
+          'createdBy': 'admin',
+          'date': DateTime.now(),
+          'createdAt': DateTime.now(),
+        });
+
+        final isInternal =
+            (toBankData['isSystem'] ?? false) &&
+            (toBankData['name'] ?? '').toString().toLowerCase().contains(
+              'internal',
+            );
+        if (isInternal) {
+          final balRef = _firestore
+              .collection('company_finances')
+              .doc('balance');
+          final balDoc = await tx.get(balRef);
+          if (balDoc.exists) {
+            final tcb =
+                ((balDoc.data()
+                            as Map<String, dynamic>)['totalCompanyBalance'] ??
+                        0.0)
+                    as num;
+            tx.update(balRef, {'totalCompanyBalance': tcb.toDouble() + amount});
+          }
+        }
+      });
+      return true;
+    } catch (e) {
+      print("Transfer from split error: $e");
+      return false;
+    }
+  }
 }

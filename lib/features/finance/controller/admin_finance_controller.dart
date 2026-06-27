@@ -249,10 +249,11 @@ class AdminFinanceController extends GetxController {
   var rewardsHistory = <Map<String, dynamic>>[].obs;
 
   void _bindRewardsHistoryStream() {
+    // ✅ FIX: Rewards History ko bhi ALL TIME hardcode kar diya
     _repo
         .getRewardsHistoryStream(
-          startDate: startDate.value,
-          endDate: endDate.value,
+          startDate: DateTime(2000, 1, 1),
+          endDate: DateTime(2100, 12, 31),
         )
         .listen((list) {
           rewardsHistory.assignAll(list);
@@ -350,8 +351,12 @@ class AdminFinanceController extends GetxController {
   var filteredFinesEntries = <LedgerTransactionModel>[].obs;
 
   void _bindFinesStream() {
+    // ✅ FIX: Fines History ko ALL TIME fetch karwaya taake date change se ghaib na ho
     _repo
-        .getFinesStream(startDate: startDate.value, endDate: endDate.value)
+        .getFinesStream(
+          startDate: DateTime(2000, 1, 1),
+          endDate: DateTime(2100, 12, 31),
+        )
         .listen((entries) {
           finesEntries.assignAll(entries);
           applyFinesFilter();

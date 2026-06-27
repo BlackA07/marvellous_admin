@@ -29,7 +29,19 @@ class DashboardScreen extends StatelessWidget {
               padding: const EdgeInsets.all(20),
               child: Column(
                 children: [
-                  // ================= TOP CHART SECTION =================
+                  // SalesChartCard() se pehle yeh add karo:
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: IconButton(
+                      icon: const Icon(
+                        Icons.refresh,
+                        color: Color.fromARGB(255, 0, 0, 0),
+                      ),
+                      onPressed: () => controller.fetchData(),
+                      tooltip: 'Refresh',
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   SalesChartCard(),
                   const SizedBox(height: 20),
 

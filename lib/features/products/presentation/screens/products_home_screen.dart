@@ -22,7 +22,7 @@ class _ProductsHomeScreenState extends ConsumerState<ProductsHomeScreen> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
-  final ProductsController controller = Get.put(ProductsController());
+  final ProductsController controller = Get.find<ProductsController>();
 
   @override
   void initState() {

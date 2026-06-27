@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -334,15 +335,17 @@ void showSendMessageDialog(
                         style: TextStyle(color: Colors.black),
                       ),
                       onPressed: () async {
-                        final picker = ImagePicker();
-                        final XFile? xfile = await picker.pickImage(
-                          source: ImageSource.gallery,
-                          imageQuality: 50,
+                        // ✅ FIX: file_picker — PC, Web, Mobile sab support
+                        final result = await FilePicker.platform.pickFiles(
+                          type: FileType.image,
+                          withData: true,
                         );
-                        if (xfile != null) {
-                          final bytes = await xfile.readAsBytes();
+                        if (result != null &&
+                            result.files.first.bytes != null) {
                           setState(
-                            () => selectedImageBase64 = base64Encode(bytes),
+                            () => selectedImageBase64 = base64Encode(
+                              result.files.first.bytes!,
+                            ),
                           );
                         }
                       },

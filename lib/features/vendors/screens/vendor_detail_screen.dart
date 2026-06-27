@@ -464,18 +464,31 @@ class _VendorDetailScreenState extends State<VendorDetailScreen> {
                         decoration: BoxDecoration(
                           color: Colors.black26,
                           borderRadius: BorderRadius.circular(8),
-                          image: product.images.isNotEmpty
-                              ? DecorationImage(
-                                  image: MemoryImage(
-                                    base64Decode(product.images.first),
-                                  ),
-                                  fit: BoxFit.cover,
-                                )
-                              : null,
                         ),
                         child: product.images.isEmpty
                             ? const Icon(Icons.image, color: Colors.white24)
-                            : null,
+                            : ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: product.images.first.startsWith('http')
+                                    ? Image.network(
+                                        product.images.first,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, __, ___) =>
+                                            const Icon(
+                                              Icons.broken_image,
+                                              color: Colors.white24,
+                                            ),
+                                      )
+                                    : Image.memory(
+                                        base64Decode(product.images.first),
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, __, ___) =>
+                                            const Icon(
+                                              Icons.broken_image,
+                                              color: Colors.white24,
+                                            ),
+                                      ),
+                              ),
                       ),
                       title: Text(
                         product.name,

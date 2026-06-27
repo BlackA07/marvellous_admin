@@ -311,13 +311,13 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
     Function(String?) onChanged, {
     bool isOptional = false,
   }) {
-    List<String> safeItems = List.from(items);
+    List<String> safeItems = List.from(items)..sort(); // ✅ A-Z sort
     if (value != null && value.isNotEmpty && !safeItems.contains(value)) {
       safeItems.add(value);
+      safeItems.sort();
     }
-    String? safeValue = safeItems.contains(value)
-        ? value
-        : (safeItems.isNotEmpty ? safeItems.first : null);
+    String? safeValue = safeItems.contains(value) ? value : null;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -329,29 +329,153 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
           ),
         ),
         const SizedBox(height: 5),
-        DropdownButtonFormField<String>(
-          value: safeValue,
+        TextFormField(
+          readOnly: true,
+          controller: TextEditingController(text: safeValue ?? ''),
           style: const TextStyle(color: Colors.black, fontSize: 14),
-          dropdownColor: Colors.white,
-          items: safeItems
-              .toSet()
-              .map(
-                (e) => DropdownMenuItem(
-                  value: e,
-                  child: Text(e, style: const TextStyle(color: Colors.black)),
-                ),
-              )
-              .toList(),
-          onChanged: onChanged,
           decoration: InputDecoration(
+            hintText: "Select $label",
+            hintStyle: const TextStyle(color: Colors.black54),
             filled: true,
             fillColor: widget.cardColor,
+            suffixIcon: const Icon(
+              Icons.arrow_drop_down,
+              color: Colors.black54,
+            ),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: Colors.grey.shade300),
+            ),
           ),
-          validator: (val) =>
-              isOptional ? null : (val == null ? "Required" : null),
+          validator: (val) => isOptional
+              ? null
+              : (val == null || val.isEmpty ? "Required" : null),
+          onTap: () => _openSearchSheet(
+            label,
+            safeItems,
+            (selected) => onChanged(selected),
+          ),
         ),
       ],
+    );
+  }
+
+  void _openSearchSheet(
+    String title,
+    List<String> items,
+    Function(String) onSelected,
+  ) {
+    final searchCtrl = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          List<String> filtered =
+              items
+                  .where(
+                    (e) =>
+                        e.toLowerCase().contains(searchCtrl.text.toLowerCase()),
+                  )
+                  .toList()
+                ..sort();
+
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom,
+            ),
+            child: Container(
+              height: MediaQuery.of(context).size.height * 0.65,
+              decoration: const BoxDecoration(
+                color: Color(0xFF1E1E1E),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              child: Column(
+                children: [
+                  const SizedBox(height: 12),
+                  Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Text(
+                      "Select $title",
+                      style: GoogleFonts.orbitron(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: TextField(
+                      controller: searchCtrl,
+                      autofocus: false,
+                      style: const TextStyle(color: Colors.white),
+                      onChanged: (_) => setSheetState(() {}),
+                      decoration: InputDecoration(
+                        hintText: "Search...",
+                        hintStyle: const TextStyle(color: Colors.white38),
+                        prefixIcon: const Icon(
+                          Icons.search,
+                          color: Colors.white38,
+                        ),
+                        filled: true,
+                        fillColor: const Color(0xFF2C2C2C),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: filtered.isEmpty
+                        ? const Center(
+                            child: Text(
+                              "No match found",
+                              style: TextStyle(color: Colors.white54),
+                            ),
+                          )
+                        : ListView.builder(
+                            itemCount: filtered.length,
+                            itemBuilder: (context, index) {
+                              return ListTile(
+                                title: Text(
+                                  filtered[index],
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                                trailing: const Icon(
+                                  Icons.arrow_forward_ios,
+                                  color: Colors.white38,
+                                  size: 14,
+                                ),
+                                onTap: () {
+                                  onSelected(filtered[index]);
+                                  Navigator.pop(ctx);
+                                },
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 

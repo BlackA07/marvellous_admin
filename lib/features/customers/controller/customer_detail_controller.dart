@@ -753,6 +753,9 @@ class CustomerDetailController extends GetxController {
     }
   }
 
+  // Path: lib/features/finances/controller/customer_detail_controller.dart
+  // (Baaki poora code same rakhein, sirf adjustWallet method ko is se replace karein)
+
   Future<void> adjustWallet(
     double amount,
     String reason,
@@ -763,10 +766,12 @@ class CustomerDetailController extends GetxController {
     try {
       final double finalAmount = isDeduction ? -amount : amount;
 
+      // 1. User Wallet Update
       await _db.collection('users').doc(uid).update({
         'walletBalance': FieldValue.increment(finalAmount),
       });
 
+      // 2. User Wallet History Update
       await _db.collection('users').doc(uid).collection('wallet_history').add({
         'amount': finalAmount,
         'type': isDeduction ? 'admin_deduction' : 'admin_credit',
@@ -774,22 +779,67 @@ class CustomerDetailController extends GetxController {
         'timestamp': FieldValue.serverTimestamp(),
       });
 
-      if (!isDeduction && selectedBankId != null && selectedBankId.isNotEmpty) {
-        await _db.collection('banks').doc(selectedBankId).update({
-          'balance': FieldValue.increment(-amount),
+      // 3. Bank and Master Ledger Logic
+      if (!isDeduction) {
+        // ✅ FIX: Agar ADD kar rahe hain (Credit / Reward)
+        if (selectedBankId != null && selectedBankId.isNotEmpty) {
+          await _db
+              .collection('company_finances')
+              .doc('main_finances')
+              .collection('banks')
+              .doc(selectedBankId)
+              .update({'balance': FieldValue.increment(-amount)});
+
+          await _db
+              .collection('company_finances')
+              .doc('main_finances')
+              .collection('banks')
+              .doc(selectedBankId)
+              .collection('transactions')
+              .add({
+                'amount': -amount,
+                'type': 'admin_wallet_credit',
+                'description': 'Admin credited to user wallet: $reason',
+                'userId': uid,
+                'timestamp': FieldValue.serverTimestamp(),
+              });
+        }
+
+        // ✅ FIX: Add to MASTER LEDGER as OUT (Kyunke admin ki taraf se paise customer ko ja rahe hain)
+        await _db.collection('admin_ledger_transactions').add({
+          'type': 'out',
+          'category': 'customer_reward',
+          'amount': amount,
+          'paymentMethod': selectedBankId != null && selectedBankId.isNotEmpty
+              ? 'online'
+              : 'main_wallet',
+          'bankId': selectedBankId,
+          'bankName': selectedBankName,
+          'description': 'Admin Wallet Credit: $reason',
+          'linkedUserId': uid,
+          'linkedUserName': customer.value?.name ?? '',
+          'linkedUserPhone': customer.value?.phone ?? '',
+          'linkedUserEmail': customer.value?.email ?? '',
+          'createdBy': 'admin',
+          'date': FieldValue.serverTimestamp(),
+          'createdAt': FieldValue.serverTimestamp(),
         });
-        await _db
-            .collection('banks')
-            .doc(selectedBankId)
-            .collection('transactions')
-            .add({
-              'amount': -amount,
-              'type': 'admin_wallet_credit',
-              'description': 'Admin credited to user wallet: $reason',
-              'userId': uid,
-              'timestamp': FieldValue.serverTimestamp(),
-            });
+
+        // ✅ FIX: Add to REWARDS HISTORY (Taake rewards tab mein show ho)
+        await _db.collection('admin_rewards').add({
+          'userId': uid,
+          'userName': customer.value?.name ?? 'Unknown',
+          'userPhone': customer.value?.phone ?? '',
+          'userEmail': customer.value?.email ?? '',
+          'amount': amount,
+          'bankId': selectedBankId ?? '',
+          'bankName': selectedBankName ?? 'Main Wallet',
+          'note': 'Wallet Credit: $reason',
+          'date': FieldValue.serverTimestamp(),
+          'createdAt': FieldValue.serverTimestamp(),
+        });
       } else if (isDeduction) {
+        // Agar MINUS kar rahe hain (Deduction / Fine)
         await _db.collection('company_finances').doc('balance').set({
           'totalCompanyBalance': FieldValue.increment(amount),
         }, SetOptions(merge: true));
@@ -805,8 +855,25 @@ class CustomerDetailController extends GetxController {
               'reason': reason,
               'timestamp': FieldValue.serverTimestamp(),
             });
+
+        // Master Ledger mein IN
+        await _db.collection('admin_ledger_transactions').add({
+          'type': 'in',
+          'category': 'fine',
+          'amount': amount,
+          'paymentMethod': 'main_wallet',
+          'description': 'Admin Fine: $reason',
+          'linkedUserId': uid,
+          'linkedUserName': customer.value?.name ?? '',
+          'linkedUserPhone': customer.value?.phone ?? '',
+          'linkedUserEmail': customer.value?.email ?? '',
+          'createdBy': 'admin',
+          'date': FieldValue.serverTimestamp(),
+          'createdAt': FieldValue.serverTimestamp(),
+        });
       }
 
+      // 4. Send Notification
       await _db.collection('users').doc(uid).collection('notifications').add({
         'title': isDeduction ? 'Wallet Deduction 💳' : 'Wallet Credit 💰',
         'body': isDeduction

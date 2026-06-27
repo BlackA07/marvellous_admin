@@ -5,7 +5,7 @@ import '../controller/finance_controller.dart';
 import '../models/finance_models.dart';
 
 class TaxesScreen extends StatelessWidget {
-  final FinanceController controller = Get.find();
+  final FinanceController controller = Get.put(FinanceController());
   @override
   Widget build(BuildContext context) {
     return Scaffold(

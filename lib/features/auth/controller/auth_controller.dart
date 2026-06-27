@@ -46,7 +46,6 @@ class AuthController {
       );
 
       if (user != null) {
-        // ✅ Tell controllers to fetch data now that user is authenticated
         if (Get.isRegistered<ProductsController>()) {
           Get.find<ProductsController>().fetchAllData();
         }
@@ -54,29 +53,33 @@ class AuthController {
           Get.find<CategoryController>().fetchCategories();
         }
 
-        // ✅ Pehle Navigate karo
+        // ✅ FIX: Navigation se PEHLE loading state false karein
+        _ref.read(authLoadingProvider.notifier).state = false;
+
         Get.offAllNamed(AppRoutes.home);
-        // ✅ Phir delay ke sath Snackbar dikhao
+
         Future.delayed(const Duration(milliseconds: 400), () {
           Get.snackbar("Success", "Account Created Successfully!");
         });
+
+        return; // ✅ FIX: Yahan se return kar jayen taake finally block na chale
       }
     } catch (e) {
+      // ✅ Agar error aaye toh loading band karein
+      _ref.read(authLoadingProvider.notifier).state = false;
       Get.snackbar(
         "Error",
         e.toString(),
         backgroundColor: Colors.redAccent,
         colorText: Colors.white,
       );
-    } finally {
-      _ref.read(authLoadingProvider.notifier).state = false; // Stop Loading
     }
   }
 
   // --- LOGIN LOGIC ---
   void login({required String email, required String password}) async {
     try {
-      _ref.read(authLoadingProvider.notifier).state = true;
+      _ref.read(authLoadingProvider.notifier).state = true; // Start Loading
 
       User? user = await _authRepository.loginWithEmail(
         email: email,
@@ -84,7 +87,6 @@ class AuthController {
       );
 
       if (user != null) {
-        // ✅ Tell controllers to fetch data now that user is authenticated
         if (Get.isRegistered<ProductsController>()) {
           Get.find<ProductsController>().fetchAllData();
         }
@@ -92,22 +94,26 @@ class AuthController {
           Get.find<CategoryController>().fetchCategories();
         }
 
-        // ✅ Pehle Navigate karo
+        // ✅ FIX: Navigation se PEHLE loading state false karein taake dying widget rebuild na ho
+        _ref.read(authLoadingProvider.notifier).state = false;
+
         Get.offAllNamed(AppRoutes.home);
-        // ✅ Phir delay ke sath Snackbar dikhao
+
         Future.delayed(const Duration(milliseconds: 400), () {
           Get.snackbar("Welcome Back", "Login Successful!");
         });
+
+        return; // ✅ FIX: Yahan se return kar jayen
       }
     } catch (e) {
+      // ✅ Agar error aaye toh loading band karein
+      _ref.read(authLoadingProvider.notifier).state = false;
       Get.snackbar(
         "Login Failed",
         e.toString(),
         backgroundColor: Colors.redAccent,
         colorText: Colors.white,
       );
-    } finally {
-      _ref.read(authLoadingProvider.notifier).state = false;
     }
   }
 }

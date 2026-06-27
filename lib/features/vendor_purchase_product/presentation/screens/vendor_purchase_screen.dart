@@ -5,7 +5,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../controller/purchase_controller.dart';
 import '../widgets/payment_terms_section.dart';
-import '../widgets/searchable_selection_field.dart';
 
 class VendorPurchaseScreen extends StatefulWidget {
   const VendorPurchaseScreen({super.key});
@@ -335,107 +334,119 @@ class _VendorPurchaseScreenState extends State<VendorPurchaseScreen> {
               ),
               const Divider(height: 35, color: Colors.black, thickness: 2),
 
+              // ══════════════════════════════════════════════════════════
+              // ✅ STEP 1: VENDOR — Custom Image Dropdown (CreateOrderRequest style)
+              // ══════════════════════════════════════════════════════════
+              Text(
+                "Select Vendor / Store Name",
+                style: GoogleFonts.comicNeue(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 20,
+                  color: Colors.black,
+                ),
+              ),
+              const SizedBox(height: 10),
+
+              _PurchaseVendorSearchField(
+                controller: controller,
+                buildImage: _buildBase64Image,
+              ),
+
+              // ✅ Vendor Details Table — bilkul wahi jo pehle tha
               Obx(() {
-                // ✅ FIX: Duplicate vendors ko remove karne ke liye .toSet() use kiya gaya hai
-                var uniqueVendorItems = controller.vendors
-                    .map((e) => "${e['storeName']} (${e['ownerName']})")
-                    .toSet()
-                    .toList();
-
-                return SearchableSelectionField(
-                  label: "Select Vendor / Store Name",
-                  hint: "Search Store or Owner...",
-                  selectedValue: controller.selectedVendor.value == null
-                      ? null
-                      : "${controller.selectedVendor.value?['storeName']} (${controller.selectedVendor.value?['ownerName']})",
-                  items: uniqueVendorItems,
-                  onSelected: (val) {
-                    var v = controller.vendors.firstWhere(
-                      (e) => "${e['storeName']} (${e['ownerName']})" == val,
-                    );
-                    controller.setVendor(v);
-                  },
-                );
-              }),
-
-              // ✅ NEW: Vendor Details Table
-              if (controller.selectedVendor.value != null) ...[
-                const SizedBox(height: 15),
-                Container(
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    border: Border.all(color: Colors.black, width: 2),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Table(
-                    columnWidths: const {
-                      0: FixedColumnWidth(70),
-                      1: FlexColumnWidth(2),
-                      2: FlexColumnWidth(2),
-                      3: FlexColumnWidth(1.5),
-                    },
-                    border: TableBorder.symmetric(
-                      inside: const BorderSide(color: Colors.black12, width: 1),
-                    ),
-                    children: [
-                      TableRow(
-                        decoration: const BoxDecoration(
-                          color: Colors.black,
-                          borderRadius: BorderRadius.vertical(
-                            top: Radius.circular(6),
+                if (controller.selectedVendor.value == null) {
+                  return const SizedBox.shrink();
+                }
+                return Column(
+                  children: [
+                    const SizedBox(height: 15),
+                    Container(
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        border: Border.all(color: Colors.black, width: 2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Table(
+                        columnWidths: const {
+                          0: FixedColumnWidth(70),
+                          1: FlexColumnWidth(2),
+                          2: FlexColumnWidth(2),
+                          3: FlexColumnWidth(1.5),
+                        },
+                        border: TableBorder.symmetric(
+                          inside: const BorderSide(
+                            color: Colors.black12,
+                            width: 1,
                           ),
                         ),
                         children: [
-                          _tableHeaderCell("Image"),
-                          _tableHeaderCell("Store & Owner"),
-                          _tableHeaderCell("Contact"),
-                          _tableHeaderCell("Category"),
-                        ],
-                      ),
-                      TableRow(
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: _buildBase64Image(
-                              controller.selectedVendor.value!['profileImage'],
-                              50,
+                          TableRow(
+                            decoration: const BoxDecoration(
+                              color: Colors.black,
+                              borderRadius: BorderRadius.vertical(
+                                top: Radius.circular(6),
+                              ),
                             ),
+                            children: [
+                              _tableHeaderCell("Image"),
+                              _tableHeaderCell("Store & Owner"),
+                              _tableHeaderCell("Contact"),
+                              _tableHeaderCell("Category"),
+                            ],
                           ),
-                          _tableDataCell(
-                            "${controller.selectedVendor.value!['storeName']}\n(${controller.selectedVendor.value!['ownerName']})",
-                            isBold: true,
-                          ),
-                          _tableDataCell(
-                            controller
-                                    .selectedVendor
-                                    .value!['contactPersonPhone'] ??
+                          TableRow(
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.all(8.0),
+                                child: _buildBase64Image(
+                                  controller
+                                      .selectedVendor
+                                      .value!['profileImage'],
+                                  50,
+                                ),
+                              ),
+                              _tableDataCell(
+                                "${controller.selectedVendor.value!['storeName']}\n(${controller.selectedVendor.value!['ownerName']})",
+                                isBold: true,
+                              ),
+                              _tableDataCell(
                                 controller
-                                    .selectedVendor
-                                    .value!['storePhone'] ??
-                                "N/A",
-                          ),
-                          _tableDataCell(
-                            (controller.selectedVendor.value!['categories'] !=
-                                        null &&
+                                        .selectedVendor
+                                        .value!['contactPersonPhone'] ??
                                     controller
                                         .selectedVendor
-                                        .value!['categories']
-                                        .isNotEmpty)
-                                ? controller
-                                      .selectedVendor
-                                      .value!['categories'][0]
-                                : "General",
+                                        .value!['storePhone'] ??
+                                    "N/A",
+                              ),
+                              _tableDataCell(
+                                (controller
+                                                .selectedVendor
+                                                .value!['categories'] !=
+                                            null &&
+                                        controller
+                                            .selectedVendor
+                                            .value!['categories']
+                                            .isNotEmpty)
+                                    ? controller
+                                          .selectedVendor
+                                          .value!['categories'][0]
+                                    : "General",
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                    ],
-                  ),
-                ),
-              ],
+                    ),
+                  ],
+                );
+              }),
 
               const SizedBox(height: 30),
 
+              // ══════════════════════════════════════════════════════════
+              // ✅ STEP 2: ADD ITEMS — Custom Image Dropdown (CreateOrderRequest style)
+              // ══════════════════════════════════════════════════════════
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
@@ -460,46 +471,12 @@ class _VendorPurchaseScreenState extends State<VendorPurchaseScreen> {
                       thickness: 1.5,
                     ),
 
-                    Obx(
-                      () => SearchableSelectionField(
-                        label: "Select Product",
-                        hint: "Search Product...",
-                        selectedValue: tempSelectedProduct.value == null
-                            ? null
-                            : "${tempSelectedProduct.value?['name']} - ${tempSelectedProduct.value?['modelNumber']}",
-                        items: controller.products.map((e) {
-                          String label = "${e['name']} - ${e['modelNumber']}";
-                          String brand = e['brand'] ?? '';
-                          String ram = e['ram'] ?? '';
-                          String storage = e['storage'] ?? '';
-                          List<String> extra = [
-                            if (brand.isNotEmpty) brand,
-                            if (ram.isNotEmpty) 'RAM:$ram',
-                            if (storage.isNotEmpty) 'ROM:$storage',
-                          ];
-                          if (extra.isNotEmpty)
-                            label += ' (${extra.join(' | ')})';
-                          return label;
-                        }).toList(),
-                        onSelected: (val) {
-                          var p = controller.products.firstWhere((e) {
-                            String label = "${e['name']} - ${e['modelNumber']}";
-                            String brand = e['brand'] ?? '';
-                            String ram = e['ram'] ?? '';
-                            String storage = e['storage'] ?? '';
-                            List<String> extra = [
-                              if (brand.isNotEmpty) brand,
-                              if (ram.isNotEmpty) 'RAM:$ram',
-                              if (storage.isNotEmpty) 'ROM:$storage',
-                            ];
-                            if (extra.isNotEmpty)
-                              label += ' (${extra.join(' | ')})';
-                            return label == val;
-                          });
-                          tempSelectedProduct.value = p;
-                          priceCtrl.text = p['purchasePrice'].toString();
-                        },
-                      ),
+                    // ✅ Custom Product Search Field with image list
+                    _PurchaseProductSearchField(
+                      controller: controller,
+                      buildImage: _buildBase64Image,
+                      tempSelectedProduct: tempSelectedProduct,
+                      priceCtrl: priceCtrl,
                     ),
 
                     const SizedBox(height: 25),
@@ -878,6 +855,694 @@ class _VendorPurchaseScreenState extends State<VendorPurchaseScreen> {
           fontSize: 13,
         ),
       ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ✅ PURCHASE VENDOR SEARCH FIELD
+// Exactly same design as CreateOrderRequestScreen ka _VendorSearchField
+// ══════════════════════════════════════════════════════════════════
+class _PurchaseVendorSearchField extends StatefulWidget {
+  final PurchaseController controller;
+  final Widget Function(String? src, double size) buildImage;
+
+  const _PurchaseVendorSearchField({
+    required this.controller,
+    required this.buildImage,
+  });
+
+  @override
+  State<_PurchaseVendorSearchField> createState() =>
+      _PurchaseVendorSearchFieldState();
+}
+
+class _PurchaseVendorSearchFieldState
+    extends State<_PurchaseVendorSearchField> {
+  final TextEditingController _ctrl = TextEditingController();
+  final FocusNode _focus = FocusNode();
+  List<Map<String, dynamic>> _filtered = [];
+  bool _showList = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Pre-fill if vendor already selected (e.g. from order request)
+    final sel = widget.controller.selectedVendor.value;
+    if (sel != null) {
+      _ctrl.text = "${sel['storeName']} (${sel['ownerName']})";
+    }
+    _focus.addListener(() {
+      if (!_focus.hasFocus) {
+        Future.delayed(
+          const Duration(milliseconds: 150),
+          () => setState(() => _showList = false),
+        );
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  void _filter(String q) {
+    final all = List<Map<String, dynamic>>.from(widget.controller.vendors);
+    if (q.trim().isEmpty) {
+      setState(() {
+        _filtered = all
+          ..sort(
+            (a, b) => (a['storeName'] ?? '').toLowerCase().compareTo(
+              (b['storeName'] ?? '').toLowerCase(),
+            ),
+          );
+        _showList = true;
+      });
+      return;
+    }
+    final lower = q.toLowerCase();
+    setState(() {
+      _filtered =
+          all.where((v) {
+            return (v['storeName'] ?? '').toLowerCase().contains(lower) ||
+                (v['ownerName'] ?? '').toLowerCase().contains(lower) ||
+                (v['storePhone'] ?? '').contains(lower);
+          }).toList()..sort(
+            (a, b) => (a['storeName'] ?? '').toLowerCase().compareTo(
+              (b['storeName'] ?? '').toLowerCase(),
+            ),
+          );
+      _showList = true;
+    });
+  }
+
+  void _select(Map<String, dynamic> vendor) {
+    widget.controller.setVendor(vendor);
+    _ctrl.text = "${vendor['storeName']} (${vendor['ownerName']})";
+    setState(() => _showList = false);
+    _focus.unfocus();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Search TextField
+        TextField(
+          controller: _ctrl,
+          focusNode: _focus,
+          style: GoogleFonts.comicNeue(
+            color: Colors.black,
+            fontSize: 17,
+            fontWeight: FontWeight.w900,
+          ),
+          decoration: InputDecoration(
+            hintText: "Search store name or owner...",
+            hintStyle: GoogleFonts.comicNeue(
+              color: Colors.black45,
+              fontSize: 15,
+            ),
+            prefixIcon: const Icon(Icons.search, color: Colors.black, size: 24),
+            suffixIcon: IconButton(
+              icon: const Icon(
+                Icons.arrow_drop_down_circle_outlined,
+                color: Colors.black,
+                size: 26,
+              ),
+              onPressed: () {
+                _filter('');
+                _focus.requestFocus();
+              },
+            ),
+            filled: true,
+            fillColor: Colors.white,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: Colors.black, width: 2),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: Colors.black, width: 2),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: Colors.black, width: 3),
+            ),
+          ),
+          onChanged: _filter,
+          onTap: () => _filter(_ctrl.text),
+        ),
+
+        // Dropdown List
+        if (_showList && _filtered.isNotEmpty)
+          Container(
+            margin: const EdgeInsets.only(top: 4),
+            constraints: const BoxConstraints(maxHeight: 320),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border.all(color: Colors.black, width: 2),
+              borderRadius: BorderRadius.circular(10),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
+                  decoration: const BoxDecoration(
+                    color: Colors.black,
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(8),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        "Select Vendor",
+                        style: GoogleFonts.comicNeue(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 16,
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () => setState(() => _showList = false),
+                        child: const Icon(
+                          Icons.close,
+                          color: Colors.white,
+                          size: 22,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // List
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    padding: EdgeInsets.zero,
+                    itemCount: _filtered.length,
+                    separatorBuilder: (_, __) =>
+                        const Divider(height: 1, color: Colors.black12),
+                    itemBuilder: (context, i) {
+                      final v = _filtered[i];
+                      final String? img = v['profileImage'];
+                      final String phone =
+                          v['storePhone'] ?? v['contactPersonPhone'] ?? '';
+
+                      return InkWell(
+                        onTap: () => _select(v),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
+                          child: Row(
+                            children: [
+                              // Profile image — circular
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(26),
+                                child: widget.buildImage(img, 52),
+                              ),
+                              const SizedBox(width: 14),
+                              // Details
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      v['storeName'] ?? '',
+                                      style: GoogleFonts.comicNeue(
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 16,
+                                        color: Colors.black,
+                                      ),
+                                    ),
+                                    Text(
+                                      v['ownerName'] ?? '',
+                                      style: GoogleFonts.comicNeue(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.deepPurple,
+                                      ),
+                                    ),
+                                    if (phone.isNotEmpty)
+                                      Text(
+                                        phone,
+                                        style: GoogleFonts.comicNeue(
+                                          fontSize: 12,
+                                          color: Colors.black45,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              const Icon(
+                                Icons.chevron_right,
+                                color: Colors.black26,
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ✅ PURCHASE PRODUCT SEARCH FIELD
+// Exactly same design as CreateOrderRequestScreen ka _ProductSearchField
+// ══════════════════════════════════════════════════════════════════
+class _PurchaseProductSearchField extends StatefulWidget {
+  final PurchaseController controller;
+  final Widget Function(String? src, double size) buildImage;
+  final Rxn<Map<String, dynamic>> tempSelectedProduct;
+  final TextEditingController priceCtrl;
+
+  const _PurchaseProductSearchField({
+    required this.controller,
+    required this.buildImage,
+    required this.tempSelectedProduct,
+    required this.priceCtrl,
+  });
+
+  @override
+  State<_PurchaseProductSearchField> createState() =>
+      _PurchaseProductSearchFieldState();
+}
+
+class _PurchaseProductSearchFieldState
+    extends State<_PurchaseProductSearchField> {
+  final TextEditingController _ctrl = TextEditingController();
+  final FocusNode _focus = FocusNode();
+  List<Map<String, dynamic>> _filtered = [];
+  bool _showList = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _focus.addListener(() {
+      if (!_focus.hasFocus) {
+        Future.delayed(
+          const Duration(milliseconds: 150),
+          () => setState(() => _showList = false),
+        );
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  void _filter(String q) {
+    final all = List<Map<String, dynamic>>.from(widget.controller.products);
+    if (q.trim().isEmpty) {
+      setState(() {
+        _filtered = all
+          ..sort(
+            (a, b) => (a['name'] ?? '').toLowerCase().compareTo(
+              (b['name'] ?? '').toLowerCase(),
+            ),
+          );
+        _showList = true;
+      });
+      return;
+    }
+    final lower = q.toLowerCase();
+    setState(() {
+      _filtered =
+          all.where((p) {
+            return (p['name'] ?? '').toLowerCase().contains(lower) ||
+                (p['modelNumber'] ?? '').toLowerCase().contains(lower) ||
+                (p['brand'] ?? '').toLowerCase().contains(lower);
+          }).toList()..sort(
+            (a, b) => (a['name'] ?? '').toLowerCase().compareTo(
+              (b['name'] ?? '').toLowerCase(),
+            ),
+          );
+      _showList = true;
+    });
+  }
+
+  void _select(Map<String, dynamic> product) {
+    widget.tempSelectedProduct.value = product;
+    widget.priceCtrl.text = (product['purchasePrice'] ?? '').toString();
+    _ctrl.text = "${product['name']} - ${product['modelNumber'] ?? ''}".trim();
+    setState(() => _showList = false);
+    _focus.unfocus();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Search TextField
+        TextField(
+          controller: _ctrl,
+          focusNode: _focus,
+          style: GoogleFonts.comicNeue(
+            color: Colors.black,
+            fontSize: 17,
+            fontWeight: FontWeight.w900,
+          ),
+          decoration: InputDecoration(
+            hintText: "Search Product name, model, brand...",
+            hintStyle: GoogleFonts.comicNeue(
+              color: Colors.black45,
+              fontSize: 15,
+            ),
+            prefixIcon: const Icon(Icons.search, color: Colors.black, size: 24),
+            suffixIcon: IconButton(
+              icon: const Icon(
+                Icons.arrow_drop_down_circle_outlined,
+                color: Colors.black,
+                size: 26,
+              ),
+              onPressed: () {
+                _filter('');
+                _focus.requestFocus();
+              },
+            ),
+            filled: true,
+            fillColor: Colors.white,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: Colors.black, width: 2),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: Colors.black, width: 2),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: Colors.black, width: 3),
+            ),
+          ),
+          onChanged: _filter,
+          onTap: () => _filter(_ctrl.text),
+        ),
+
+        // Dropdown List
+        if (_showList && _filtered.isNotEmpty)
+          Container(
+            margin: const EdgeInsets.only(top: 4),
+            constraints: const BoxConstraints(maxHeight: 350),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border.all(color: Colors.black, width: 2),
+              borderRadius: BorderRadius.circular(10),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
+                  decoration: const BoxDecoration(
+                    color: Colors.black,
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(8),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        "Select Product",
+                        style: GoogleFonts.comicNeue(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 16,
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () => setState(() => _showList = false),
+                        child: const Icon(
+                          Icons.close,
+                          color: Colors.white,
+                          size: 22,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // List
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    padding: EdgeInsets.zero,
+                    itemCount: _filtered.length,
+                    separatorBuilder: (_, __) =>
+                        const Divider(height: 1, color: Colors.black12),
+                    itemBuilder: (context, i) {
+                      final p = _filtered[i];
+                      // First image
+                      String? img;
+                      if (p['images'] != null &&
+                          (p['images'] as List).isNotEmpty) {
+                        img = p['images'][0];
+                      }
+                      final String brand = p['brand'] ?? '';
+                      final String model = p['modelNumber'] ?? '';
+                      final String ram = p['ram'] ?? '';
+                      final String storage = p['storage'] ?? '';
+                      final num price = p['purchasePrice'] ?? 0;
+
+                      return InkWell(
+                        onTap: () => _select(p),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
+                          child: Row(
+                            children: [
+                              // Product image
+                              widget.buildImage(img, 58),
+                              const SizedBox(width: 14),
+                              // Details
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      p['name'] ?? '',
+                                      style: GoogleFonts.comicNeue(
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 15,
+                                        color: Colors.black,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    if (brand.isNotEmpty)
+                                      Text(
+                                        brand,
+                                        style: GoogleFonts.comicNeue(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.deepPurple,
+                                        ),
+                                      ),
+                                    Row(
+                                      children: [
+                                        if (model.isNotEmpty)
+                                          Text(
+                                            model,
+                                            style: GoogleFonts.comicNeue(
+                                              fontSize: 12,
+                                              color: Colors.black45,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        if (ram.isNotEmpty) ...[
+                                          Text(
+                                            "  $ram",
+                                            style: GoogleFonts.comicNeue(
+                                              fontSize: 12,
+                                              color: Colors.teal.shade700,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ],
+                                        if (storage.isNotEmpty) ...[
+                                          Text(
+                                            " / $storage",
+                                            style: GoogleFonts.comicNeue(
+                                              fontSize: 12,
+                                              color: Colors.teal.shade700,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              // Purchase Price
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    "PKR",
+                                    style: GoogleFonts.comicNeue(
+                                      fontSize: 11,
+                                      color: Colors.black45,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  Text(
+                                    price.toStringAsFixed(0),
+                                    style: GoogleFonts.comicNeue(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w900,
+                                      color: Colors.green.shade800,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+        // ✅ Selected Product Card — jab product select ho jaye
+        Obx(() {
+          final sel = widget.tempSelectedProduct.value;
+          if (sel == null) return const SizedBox.shrink();
+          String? img;
+          if (sel['images'] != null && (sel['images'] as List).isNotEmpty) {
+            img = sel['images'][0];
+          }
+          final String brand = sel['brand'] ?? '';
+          final String ram = sel['ram'] ?? '';
+          final String storage = sel['storage'] ?? '';
+          final String model = sel['modelNumber'] ?? 'N/A';
+
+          return Container(
+            margin: const EdgeInsets.only(top: 14),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border.all(color: Colors.black, width: 2),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              children: [
+                widget.buildImage(img, 60),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        sel['name'] ?? '',
+                        style: GoogleFonts.comicNeue(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 16,
+                          color: Colors.black,
+                        ),
+                      ),
+                      if (brand.isNotEmpty)
+                        Text(
+                          brand,
+                          style: GoogleFonts.comicNeue(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.deepPurple,
+                          ),
+                        ),
+                      Text(
+                        "Model: $model",
+                        style: GoogleFonts.comicNeue(
+                          fontSize: 12,
+                          color: Colors.black54,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (ram.isNotEmpty || storage.isNotEmpty)
+                        Text(
+                          [
+                            if (ram.isNotEmpty) 'RAM: $ram',
+                            if (storage.isNotEmpty) 'ROM: $storage',
+                          ].join('  |  '),
+                          style: GoogleFonts.comicNeue(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.teal.shade700,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade800,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    "PKR ${(sel['purchasePrice'] ?? 0).toStringAsFixed(0)}",
+                    style: GoogleFonts.comicNeue(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
+      ],
     );
   }
 }
