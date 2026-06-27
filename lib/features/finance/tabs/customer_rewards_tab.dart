@@ -1,4 +1,5 @@
 // Path: lib/features/finances/presentation/tabs/customer_rewards_tab.dart
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -199,11 +200,9 @@ class _CustomerRewardsTabState extends State<CustomerRewardsTab> {
             ),
             IconButton(
               icon: const Icon(Icons.cancel, color: Colors.white54, size: 20),
-              padding: EdgeInsets.zero, // onPadding ko padding kar diya
+              padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),
-              onPressed: widget
-                  .controller
-                  .clearCustomerSelection, // onTap ko onPressed kar diya
+              onPressed: widget.controller.clearCustomerSelection,
             ),
           ],
         ),
@@ -337,14 +336,24 @@ class _CustomerRewardsTabState extends State<CustomerRewardsTab> {
         itemCount: list.length,
         itemBuilder: (context, i) {
           final doc = list[i];
-          final date = (doc['date'] as num?) != null
-              ? DateTime.fromMillisecondsSinceEpoch(
-                  (doc['date'] as num).toInt() * 1000,
-                )
-              : DateTime.now(); // Handle firestore timestamp if needed, repository mapped it. Note: Timestamp is handled in repo. Assuming mapped as Timestamp or direct Date. If Repo returns Timestamp, use `doc['date'].toDate()`. Assuming `doc['date']` is already a DateTime or Timestamp from your stream mapping.
-          final actualDate = doc['date'] is DateTime
-              ? doc['date']
-              : (doc['date']).toDate();
+
+          // ✅ FIX: Ghalat type cast ko hata diya aur direct try-catch lagaya
+          DateTime actualDate;
+          try {
+            if (doc['date'] is DateTime) {
+              actualDate = doc['date'];
+            } else if (doc['date'] is Timestamp) {
+              actualDate = (doc['date'] as Timestamp).toDate();
+            } else if (doc['date'] is num) {
+              actualDate = DateTime.fromMillisecondsSinceEpoch(
+                (doc['date'] as num).toInt() * 1000,
+              );
+            } else {
+              actualDate = DateTime.now();
+            }
+          } catch (_) {
+            actualDate = DateTime.now();
+          }
 
           return Container(
             margin: const EdgeInsets.only(bottom: 8),

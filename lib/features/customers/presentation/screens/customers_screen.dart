@@ -14,7 +14,7 @@ class CustomersScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final controller = Get.put(CustomersController());
+    final controller = Get.find<CustomersController>();
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9),

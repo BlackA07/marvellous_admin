@@ -511,14 +511,7 @@ class AdminFinanceRepository {
   }) {
     return _db
         .collection('admin_rewards')
-        .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
-        .where(
-          'date',
-          isLessThanOrEqualTo: Timestamp.fromDate(
-            endDate.add(const Duration(hours: 23, minutes: 59, seconds: 59)),
-          ),
-        )
-        .orderBy('date', descending: true)
+        .orderBy('createdAt', descending: true) // ✅ date ki jagah createdAt
         .snapshots()
         .map(
           (snap) => snap.docs.map((doc) {

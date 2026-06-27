@@ -188,7 +188,6 @@ class OrdersController extends GetxController {
     }
   }
 
-  // ✅ FIX: OrdersParsing Fix for LegacyJavaScriptObject
   void _listenToOrders() {
     _db
         .collection('orders')
@@ -198,19 +197,11 @@ class OrdersController extends GetxController {
           final List<OrderModel> orders = [];
           for (var doc in snap.docs) {
             try {
-              // Convert explicitly to Map<String, dynamic> before passing to fromFirestore
-              final data = Map<String, dynamic>.from(doc.data());
-              // Creating a temporary map and simulating a DocumentSnapshot is not ideal,
-              // but we need to ensure the raw map is clean.
-              // Assuming your OrderModel.fromFirestore takes a DocumentSnapshot
-              // Alternatively, if you have OrderModel.fromMap, use that.
-              // We will pass the doc directly but ensure it doesn't crash on internal lists.
-              orders.add(OrderModel.fromFirestore(doc));
+              // ✅ FIX: Explicitly cast using Map.from for Web compatibility
+              final rawData = _deepConvert(doc.data() as Map);
+              orders.add(OrderModel.fromMap(rawData, doc.id));
             } catch (e) {
-              debugPrint(
-                "❌ Error parsing OrderModel from Firestore: $e\nDocument ID: ${doc.id}",
-              );
-              // Skipping bad order, you can handle it differently if you want.
+              debugPrint("❌ Error parsing order ${doc.id}: $e");
             }
           }
           pendingOrders.assignAll(orders);
@@ -366,7 +357,6 @@ class OrdersController extends GetxController {
               body =
                   "Your order #$orderId has been rejected.\nReason: ${reason.isNotEmpty ? reason : 'Not specified'}\n\nNeed help? Tap the WhatsApp icon on the Home Screen and quote your Order ID.";
 
-              // Refund logic
               String src = data['paymentSource'] ?? '';
               double deduction = (data['actualDeduction'] ?? 0.0).toDouble();
 
@@ -474,6 +464,18 @@ class OrdersController extends GetxController {
     return null;
   }
 
+  Map<String, dynamic> _deepConvert(Map map) {
+    return map.map((k, v) {
+      if (v is Map) return MapEntry(k.toString(), _deepConvert(v));
+      if (v is List)
+        return MapEntry(
+          k.toString(),
+          v.map((e) => e is Map ? _deepConvert(e) : e).toList(),
+        );
+      return MapEntry(k.toString(), v);
+    });
+  }
+
   Future<Map<String, dynamic>> _ensureUserInTree(
     String buyerUid,
     Map<String, dynamic> buyerData,
@@ -534,7 +536,6 @@ class OrdersController extends GetxController {
     return updatedData;
   }
 
-  // ✅ FULL AUTOMATED PROCESS WITH SKIP LOGIC FOR DOUBLE COMMISSIONS
   Future<bool> _processInstantRewardsAtomically(
     String orderId,
     Map<String, dynamic> orderData,
@@ -598,7 +599,7 @@ class OrdersController extends GetxController {
             'date': FieldValue.serverTimestamp(),
             'description': 'COD Payment added for Order #$orderId',
           });
-          // --- NEW LEDGER HOOK: COD PAYMENT ---
+
           DocumentReference ledgerRef = _db
               .collection('admin_ledger_transactions')
               .doc();
@@ -615,7 +616,6 @@ class OrdersController extends GetxController {
             'createdBy': 'system',
             'date': FieldValue.serverTimestamp(),
             'createdAt': FieldValue.serverTimestamp(),
-            // Naye fields for breakdown
             'subTotal': orderData['subTotal'] ?? 0,
             'shippingFee': orderData['shippingFee'] ?? 0,
             'codCharges': orderData['codCharges'] ?? 0,
@@ -625,6 +625,60 @@ class OrdersController extends GetxController {
       }
 
       double grossProfit = (orderData['grossProfit'] ?? 0.0).toDouble();
+
+      // ✅ COMPANY FINANCE SPLIT
+      if (grossProfit > 0) {
+        DocumentSnapshot settingsDoc = await _db
+            .collection('admin_settings')
+            .doc('mlm_variables')
+            .get();
+        Map<String, dynamic> settings =
+            settingsDoc.data() as Map<String, dynamic>? ?? {};
+
+        double taxPercent = (settings['taxPercent'] ?? 0.0).toDouble();
+        double sadqaPercent = (settings['sadqaPercent'] ?? 0.0).toDouble();
+        double companyProfitPercent = (settings['companyProfitPercent'] ?? 0.0)
+            .toDouble();
+        double expensesPercent = (settings['expensesPercent'] ?? 0.0)
+            .toDouble(); // ✅ NEW
+
+        double taxAmount = grossProfit * (taxPercent / 100);
+        double sadqaAmount = grossProfit * (sadqaPercent / 100);
+        double profitAmount = grossProfit * (companyProfitPercent / 100);
+        double expenseAmount = grossProfit * (expensesPercent / 100); // ✅ NEW
+
+        DocumentReference mainFinRef = _db
+            .collection('company_finances')
+            .doc('main_finances');
+
+        DocumentSnapshot mainFinSnap = await mainFinRef.get();
+        double currentTaxes = 0.0;
+        double currentSadqa = 0.0;
+        double currentProfit = 0.0;
+        double currentExpenses = 0.0; // ✅ NEW
+
+        if (mainFinSnap.exists && mainFinSnap.data() != null) {
+          var mData = mainFinSnap.data() as Map<String, dynamic>;
+          currentTaxes =
+              double.tryParse(mData['taxes']?.toString() ?? '0') ?? 0.0;
+          currentSadqa =
+              double.tryParse(mData['sadqa']?.toString() ?? '0') ?? 0.0;
+          currentProfit =
+              double.tryParse(mData['main_profit']?.toString() ?? '0') ?? 0.0;
+          currentExpenses =
+              double.tryParse(mData['expense_product']?.toString() ?? '0') ??
+              0.0; // ✅ NEW
+        }
+
+        batch.set(mainFinRef, {
+          'taxes': (currentTaxes + taxAmount).toStringAsFixed(2),
+          'sadqa': (currentSadqa + sadqaAmount).toStringAsFixed(2),
+          'main_profit': (currentProfit + profitAmount).toStringAsFixed(2),
+          'expense_product': (currentExpenses + expenseAmount).toStringAsFixed(
+            2,
+          ), // ✅ NEW
+        }, SetOptions(merge: true));
+      }
 
       if (grossProfit <= 0) {
         await batch.commit();
@@ -751,7 +805,6 @@ class OrdersController extends GetxController {
         },
       );
 
-      // ✅ FIX 1: Admin app will now send SEPARATE Review notifications for each item
       final List items = orderData['items'] ?? [];
       for (var rawItem in items) {
         final itemMap = Map<String, dynamic>.from(rawItem as Map);
@@ -768,7 +821,7 @@ class OrdersController extends GetxController {
             {
               'orderId': orderId,
               'showReviewButton': true,
-              'items': [itemMap], // Individual item for review
+              'items': [itemMap],
             },
           );
         }
@@ -848,7 +901,7 @@ class OrdersController extends GetxController {
                 'baseAmount': refBaseComm,
                 'rankMultiplier': rankMulti,
                 'level': 1,
-                'depth': 1, // Physical depth added
+                'depth': 1,
                 'fromUser': buyerName,
                 'fromUid': buyerUid,
                 'orderId': orderId,
@@ -864,8 +917,7 @@ class OrdersController extends GetxController {
 
       String currentUplineUid = buyerParentUid.trim();
       int physicalDepth = 1;
-      int level =
-          2; // ✅ FIX: Use while loop to properly control skipped referrer
+      int level = 2;
 
       while (currentUplineUid.isNotEmpty && level <= maxLevels) {
         DocumentSnapshot uDoc = await _db
@@ -877,7 +929,6 @@ class OrdersController extends GetxController {
         Map<String, dynamic> uData = uDoc.data() as Map<String, dynamic>;
         String nextParent = (uData['mlmParentUid'] ?? '').toString().trim();
 
-        // ✅ FIX: Referrer skip without incrementing the level
         if (currentUplineUid == referrerUid) {
           double levelPercent = commPercentages['level_$level'] ?? 0.0;
           if (levelPercent > 0) {
@@ -961,8 +1012,8 @@ class OrdersController extends GetxController {
               'amount': finalComm,
               'baseAmount': baseComm,
               'rankMultiplier': rankMulti,
-              'level': level, // Matrix table level mapped exactly
-              'depth': physicalDepth, // Physical UI box depth
+              'level': level,
+              'depth': physicalDepth,
               'fromUser': buyerName,
               'fromUid': buyerUid,
               'orderId': orderId,
@@ -1230,8 +1281,7 @@ class OrdersController extends GetxController {
           .toDouble();
 
       if (!isHeActive) {
-        heEarningsSince +=
-            amount; // ✅ FIX: Use 'amount' (Gross) instead of 'afterSponsor' for total earnings metric calculations
+        heEarningsSince += amount;
         if (heEarningsSince >= hThreshold) {
           isHeActive = true;
           heTarget = hDeduction;
@@ -1565,7 +1615,6 @@ class OrdersController extends GetxController {
         'hasAdminScreenshot': true,
         'timestamp': FieldValue.serverTimestamp(),
       });
-      // --- NEW LEDGER HOOK: CUSTOMER WITHDRAWAL ---
       await _db.collection('admin_ledger_transactions').add({
         'type': 'out',
         'category': 'customer_withdrawal',
@@ -1775,7 +1824,6 @@ class OrdersController extends GetxController {
                       ? 'Fee Deposit Approved'
                       : 'Wallet Deposit Approved',
                 });
-            // --- NEW LEDGER HOOK: ONLINE DEPOSIT ---
             await _db.collection('admin_ledger_transactions').add({
               'type': 'in',
               'category': purpose == 'membership_fee'
@@ -2060,7 +2108,6 @@ class OrdersController extends GetxController {
                   'date': FieldValue.serverTimestamp(),
                   'description': 'Order Payment received for Order #$orderId',
                 });
-            // --- NEW LEDGER HOOK: ONLINE ORDER PAYMENT ---
             await _db.collection('admin_ledger_transactions').add({
               'type': 'in',
               'category': 'product_purchase_online',
@@ -2073,6 +2120,11 @@ class OrdersController extends GetxController {
               'createdBy': 'system',
               'date': FieldValue.serverTimestamp(),
               'createdAt': FieldValue.serverTimestamp(),
+              // ✅ YEH FIELDS MISSING THAY:
+              'subTotal': subTotal,
+              'shippingFee': shippingFee,
+              'codCharges': 0, // Online payment mein COD nahi hota
+              'grossProfit': data['grossProfit'] ?? 0,
             });
           }
         } catch (e) {

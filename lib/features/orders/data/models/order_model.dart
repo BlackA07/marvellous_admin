@@ -58,7 +58,12 @@ class OrderModel {
       if (data['items'] != null && data['items'] is List) {
         for (var i in data['items']) {
           if (i is Map) {
-            parsedItems.add(Map<String, dynamic>.from(i));
+            final item = Map<String, dynamic>.from(i as Map);
+            // productId ko string force karo
+            if (item['productId'] != null) {
+              item['productId'] = item['productId'].toString();
+            }
+            parsedItems.add(item);
           }
         }
       }

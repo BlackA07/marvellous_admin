@@ -1,5 +1,6 @@
 // Path: lib/features/finances/presentation/screens/BanksScreen.dart
 import 'dart:convert';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -26,7 +27,6 @@ class BanksScreen extends StatelessWidget {
           ),
         ),
       ),
-      // ✅ FAB with Transfer + Add buttons
       floatingActionButton: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -50,17 +50,109 @@ class BanksScreen extends StatelessWidget {
         ],
       ),
       body: Obx(() {
+        double totalExpense = controller.expenses.fold(
+          0.0,
+          (sum, e) => sum + e.amount,
+        );
         final systemAccounts = controller.banks
             .where((b) => b.isSystem)
             .toList();
         final bankAccounts = controller.banks
             .where((b) => !b.isSystem)
             .toList();
+
         return SingleChildScrollView(
           padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // ── ✅ NAYA SECTION: FINANCIAL SPLITS (PROFIT, TAX, SADQA, EXPENSE POOL) ──
+              Text(
+                'Financial Splits Overview',
+                style: GoogleFonts.comicNeue(
+                  color: Colors.cyanAccent,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 15),
+              StreamBuilder<DocumentSnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('company_finances')
+                    .doc('main_finances')
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  double taxes = 0.0;
+                  double sadqa = 0.0;
+                  double profit = 0.0;
+                  double expPool = 0.0; // ✅ Real Expense Pool from Gross Split
+
+                  if (snapshot.hasData && snapshot.data!.exists) {
+                    var data =
+                        snapshot.data!.data() as Map<String, dynamic>? ?? {};
+                    // Parsing strings to double with rounding (toInt)
+                    taxes =
+                        double.tryParse(data['taxes']?.toString() ?? '0') ??
+                        0.0;
+                    sadqa =
+                        double.tryParse(data['sadqa']?.toString() ?? '0') ??
+                        0.0;
+                    profit =
+                        double.tryParse(
+                          data['main_profit']?.toString() ?? '0',
+                        ) ??
+                        0.0;
+                    expPool =
+                        double.tryParse(
+                          data['expense_product']?.toString() ?? '0',
+                        ) ??
+                        0.0;
+                  }
+
+                  return Row(
+                    children: [
+                      // ✅ ROUNDING: .toInt() ya .round() use kiya taake decimal na aaye
+                      _buildSplitSummaryCard(
+                        context,
+                        "Main Profit",
+                        'main_profit',
+                        profit.toInt().toDouble(),
+                        Colors.greenAccent,
+                        Icons.monetization_on,
+                      ),
+                      const SizedBox(width: 8),
+                      _buildSplitSummaryCard(
+                        context,
+                        "Taxes",
+                        'taxes',
+                        taxes.toInt().toDouble(),
+                        Colors.orangeAccent,
+                        Icons.account_balance,
+                      ),
+                      const SizedBox(width: 8),
+                      _buildSplitSummaryCard(
+                        context,
+                        "Sadqa",
+                        'sadqa',
+                        sadqa.toInt().toDouble(),
+                        Colors.purpleAccent,
+                        Icons.volunteer_activism,
+                      ),
+                      const SizedBox(width: 8),
+                      _buildSplitSummaryCard(
+                        context,
+                        "Expenses",
+                        'expenses_pool',
+                        expPool.toInt().toDouble(),
+                        Colors.redAccent,
+                        Icons.money_off,
+                      ),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 30),
+
               if (systemAccounts.isNotEmpty) ...[
                 Text(
                   'System Accounts (Default)',
@@ -88,12 +180,273 @@ class BanksScreen extends StatelessWidget {
               ...bankAccounts
                   .map((bank) => _buildBankCard(context, bank))
                   .toList(),
-              // Bottom padding so FABs don't overlap last card
               const SizedBox(height: 100),
             ],
           ),
         );
       }),
+    );
+  }
+
+  // ── ✅ WIDGET: SPLIT CARD (Clickable & Vertical Layout) ──
+  Widget _buildSplitSummaryCard(
+    BuildContext context,
+    String title,
+    String dbField,
+    double amount,
+    Color color,
+    IconData icon,
+  ) {
+    return Expanded(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => _splitOptionsDialog(context, title, dbField, amount),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+          decoration: BoxDecoration(
+            color: const Color(0xFF252525),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: color.withOpacity(0.3)),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: color, size: 20),
+              const SizedBox(height: 6),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  'Rs. ${_fmt(amount)}',
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── ✅ ACTION: OPTIONS DIALOG FOR SPLIT CARDS ──
+  void _splitOptionsDialog(
+    BuildContext context,
+    String title,
+    String dbField,
+    double currentAmt,
+  ) {
+    Get.bottomSheet(
+      Container(
+        padding: const EdgeInsets.all(20),
+        decoration: const BoxDecoration(
+          color: Color(0xFF2C2C2C),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              "$title Settings",
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              "Current Balance: PKR ${_fmt(currentAmt)}",
+              style: const TextStyle(color: Colors.cyanAccent, fontSize: 14),
+            ),
+            const SizedBox(height: 20),
+            ListTile(
+              leading: const Icon(Icons.edit, color: Colors.orangeAccent),
+              title: const Text(
+                "Edit Balance Manually",
+                style: TextStyle(color: Colors.white),
+              ),
+              onTap: () {
+                Get.back();
+                _editSplitDialog(title, dbField, currentAmt);
+              },
+            ),
+            const Divider(color: Colors.white12),
+            ListTile(
+              leading: const Icon(Icons.swap_horiz, color: Colors.greenAccent),
+              title: const Text(
+                "Transfer Funds to Bank",
+                style: TextStyle(color: Colors.white),
+              ),
+              onTap: () {
+                Get.back();
+                _transferSplitDialog(title, dbField, currentAmt);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── ✅ ACTION: EDIT SPLIT BALANCE ──
+  void _editSplitDialog(String title, String dbField, double currentAmt) {
+    final ctrl = TextEditingController(text: currentAmt.toStringAsFixed(0));
+    Get.defaultDialog(
+      backgroundColor: const Color(0xFF2C2C2C),
+      title: 'Edit $title',
+      titleStyle: const TextStyle(color: Colors.white),
+      content: _input(ctrl, 'New Amount', isNum: true),
+      confirm: ElevatedButton(
+        style: ElevatedButton.styleFrom(backgroundColor: Colors.cyanAccent),
+        onPressed: () {
+          double newAmt = double.tryParse(ctrl.text) ?? 0.0;
+          controller.updateSplitBalance(dbField, newAmt);
+          Get.back();
+          Get.snackbar(
+            "Success",
+            "$title updated to PKR $newAmt",
+            backgroundColor: Colors.green,
+            colorText: Colors.white,
+          );
+        },
+        child: const Text('Save', style: TextStyle(color: Colors.black)),
+      ),
+      cancel: TextButton(
+        onPressed: () => Get.back(),
+        child: const Text("Cancel", style: TextStyle(color: Colors.white54)),
+      ),
+    );
+  }
+
+  // ── ✅ ACTION: TRANSFER FROM SPLIT TO BANK ──
+  void _transferSplitDialog(String title, String dbField, double currentAmt) {
+    final amtCtrl = TextEditingController();
+    final descCtrl = TextEditingController(
+      text: 'Funds transferred from $title',
+    );
+    BankModel? toBank = controller.banks.isNotEmpty
+        ? controller.banks.first
+        : null;
+
+    Get.defaultDialog(
+      backgroundColor: const Color(0xFF2C2C2C),
+      title: 'Transfer from $title',
+      titleStyle: const TextStyle(
+        color: Colors.white,
+        fontWeight: FontWeight.bold,
+      ),
+      content: StatefulBuilder(
+        builder: (ctx, setState) => SizedBox(
+          width: Get.width * 0.9,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Available Balance: PKR ${_fmt(currentAmt)}',
+                style: const TextStyle(color: Colors.cyanAccent, fontSize: 13),
+              ),
+              const SizedBox(height: 15),
+              const Text(
+                'Transfer To Bank:',
+                style: TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+              const SizedBox(height: 4),
+              DropdownButtonFormField<BankModel>(
+                value: toBank,
+                dropdownColor: const Color(0xFF2C2C2C),
+                decoration: const InputDecoration(
+                  enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.cyanAccent),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.white),
+                  ),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                ),
+                items: controller.banks
+                    .map(
+                      (b) => DropdownMenuItem(
+                        value: b,
+                        child: Text(
+                          '${b.name} (PKR ${b.balance.toStringAsFixed(0)})',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (val) => setState(() => toBank = val),
+              ),
+              const SizedBox(height: 12),
+              _input(amtCtrl, 'Amount (PKR)', isNum: true),
+              _input(descCtrl, 'Note / Reason'),
+            ],
+          ),
+        ),
+      ),
+      confirm: ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.deepPurpleAccent,
+        ),
+        onPressed: () async {
+          final amount = double.tryParse(amtCtrl.text) ?? 0;
+          if (amount <= 0 || amount > currentAmt) {
+            Get.snackbar(
+              'Error',
+              'Valid amount likhein (Max: $currentAmt)',
+              backgroundColor: Colors.red,
+              colorText: Colors.white,
+            );
+            return;
+          }
+          if (toBank == null) return;
+
+          Get.back();
+          final success = await controller.transferFromSplit(
+            field: dbField,
+            amount: amount,
+            toBank: toBank!,
+            description: descCtrl.text,
+          );
+
+          if (success) {
+            Get.snackbar(
+              '✅ Transfer Complete',
+              'PKR ${amount.toStringAsFixed(0)} sent to ${toBank!.name}',
+              backgroundColor: Colors.green,
+              colorText: Colors.white,
+            );
+          } else {
+            Get.snackbar(
+              '❌ Failed',
+              'Transfer could not be processed.',
+              backgroundColor: Colors.redAccent,
+              colorText: Colors.white,
+            );
+          }
+        },
+        child: const Text('Transfer', style: TextStyle(color: Colors.white)),
+      ),
     );
   }
 
@@ -115,7 +468,6 @@ class BanksScreen extends StatelessWidget {
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        // ✅ FIX: Title takes available space, trailing is flexible
         title: Text(
           bank.name,
           style: GoogleFonts.comicNeue(
@@ -188,7 +540,6 @@ class BanksScreen extends StatelessWidget {
                     ),
                 ],
               ),
-        // ✅ FIX: Responsive trailing - no fixed width, uses intrinsic size
         trailing: IntrinsicHeight(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -245,12 +596,10 @@ class BanksScreen extends StatelessWidget {
     );
   }
 
-  // ✅ TRANSFER DIALOG - Bank se Bank transfer with Firestore transaction
   void _transferDialog(BuildContext context) {
     final amountCtrl = TextEditingController();
     final descCtrl = TextEditingController(text: 'Internal Transfer');
 
-    // All banks (system + regular) can be source/destination
     final allBanks = controller.banks.toList();
     if (allBanks.length < 2) {
       Get.snackbar(
@@ -314,7 +663,6 @@ class BanksScreen extends StatelessWidget {
                     .toList(),
                 onChanged: (val) => setState(() {
                   fromBank = val;
-                  // Agar from aur to same ho jaye to to change kar do
                   if (toBank?.id == val?.id) {
                     toBank = allBanks.firstWhere(
                       (b) => b.id != val?.id,
@@ -447,11 +795,7 @@ class BanksScreen extends StatelessWidget {
       text: bank?.balance.toStringAsFixed(0),
     );
 
-    // ✅ FIX: isSystemAcc aur isInternal properly initialize hon editing ke time bhi
     bool isSystemAcc = bank?.isSystem ?? false;
-    bool isInternal =
-        isSystemAcc && (bank?.name.toLowerCase().contains('internal') ?? false);
-
     bool showInCustomerApp = bank?.showInCustomerApp ?? true;
     bool showTitle = bank?.showTitle ?? true;
     bool showIban = bank?.showIban ?? true;
@@ -470,22 +814,13 @@ class BanksScreen extends StatelessWidget {
           child: SingleChildScrollView(
             child: Column(
               children: [
-                // ✅ FIX: System account bhi naam edit kar sake
                 _input(nameCtrl, 'Bank/Account Name (e.g. Cash, Internal)'),
-
-                // ✅ FIX: Agar isInternal hai to sirf naam aur balance hide karo
-                // lekin edit open hone dete hain - pehle ye block hi nahi tha system accounts ke liye
                 if (!isSystemAcc) ...[
                   _input(titleCtrl, 'Account Title'),
                   _input(ibanCtrl, 'IBAN'),
                   _input(acCtrl, 'Account No'),
                 ],
-
-                // ✅ FIX: Internal account ke liye balance field hide karo
-                // Regular system (Cash) ke liye balance edit hota hai
                 _input(balCtrl, 'Balance', isNum: true),
-
-                // ✅ FIX: isSystem checkbox sirf naye account pe dikhao
                 if (bank == null)
                   CheckboxListTile(
                     title: const Text(
@@ -496,14 +831,9 @@ class BanksScreen extends StatelessWidget {
                     activeColor: Colors.cyanAccent,
                     onChanged: (val) => setState(() {
                       isSystemAcc = val ?? false;
-                      isInternal =
-                          isSystemAcc &&
-                          nameCtrl.text.toLowerCase().contains('internal');
                     }),
                   ),
-
                 const Divider(color: Colors.white24),
-
                 if (!isSystemAcc) ...[
                   const Text(
                     "CUSTOMER APP SETTINGS",
@@ -767,4 +1097,14 @@ class BanksScreen extends StatelessWidget {
           ),
         ),
       );
+
+  String _fmt(double v) {
+    if (v == 0) return '0';
+    return v
+        .toStringAsFixed(0)
+        .replaceAllMapped(
+          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+          (m) => '${m[1]},',
+        );
+  }
 }

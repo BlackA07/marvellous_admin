@@ -158,29 +158,35 @@ class DashboardController extends GetxController {
         }
       }
 
-      // 2. Fetch Customer Orders (For Sales Chart, Pending Stats & Revenue IN)
-      var ordersSnap = await _db.collection('orders').get();
-      for (var doc in ordersSnap.docs) {
+      var pendingSnap = await _db
+          .collection('orders')
+          .where('status', whereIn: ['pending', 'confirmed', 'shipped'])
+          .get();
+      for (var doc in pendingSnap.docs) {
         var data = doc.data();
-        DateTime date = _parseDate(data['createdAt'] ?? data['orderDate']);
-
-        if (date.isBefore(start) || date.isAfter(end)) continue;
-
-        String status = (data['status'] ?? '').toString().toLowerCase();
         double price = _parseDouble(
           data['totalAmount'] ?? data['grandTotal'] ?? data['price'],
         );
+        pendingCustOrders++;
+        pendingCustValue += price;
+      }
 
-        if (status == 'pending') {
-          pendingCustOrders++;
-          pendingCustValue += price;
-        } else if (status == 'delivered' || status == 'completed') {
-          // ✅ FIX: Adding successful order amounts to Total IN and Gross Profit
-          totalIn += price;
-          grossProfit += _parseDouble(data['grossProfit']);
-
-          _addToChart(salesMap, date, price, selectedFilter.value, start, end);
-        }
+      // Delivered orders — date filter ke SAATH
+      var deliveredSnap = await _db
+          .collection('orders')
+          .where('status', whereIn: ['delivered', 'completed'])
+          .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
+          .where('createdAt', isLessThanOrEqualTo: Timestamp.fromDate(end))
+          .get();
+      for (var doc in deliveredSnap.docs) {
+        var data = doc.data();
+        DateTime date = _parseDate(data['createdAt'] ?? data['orderDate']);
+        double price = _parseDouble(
+          data['totalAmount'] ?? data['grandTotal'] ?? data['price'],
+        );
+        totalIn += price;
+        grossProfit += _parseDouble(data['grossProfit']);
+        _addToChart(salesMap, date, price, selectedFilter.value, start, end);
       }
 
       // 3. Fetch Vendor Dues (Payments remaining in range)

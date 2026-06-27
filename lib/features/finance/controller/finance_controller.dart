@@ -86,7 +86,7 @@ class FinanceController extends GetxController {
   Stream<List<BankTransactionModel>> getBankHistory(String bankId) =>
       _repo.getBankTransactions(bankId);
 
-  // ✅ NEW: Transfer between accounts
+  // Transfer between bank accounts
   Future<bool> transferFunds({
     required BankModel fromBank,
     required BankModel toBank,
@@ -98,6 +98,33 @@ class FinanceController extends GetxController {
       fromBank: fromBank,
       toBank: toBank,
       amount: amount,
+      description: description,
+    );
+    isLoading.value = false;
+    return success;
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // ✅ NEW: CONTROLLER METHODS FOR SPLIT ACTIONS
+  // ─────────────────────────────────────────────────────────
+
+  Future<void> updateSplitBalance(String field, double newBalance) async {
+    isLoading.value = true;
+    await _repo.updateSplitBalance(field, newBalance);
+    isLoading.value = false;
+  }
+
+  Future<bool> transferFromSplit({
+    required String field,
+    required double amount,
+    required BankModel toBank,
+    required String description,
+  }) async {
+    isLoading.value = true;
+    bool success = await _repo.transferFromSplit(
+      field: field,
+      amount: amount,
+      toBank: toBank,
       description: description,
     );
     isLoading.value = false;

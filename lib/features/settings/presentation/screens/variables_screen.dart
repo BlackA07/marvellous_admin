@@ -1,5 +1,7 @@
+// Path: lib/features/settings/presentation/screens/variables_screen.dart
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -25,6 +27,8 @@ class _VariablesScreenState extends State<VariablesScreen> {
   final TextEditingController _mlmDistCtrl = TextEditingController();
   final TextEditingController _expenseCtrl = TextEditingController();
   final TextEditingController _profitCtrl = TextEditingController();
+  final TextEditingController _sadqaCtrl =
+      TextEditingController(); // ✅ NAYA FIELD: SADQA
 
   final TextEditingController _bronzeLimitCtrl = TextEditingController();
   final TextEditingController _silverLimitCtrl = TextEditingController();
@@ -47,12 +51,14 @@ class _VariablesScreenState extends State<VariablesScreen> {
   final Color textColor = Colors.black; // Primary Text
   final Color accentColor = Colors.deepPurple;
 
+  // ✅ UPDATED: Added Sadqa to the Split Total Calculation
   double get _currentSplitTotal {
     double t = double.tryParse(_taxCtrl.text) ?? 0;
     double m = double.tryParse(_mlmDistCtrl.text) ?? 0;
     double e = double.tryParse(_expenseCtrl.text) ?? 0;
     double p = double.tryParse(_profitCtrl.text) ?? 0;
-    return t + m + e + p;
+    double s = double.tryParse(_sadqaCtrl.text) ?? 0;
+    return t + m + e + p + s;
   }
 
   @override
@@ -77,8 +83,12 @@ class _VariablesScreenState extends State<VariablesScreen> {
         settings = MLMGlobalSettings.fromMap(
           doc.data() as Map<String, dynamic>,
         );
+        // Fallback fetch for Sadqa in case model doesn't have it yet
+        var rawData = doc.data() as Map<String, dynamic>;
+        _sadqaCtrl.text = (rawData['sadqaPercent'] ?? 0.0).toString();
       } else {
         settings = MLMGlobalSettings.defaults();
+        _sadqaCtrl.text = "0.0";
       }
 
       setState(() {
@@ -203,10 +213,14 @@ class _VariablesScreenState extends State<VariablesScreen> {
         highEarnerDeduction: double.parse(_cycleChargeCtrl.text),
       );
 
+      // ✅ MAP DATA: Injecting Sadqa into the Map
+      Map<String, dynamic> settingsMap = newSettings.toMap();
+      settingsMap['sadqaPercent'] = double.parse(_sadqaCtrl.text);
+
       await FirebaseFirestore.instance
           .collection('admin_settings')
           .doc('mlm_variables')
-          .set(newSettings.toMap(), SetOptions(merge: true));
+          .set(settingsMap, SetOptions(merge: true));
 
       await FirebaseFirestore.instance
           .collection('admin_settings')
@@ -300,7 +314,7 @@ class _VariablesScreenState extends State<VariablesScreen> {
                           "Updating this triggers a global recalculation for Products & Packages.",
                           style: TextStyle(
                             fontSize: 11,
-                            color: Colors.black, // Changed from Blue to Black
+                            color: Colors.black,
                             fontWeight: FontWeight.bold,
                             fontStyle: FontStyle.italic,
                           ),
@@ -325,8 +339,7 @@ class _VariablesScreenState extends State<VariablesScreen> {
                                       : "Preview: 10 Pts",
                                   style: const TextStyle(
                                     fontSize: 12,
-                                    color: Colors
-                                        .black, // Changed from Grey to Black
+                                    color: Colors.black,
                                   ),
                                 ),
                               ],
@@ -401,6 +414,7 @@ class _VariablesScreenState extends State<VariablesScreen> {
                           ],
                         ),
                         const SizedBox(height: 10),
+                        // ✅ UPDATED ROW WITH SADQA INCLUDED
                         Row(
                           children: [
                             Expanded(
@@ -417,6 +431,16 @@ class _VariablesScreenState extends State<VariablesScreen> {
                               child: _buildTextField(
                                 "Profit",
                                 _profitCtrl,
+                                suffix: "%",
+                                isPercentage: true,
+                                onChanged: (v) => setState(() {}),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: _buildTextField(
+                                "Sadqa",
+                                _sadqaCtrl,
                                 suffix: "%",
                                 isPercentage: true,
                                 onChanged: (v) => setState(() {}),
@@ -527,7 +551,7 @@ class _VariablesScreenState extends State<VariablesScreen> {
                         child: Text(
                           "SAVE & SYNC EVERYTHING",
                           style: GoogleFonts.orbitron(
-                            color: Colors.black, // Changed from White to Black
+                            color: Colors.black,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -629,7 +653,7 @@ class _VariablesScreenState extends State<VariablesScreen> {
     ),
     decoration: InputDecoration(
       labelText: label,
-      labelStyle: const TextStyle(color: Colors.black), // Label color black
+      labelStyle: const TextStyle(color: Colors.black),
       prefixText: prefix,
       prefixStyle: const TextStyle(color: Colors.black),
       suffixText: suffix,
@@ -661,7 +685,7 @@ class _VariablesScreenState extends State<VariablesScreen> {
           child: Text(
             "Saving these variables will instantly update the entire app's economy.",
             style: TextStyle(
-              color: Colors.black, // Changed from Blue to Black
+              color: Colors.black,
               fontWeight: FontWeight.bold,
               fontSize: 13,
             ),

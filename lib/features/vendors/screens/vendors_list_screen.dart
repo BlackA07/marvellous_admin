@@ -13,8 +13,10 @@ class VendorsListScreen extends StatefulWidget {
 }
 
 class _VendorsListScreenState extends State<VendorsListScreen> {
-  final VendorController controller = Get.put(VendorController());
+  final VendorController controller = Get.find<VendorController>();
   String _selectedFilter = 'All';
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _searchQuery = '';
 
   final List<String> _filters = [
     'All',
@@ -23,6 +25,12 @@ class _VendorsListScreenState extends State<VendorsListScreen> {
     'Hold',
     'Rejected',
   ];
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
 
   Color _statusColor(String status) {
     switch (status.toLowerCase()) {
@@ -39,21 +47,39 @@ class _VendorsListScreenState extends State<VendorsListScreen> {
     }
   }
 
-  // Vendors ko sort karo: approved upar, baqi neeche
   List get _sortedVendors {
-    final all = controller.vendors.toList();
+    var all = controller.vendors.toList();
+
+    // ✅ Search filter
+    if (_searchQuery.isNotEmpty) {
+      all = all
+          .where(
+            (v) =>
+                v.storeName.toLowerCase().contains(
+                  _searchQuery.toLowerCase(),
+                ) ||
+                v.ownerName.toLowerCase().contains(
+                  _searchQuery.toLowerCase(),
+                ) ||
+                v.email.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+                v.displayPhone.contains(_searchQuery),
+          )
+          .toList();
+    }
+
+    // ✅ Status filter
     if (_selectedFilter != 'All') {
-      return all
+      all = all
           .where((v) => v.status.toLowerCase() == _selectedFilter.toLowerCase())
           .toList();
     }
-    final approved = all
-        .where((v) => v.status.toLowerCase() == 'approved')
-        .toList();
-    final others = all
-        .where((v) => v.status.toLowerCase() != 'approved')
-        .toList();
-    return [...approved, ...others];
+
+    // ✅ A-Z sort by storeName
+    all.sort(
+      (a, b) => a.storeName.toLowerCase().compareTo(b.storeName.toLowerCase()),
+    );
+
+    return all;
   }
 
   void _showHoldDialog(String docId) {
@@ -155,6 +181,34 @@ class _VendorsListScreenState extends State<VendorsListScreen> {
             ),
             const SizedBox(height: 14),
 
+            // ✅ Search Bar
+            TextField(
+              controller: _searchCtrl,
+              style: const TextStyle(color: Colors.white),
+              onChanged: (val) => setState(() => _searchQuery = val),
+              decoration: InputDecoration(
+                hintText: "Search by name, email, phone...",
+                hintStyle: const TextStyle(color: Colors.white38),
+                prefixIcon: const Icon(Icons.search, color: Colors.white38),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white38),
+                        onPressed: () {
+                          _searchCtrl.clear();
+                          setState(() => _searchQuery = '');
+                        },
+                      )
+                    : null,
+                filled: true,
+                fillColor: const Color(0xFF2A2D3E),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+
             // ── Filter Chips ──
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
@@ -236,7 +290,9 @@ class _VendorsListScreenState extends State<VendorsListScreen> {
                   if (list.isEmpty) {
                     return Center(
                       child: Text(
-                        'No vendors found.',
+                        _searchQuery.isNotEmpty
+                            ? 'No vendors match "$_searchQuery"'
+                            : 'No vendors found.',
                         style: const TextStyle(color: Colors.white54),
                       ),
                     );
@@ -342,7 +398,6 @@ class _VendorsListScreenState extends State<VendorsListScreen> {
                                       const SizedBox(height: 5),
                                       Row(
                                         children: [
-                                          // Status badge
                                           if (vendor.status.trim().isNotEmpty)
                                             Container(
                                               padding:
@@ -410,17 +465,13 @@ class _VendorsListScreenState extends State<VendorsListScreen> {
                                           ],
                                         ],
                                       ),
-
-                                      // Hold reason
                                       if (isHold &&
                                           vendor.rejectionReason.isEmpty)
-                                        Padding(
-                                          padding: const EdgeInsets.only(
-                                            top: 4,
-                                          ),
+                                        const Padding(
+                                          padding: EdgeInsets.only(top: 4),
                                           child: Text(
                                             'Hold Reason: (see detail)',
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               color: Colors.amberAccent,
                                               fontSize: 11,
                                             ),
@@ -434,7 +485,6 @@ class _VendorsListScreenState extends State<VendorsListScreen> {
                                 Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    // View
                                     IconButton(
                                       icon: const Icon(
                                         Icons.visibility,
@@ -450,8 +500,6 @@ class _VendorsListScreenState extends State<VendorsListScreen> {
                                         ),
                                       ),
                                     ),
-
-                                    // Approve (only if not already approved)
                                     if (!isApproved)
                                       IconButton(
                                         icon: const Icon(
@@ -463,8 +511,6 @@ class _VendorsListScreenState extends State<VendorsListScreen> {
                                         onPressed: () => controller
                                             .approveVendor(vendor.id!),
                                       ),
-
-                                    // Hold (only pending)
                                     if (isPending || isApproved)
                                       IconButton(
                                         icon: const Icon(
@@ -476,8 +522,6 @@ class _VendorsListScreenState extends State<VendorsListScreen> {
                                         onPressed: () =>
                                             _showHoldDialog(vendor.id!),
                                       ),
-
-                                    // Reject (not already rejected)
                                     if (!vendor.status.toLowerCase().contains(
                                       'rejected',
                                     ))
@@ -491,8 +535,6 @@ class _VendorsListScreenState extends State<VendorsListScreen> {
                                         onPressed: () =>
                                             _showRejectDialog(vendor.id!),
                                       ),
-
-                                    // Delete
                                     IconButton(
                                       icon: const Icon(
                                         Icons.delete,
