@@ -624,12 +624,26 @@ class ProductsController extends GetxController {
                   onTap: () => selectedAudience.value = 'inactive',
                 ),
               ),
+              const SizedBox(height: 8),
+              // ✅ Downloaded (Guest) audience option
+              Obx(
+                () => _audienceOption(
+                  icon: Icons.download_done_outlined,
+                  label: "Downloaded (Guests)",
+                  sublabel: "isGuest = true — signup nahi kiya",
+                  value: 'downloaded',
+                  color: Colors.purple.shade700,
+                  bgColor: Colors.purple.shade50,
+                  selected: selectedAudience.value == 'downloaded',
+                  onTap: () => selectedAudience.value = 'downloaded',
+                ),
+              ),
 
               const SizedBox(height: 20),
               const Divider(thickness: 1, color: Colors.black12),
               const SizedBox(height: 12),
 
-              // ── Section 2: Location (multi-select) ──────────────────
+              // ── Section: Location (multi-select) ──────────────────
               Row(
                 children: [
                   Text(
@@ -778,6 +792,7 @@ class ProductsController extends GetxController {
                             await _sendNotification(
                               product: product,
                               audienceFilter: selectedAudience.value,
+                              platformFilter: 'all',
                               locationFilters: Set<String>.from(
                                 selectedLocations,
                               ),
@@ -985,7 +1000,9 @@ class ProductsController extends GetxController {
         ? 'Sab users'
         : audience == 'active'
         ? 'Active members'
-        : 'Inactive members';
+        : audience == 'inactive'
+        ? 'Inactive members'
+        : 'Downloaded (Guests)';
 
     final List<String> locLabels = [];
     if (locations.contains('karachi')) locLabels.add('Karachi');
@@ -1006,9 +1023,15 @@ class ProductsController extends GetxController {
   // Works for: new product, updated product, new package, updated package
   // notifTitlePrefix controls the emoji+label in title
   // notifType controls the 'type' field in Firestore
+  //
+  // NOTE: platformFilter is always passed as 'all' now (iOS/Android picker
+  // removed from the admin dialog per request) — kept as a parameter so the
+  // underlying targeting logic doesn't need to change, and so it can be
+  // reintroduced later without touching this function again.
   Future<void> _sendNotification({
     required ProductModel product,
     required String audienceFilter,
+    required String platformFilter,
     required Set<String> locationFilters,
     required String notifTitlePrefix,
     required String notifType,
@@ -1016,9 +1039,10 @@ class ProductsController extends GetxController {
     try {
       final usersSnap = await _db.collection('users').get();
 
-      final String firstImage = product.images.isNotEmpty
-          ? product.images[0]
-          : '';
+      final String firstImage = product.images.firstWhere(
+        (img) => img.trim().startsWith('http'),
+        orElse: () => '',
+      );
       final String priceText = "Rs. ${product.salePrice.toStringAsFixed(0)}";
       final String notifBody =
           "${product.brand.isNotEmpty ? product.brand : 'New'} · $priceText"
@@ -1029,14 +1053,31 @@ class ProductsController extends GetxController {
       for (final userDoc in usersSnap.docs) {
         final data = userDoc.data() as Map<String, dynamic>;
         final bool isMLMActive = data['isMLMActive'] == true;
+        // ✅ "Downloaded" audience = guest users (signup nahi kiya)
+        final bool isGuestUser = data['isGuest'] == true;
 
         // ── Audience filter ──────────────────────────────────────────
         final bool passesAudience =
             audienceFilter == 'all' ||
             (audienceFilter == 'active' && isMLMActive) ||
-            (audienceFilter == 'inactive' && !isMLMActive);
+            (audienceFilter == 'inactive' && !isMLMActive) ||
+            (audienceFilter == 'downloaded' && isGuestUser);
 
         if (!passesAudience) continue;
+
+        // Platform filter — always 'all' now (no UI to change it), so this
+        // simply passes through every user regardless of devicePlatform.
+        final String userPlatform = (data['devicePlatform'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
+
+        final bool passesPlatform =
+            platformFilter == 'all' ||
+            (platformFilter == 'android' && userPlatform == 'android') ||
+            (platformFilter == 'ios' && userPlatform == 'ios');
+
+        if (!passesPlatform) continue;
 
         // ── Location filter ──────────────────────────────────────────
         final String userLocPref = (data['deliveryLocationPreference'] ?? '')
@@ -1124,6 +1165,7 @@ class ProductsController extends GetxController {
     await _sendNotification(
       product: product,
       audienceFilter: audienceFilter,
+      platformFilter: 'all',
       locationFilters: locationFilters,
       notifTitlePrefix: '🛍️ New Product: ',
       notifType: 'new_product',
@@ -1139,6 +1181,16 @@ class ProductsController extends GetxController {
 
       // ✅ SMART APPROVE LOGIC FOR PENDING VENDOR REQUESTS
       if (product.status == 'pending') {
+        // ✅ Vendor ki images (jo base64 ho sakti hain) ko pehle
+        // Cloudinary pe upload karo — agar pehle se http URL hai to
+        // uploadImagesToCloudinary khud usay skip kar deta hai.
+        // Isi missing step ki wajah se approved product ki notification
+        // mein image nahi ja rahi thi.
+        List<String> uploadedUrls = await uploadImagesToCloudinary(
+          product.images,
+        );
+        product.images = uploadedUrls;
+
         _showNotificationAudienceDialog(product, isUpdate: false);
         product.status = 'approved';
         String requestId = product.id!;

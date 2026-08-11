@@ -23,6 +23,7 @@ class ProductModel {
   String warranty;
   double productPoints;
   String? tiktokVideoUrl; // ✅ NAYA FIELD ADDED
+  int views; // ✅ NEW
 
   Map<String, double> deliveryFeesMap;
   Map<String, String> deliveryTimeMap;
@@ -53,6 +54,7 @@ class ProductModel {
     required this.stockQuantity,
     this.stockOut = 0,
     this.stockIn = 0,
+    this.views = 0, // ✅ NEW
     required this.vendorId,
     this.vendorName = 'Admin',
     required this.images,
@@ -82,6 +84,7 @@ class ProductModel {
       'modelNumber': modelNumber,
       'description': description,
       'category': category,
+      'views': views, // ✅ NEW
       'subCategory': subCategory,
       'brand': brand,
       'purchasePrice': purchasePrice,
@@ -129,6 +132,7 @@ class ProductModel {
       originalPrice: (map['originalPrice'] as num?)?.toDouble() ?? 0.0,
       stockQuantity: (map['stockQuantity'] as num?)?.toInt() ?? 0,
       stockOut: (map['stockOut'] as num?)?.toInt() ?? 0,
+      views: (map['views'] as num?)?.toInt() ?? 0, // ✅ NEW
       stockIn: (map['stockIn'] ?? map['stockQuantity'] as num?)?.toInt() ?? 0,
       vendorId: map['vendorId']?.toString() ?? '',
       vendorName: map['vendorName']?.toString() ?? 'Admin',

@@ -134,34 +134,39 @@ class _ProductsHomeScreenState extends ConsumerState<ProductsHomeScreen> {
               );
             }
 
+            // ✅ FIX: Ye reactive reads ab seedha Obx ke andar hain (LayoutBuilder
+            // se pehle). Pehle ye reads LayoutBuilder.builder ke andar thi, jo
+            // Obx ki tracking window se bahar chalta hai — isi wajah se search
+            // type karte hi list update nahi hoti thi (sirf refresh/trigger par
+            // hoti thi). Ab searchQuery / category / subCategory change hote hi
+            // Obx turant rebuild karega.
+            final products = controller.productsOnly;
+            final String search = controller.searchQuery.value.toLowerCase();
+            final String selCategory = controller.selectedCategory.value;
+            final String selSubCategory = controller.selectedSubCategory.value;
+
+            final filteredList = products.where((product) {
+              bool matchesSearch =
+                  search.isEmpty ||
+                  product.name.toLowerCase().contains(search) ||
+                  product.modelNumber.toLowerCase().contains(search) ||
+                  product.category.toLowerCase().contains(search) ||
+                  product.brand.toLowerCase().contains(search);
+
+              bool matchesCategory =
+                  selCategory == 'All' || product.category == selCategory;
+
+              bool matchesSubCategory =
+                  selSubCategory == 'All' ||
+                  product.subCategory == selSubCategory;
+
+              return matchesSearch && matchesCategory && matchesSubCategory;
+            }).toList();
+
             return LayoutBuilder(
               builder: (context, constraints) {
                 bool isDesktop = constraints.maxWidth > 1100;
                 bool isMobile = constraints.maxWidth < 800;
-
-                final products = controller.productsOnly;
-
-                final filteredList = products.where((product) {
-                  String search = controller.searchQuery.value.toLowerCase();
-
-                  bool matchesSearch =
-                      search.isEmpty ||
-                      product.name.toLowerCase().contains(search) ||
-                      product.modelNumber.toLowerCase().contains(search) ||
-                      product.category.toLowerCase().contains(search) ||
-                      product.brand.toLowerCase().contains(search);
-
-                  bool matchesCategory =
-                      controller.selectedCategory.value == 'All' ||
-                      product.category == controller.selectedCategory.value;
-
-                  bool matchesSubCategory =
-                      controller.selectedSubCategory.value == 'All' ||
-                      product.subCategory ==
-                          controller.selectedSubCategory.value;
-
-                  return matchesSearch && matchesCategory && matchesSubCategory;
-                }).toList();
 
                 return Scrollbar(
                   controller: _scrollController,

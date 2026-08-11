@@ -16,7 +16,6 @@ class CustomersRepository {
               doc.id,
             ),
           )
-          .where((c) => c.myReferralCode.isNotEmpty)
           .toList();
 
       // Ab har user ki image resolve karo (subcollection fallback ke saath)

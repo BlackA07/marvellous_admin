@@ -147,6 +147,15 @@ class CustomersScreen extends StatelessWidget {
                     selected: controller.statusFilter.value == 'inactive',
                     onTap: () => controller.applyStatusFilter('inactive'),
                   ),
+                  const SizedBox(width: 8),
+                  // ✅ NEW: Downloaded App filter chip
+                  _statusChip(
+                    label: "Downloaded",
+                    icon: Icons.download_done,
+                    color: Colors.purple.shade700,
+                    selected: controller.statusFilter.value == 'downloaded',
+                    onTap: () => controller.applyStatusFilter('downloaded'),
+                  ),
                 ],
               ),
             ),
@@ -198,7 +207,55 @@ class CustomersScreen extends StatelessWidget {
               ),
             );
           }),
-          const SizedBox(height: 10),
+          // ✅ NEW: Platform Filter (Android / iOS)
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 15),
+            child: Obx(
+              () => Row(
+                children: ['All Platforms', 'Android', 'iOS'].map((platform) {
+                  bool isSel =
+                      controller.selectedPlatformFilter.value == platform;
+                  IconData icon = platform == 'Android'
+                      ? Icons.android
+                      : platform == 'iOS'
+                      ? Icons.apple
+                      : Icons.devices;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            icon,
+                            size: 14,
+                            color: isSel ? Colors.white : Colors.teal,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            platform,
+                            style: TextStyle(
+                              color: isSel ? Colors.white : Colors.teal,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                      selected: isSel,
+                      selectedColor: Colors.teal,
+                      backgroundColor: Colors.teal.shade50,
+                      side: BorderSide(color: Colors.teal.shade200),
+                      onSelected: (_) =>
+                          controller.applyPlatformFilter(platform),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
 
           // ── Count indicator ──────────────────────────────────────────
           Obx(() {
@@ -206,17 +263,32 @@ class CustomersScreen extends StatelessWidget {
             final active = controller.filteredList
                 .where((c) => c.isMLMActive)
                 .length;
-            final inactive = total - active;
+            // ✅ CHANGED: guests "Inactive" count mein shamil nahi
+            final inactive = controller.filteredList
+                .where((c) => !c.isMLMActive && !c.isGuest)
+                .length;
+            // ✅ CHANGED: Downloaded count — ab guests bhi shamil
+            final downloaded = controller.filteredList
+                .where((c) => c.hasDeviceInfo)
+                .length;
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 15),
-              child: Row(
-                children: [
-                  _countBadge("Total: $total", Colors.blueGrey),
-                  const SizedBox(width: 8),
-                  _countBadge("Active: $active", Colors.green.shade700),
-                  const SizedBox(width: 8),
-                  _countBadge("Inactive: $inactive", Colors.red.shade700),
-                ],
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _countBadge("Total: $total", Colors.blueGrey),
+                    const SizedBox(width: 8),
+                    _countBadge("Active: $active", Colors.green.shade700),
+                    const SizedBox(width: 8),
+                    _countBadge("Inactive: $inactive", Colors.red.shade700),
+                    const SizedBox(width: 8),
+                    _countBadge(
+                      "Downloaded: $downloaded",
+                      Colors.purple.shade700,
+                    ),
+                  ],
+                ),
               ),
             );
           }),
@@ -469,6 +541,30 @@ class CustomersScreen extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
+                            // ✅ NEW: Guest badge
+                            if (customer.isGuest)
+                              Container(
+                                margin: const EdgeInsets.only(right: 6),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade200,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: Colors.grey.shade500,
+                                  ),
+                                ),
+                                child: Text(
+                                  "GUEST",
+                                  style: GoogleFonts.comicNeue(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w900,
+                                    color: Colors.grey.shade700,
+                                  ),
+                                ),
+                              ),
                             // Active/Inactive pill
                             Container(
                               padding: const EdgeInsets.symmetric(
@@ -640,22 +736,128 @@ class CustomersScreen extends StatelessWidget {
                   ),
                 ],
               ),
-
-              Divider(
-                color: isActive ? Colors.green.shade200 : Colors.red.shade200,
-                thickness: 1,
-                height: 15,
-              ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _refBadge(
-                    "My Code: ${customer.myReferralCode}",
-                    Colors.green.shade900,
+              // ✅ CHANGED: Device Info — poora rich block, sirf jab available ho
+              if (customer.hasDeviceInfo) ...[
+                const SizedBox(height: 8),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.teal.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.teal.shade100),
                   ),
-                  _refBadge("Referred By: $referredBy", Colors.orange.shade900),
-                ],
-              ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            customer.isAndroid
+                                ? Icons.android
+                                : customer.isIOS
+                                ? Icons.apple
+                                : Icons.devices_other,
+                            size: 16,
+                            color: Colors.teal.shade700,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              customer.deviceDisplayName,
+                              style: GoogleFonts.comicNeue(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.teal.shade900,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (customer.lastSeenAt != null)
+                            Text(
+                              "Seen: ${DateFormat('dd MMM, hh:mm a').format(customer.lastSeenAt!)}",
+                              style: GoogleFonts.comicNeue(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black45,
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          if (customer.osVersion.isNotEmpty)
+                            _miniTag(Icons.memory, customer.osVersion),
+                          if (customer.appVersion.isNotEmpty)
+                            _miniTag(
+                              Icons.apps,
+                              "App v${customer.appVersion}${customer.appBuildNumber.isNotEmpty ? '+${customer.appBuildNumber}' : ''}",
+                            ),
+                          if (customer.isAndroid && customer.sdkInt != null)
+                            _miniTag(Icons.code, "SDK ${customer.sdkInt}"),
+                          if (customer.isPhysicalDevice != null)
+                            _miniTag(
+                              customer.isPhysicalDevice!
+                                  ? Icons.smartphone
+                                  : Icons.developer_mode,
+                              customer.isPhysicalDevice!
+                                  ? "Real Device"
+                                  : "Emulator/Simulator",
+                            ),
+                          if (customer.ipAddress.isNotEmpty)
+                            _miniTag(Icons.wifi, customer.ipAddress),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
+              // ✅ CHANGED: Guest ke liye referral row ki jagah simple note
+              if (!customer.isGuest) ...[
+                Divider(
+                  color: isActive ? Colors.green.shade200 : Colors.red.shade200,
+                  thickness: 1,
+                  height: 15,
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _refBadge(
+                      "My Code: ${customer.myReferralCode}",
+                      Colors.green.shade900,
+                    ),
+                    _refBadge(
+                      "Referred By: $referredBy",
+                      Colors.orange.shade900,
+                    ),
+                  ],
+                ),
+              ] else ...[
+                Divider(color: Colors.grey.shade300, thickness: 1, height: 15),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      size: 14,
+                      color: Colors.grey.shade600,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      "Guest user — not signed up yet",
+                      style: GoogleFonts.comicNeue(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
@@ -678,6 +880,32 @@ class CustomersScreen extends StatelessWidget {
           fontWeight: FontWeight.w900,
           color: color,
         ),
+      ),
+    );
+  }
+  // ✅ NEW: Device info ke liye chhota tag/chip
+  Widget _miniTag(IconData icon, String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: Colors.teal.shade200),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 11, color: Colors.teal.shade700),
+          const SizedBox(width: 3),
+          Text(
+            text,
+            style: GoogleFonts.comicNeue(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: Colors.teal.shade800,
+            ),
+          ),
+        ],
       ),
     );
   }

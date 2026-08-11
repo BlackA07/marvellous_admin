@@ -14,12 +14,14 @@ import 'package:marvellous_admin/features/profile/presentation/screens/admin_pro
 import 'package:marvellous_admin/features/settings/presentation/screens/variables_screen.dart';
 import 'package:marvellous_admin/features/vendors/screens/vendors_list_screen.dart';
 
+import '../../../../core/common/widgets/app_update_settings_screen.dart';
 import '../../../../core/theme/pallete.dart';
 import '../../../customers/presentation/screens/customers_screen.dart';
 import '../../../finance/screens/admin_finance_home_screen.dart';
 import '../../../finance/screens/banks_screen.dart';
 import '../../../finance/screens/expenses_screen.dart';
 import '../../../finance/screens/taxes_screen.dart';
+import '../../../products/presentation/screens/top_trending_screen.dart';
 import '../../../reports/customers/screens/customer_report_screen.dart';
 import '../../../reports/finance/screens/finance_report_screen.dart';
 import '../../../reports/products/screens/product_report_screen.dart';
@@ -28,6 +30,7 @@ import '../../../reports/vendors/screens/vendor_report_screen.dart';
 import '../../../staff/presentation/add_staff_screen.dart';
 import '../../../staff/presentation/staff_list/staff_list_screen.dart';
 import '../../../user_settings/views/user_settings_screen.dart';
+import '../../../banners/screens/banner_list_screen.dart';
 
 // --- VENDOR IMPORTS ---
 import '../../../vendor_purchase_product/presentation/screens/admin_order_requests_screen.dart';
@@ -91,6 +94,7 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
         "Add Product",
         "Pending Requests",
         "Categories",
+        "Top Trending",
       ], // ✅ "Vendors" removed from here
     ),
     // ✅ NEW DEDICATED VENDORS MENU ADDED
@@ -118,8 +122,9 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
       title: "Customers",
       icon: Icons.people_outline,
       hasSubmenu: true,
-      subItems: ["Customers Details", "Login List"],
+      subItems: ["Customers Details", "Login List", "App Update"], // ✅ NEW
     ),
+    AdminMenuItem(title: "Banners", icon: Icons.campaign_outlined),
     AdminMenuItem(title: "Orders", icon: Icons.shopping_bag_outlined),
     AdminMenuItem(
       title: "MLM Network",
@@ -381,6 +386,8 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
                                   screen = const VariablesScreen();
                                 } else if (item.title == "Customers") {
                                   screen = const CustomersScreen();
+                                } else if (item.title == "Banners") {
+                                  screen = const BannerListScreen();
                                 }
 
                                 nav.navigateTo(
@@ -458,6 +465,8 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
                                           const PendingRequestsScreen();
                                     } else if (subItem == "Categories") {
                                       targetScreen = CategoriesScreen();
+                                    } else if (subItem == "Top Trending") {
+                                      targetScreen = const TopTrendingScreen();
                                     }
                                   }
                                   // ─── VENDORS (✅ NAYA SECTION) ───────────────
@@ -501,6 +510,10 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
                                       targetScreen = const CustomersScreen();
                                     } else if (subItem == "Login List") {
                                       targetScreen = const LoginListScreen();
+                                    } else if (subItem == "App Update") {
+                                      // ✅ NEW
+                                      targetScreen =
+                                          const AppUpdateSettingsScreen();
                                     }
                                   }
                                   // ─── MLM NETWORK ───────────────────────────
