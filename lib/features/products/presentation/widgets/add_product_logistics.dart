@@ -1,10 +1,11 @@
 import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
-import '../../../vendors/controllers/vendor_controller.dart';
-import '../../../products/models/product_model.dart';
+import 'package:image_cropper/image_cropper.dart';
 import '../../../../features/categories/controllers/category_controller.dart';
 import '../../../categories/models/category_model.dart';
 
@@ -64,7 +65,6 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
   @override
   void didUpdateWidget(covariant AddProductLogistics oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Jab bhi props change honge (e.g., Edit mode load hoga), sync ho jayega
     if (widget.initialDeliveryFees != oldWidget.initialDeliveryFees ||
         widget.initialCodFee != oldWidget.initialCodFee ||
         widget.selectedLocation != oldWidget.selectedLocation) {
@@ -83,10 +83,8 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
               : k == "Pakistan"
               ? "3-5 Days"
               : "7-15 Days");
-
       deliveryFees[k] = fee;
       deliveryTimes[k] = time;
-
       feeControllers[k] = TextEditingController(
         text: fee == 0 ? "" : fee.toInt().toString(),
       );
@@ -101,25 +99,18 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
     for (var k in keys) {
       double fee = widget.initialDeliveryFees?[k] ?? 0.0;
       String time = widget.initialDeliveryTimes?[k] ?? deliveryTimes[k] ?? "";
-
       deliveryFees[k] = fee;
       deliveryTimes[k] = time;
-
       if (feeControllers.containsKey(k)) {
         String feeText = fee == 0 ? "" : fee.toInt().toString();
-        if (feeControllers[k]!.text != feeText) {
+        if (feeControllers[k]!.text != feeText)
           feeControllers[k]!.text = feeText;
-        }
-        if (timeControllers[k]!.text != time) {
-          timeControllers[k]!.text = time;
-        }
+        if (timeControllers[k]!.text != time) timeControllers[k]!.text = time;
       }
     }
     codFee = widget.initialCodFee ?? 0.0;
     String codText = codFee == 0 ? "" : codFee.toInt().toString();
-    if (codController.text != codText) {
-      codController.text = codText;
-    }
+    if (codController.text != codText) codController.text = codText;
     setState(() {});
   }
 
@@ -138,14 +129,12 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
   void _updateParent() {
     Map<String, double> finalFees = Map.from(deliveryFees);
     Map<String, String> finalTimes = Map.from(deliveryTimes);
-
     if (widget.selectedLocation == "Karachi Only") {
       finalFees["Pakistan"] = 0;
       finalFees["Worldwide"] = 0;
     } else if (widget.selectedLocation == "Pakistan") {
       finalFees["Worldwide"] = 0;
     }
-
     widget.onDetailsChanged(finalFees, finalTimes, codFee);
   }
 
@@ -183,10 +172,14 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
                   (c) => c.name == widget.selectedCategory,
                   orElse: () => CategoryModel(name: '', subCategories: []),
                 );
+                // ✅ FIX: subCategories Map se string names extract kar rahe hain taake dropdown crash na ho
+                List<String> subCatNames = cat.subCategories
+                    .map((e) => e['name'].toString())
+                    .toList();
                 return _buildDropdown(
                   "Sub Category",
                   widget.selectedSubCategory,
-                  cat.subCategories,
+                  subCatNames,
                   widget.onSubCategoryChanged,
                   isOptional: true,
                 );
@@ -311,13 +304,12 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
     Function(String?) onChanged, {
     bool isOptional = false,
   }) {
-    List<String> safeItems = List.from(items)..sort(); // ✅ A-Z sort
+    List<String> safeItems = List.from(items)..sort();
     if (value != null && value.isNotEmpty && !safeItems.contains(value)) {
       safeItems.add(value);
       safeItems.sort();
     }
     String? safeValue = safeItems.contains(value) ? value : null;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -367,7 +359,6 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
     Function(String) onSelected,
   ) {
     final searchCtrl = TextEditingController();
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -382,7 +373,6 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
                   )
                   .toList()
                 ..sort();
-
           return Padding(
             padding: EdgeInsets.only(
               bottom: MediaQuery.of(context).viewInsets.bottom,
@@ -479,12 +469,17 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
     );
   }
 
+  // ✅ QUICK-ADD DIALOG WITH CROPPER CALL
   void _showAddDialog(BuildContext context, bool isSub) {
+    widget.categoryController.tempSelectedImageBytes.value =
+        null; // Open karne par purani image clear ho jaye
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) {
         return AddCategoryDialog(
           title: isSub ? "Sub-Category" : "Category",
+          categoryController: widget.categoryController,
           onSave: (val) async {
             if (isSub) {
               await widget.categoryController.addSubCategory(
@@ -530,12 +525,18 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
   }
 }
 
+// ✅ UPDATED CUSTOM DIALOG COMPONENT: Handles Name Input + Circle Image + Loader
 class AddCategoryDialog extends StatelessWidget {
   final String title;
   final Function(String) onSave;
+  final CategoryController categoryController;
 
-  AddCategoryDialog({Key? key, required this.title, required this.onSave})
-    : super(key: key);
+  AddCategoryDialog({
+    Key? key,
+    required this.title,
+    required this.onSave,
+    required this.categoryController,
+  }) : super(key: key);
 
   final TextEditingController _controller = TextEditingController();
 
@@ -546,74 +547,110 @@ class AddCategoryDialog extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(20.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              "Add New $title",
-              style: GoogleFonts.orbitron(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: _controller,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: "Enter Name",
-                hintStyle: const TextStyle(color: Colors.white24),
-                filled: true,
-                fillColor: Colors.black12,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide.none,
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: Colors.cyanAccent),
+        child: Obx(() {
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text(
+                "Add New $title",
+                style: GoogleFonts.orbitron(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-            ),
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: () => Get.back(),
-                  child: const Text(
-                    "Cancel",
-                    style: TextStyle(color: Colors.white54),
+              const SizedBox(height: 20),
+
+              // ✅ CIRCULAR IMAGE AREA WITH CROP logic integration
+              // ✅ CIRCULAR IMAGE AREA WITH CROP logic integration
+              GestureDetector(
+                onTap: () => categoryController.pickAndCropImage(),
+                child: CircleAvatar(
+                  radius: 45,
+                  backgroundColor: Colors.white12,
+                  backgroundImage: categoryController.tempSelectedImageBytes.value != null 
+                      ? MemoryImage(categoryController.tempSelectedImageBytes.value!) as ImageProvider
+                      : null,
+                  child: categoryController.tempSelectedImageBytes.value == null
+                      ? const Icon(Icons.add_a_photo, size: 30, color: Colors.white54)
+                      : null,
+                ),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                "Tap to select image",
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+              const SizedBox(height: 20),
+
+              TextField(
+                controller: _controller,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: "Enter Name",
+                  hintStyle: const TextStyle(color: Colors.white24),
+                  filled: true,
+                  fillColor: Colors.black12,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Colors.cyanAccent),
                   ),
                 ),
-                const SizedBox(width: 10),
-                ElevatedButton(
-                  onPressed: () {
-                    if (_controller.text.isNotEmpty) {
-                      onSave(_controller.text);
-                      Get.back();
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.cyanAccent,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  child: const Text(
-                    "Add",
-                    style: TextStyle(
-                      color: Colors.black,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+              ),
+              const SizedBox(height: 20),
+
+              // Uploading state handles UI actions locks safely
+              if (categoryController.isUploading.value) ...[
+                const CircularProgressIndicator(color: Colors.cyanAccent),
+                const SizedBox(height: 10),
+                const Text(
+                  "Uploading Image to Cloudinary...",
+                  style: TextStyle(color: Colors.cyanAccent, fontSize: 12),
                 ),
-              ],
-            ),
-          ],
-        ),
+              ] else
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () {
+                        categoryController.tempSelectedImageBytes.value = null;
+                        Get.back();
+                      },
+                      child: const Text(
+                        "Cancel",
+                        style: TextStyle(color: Colors.white54),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    ElevatedButton(
+                      onPressed: () {
+                        if (_controller.text.isNotEmpty)
+                          onSave(_controller.text);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.cyanAccent,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: const Text(
+                        "Add",
+                        style: TextStyle(
+                          color: Colors.black,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          );
+        }),
       ),
     );
   }

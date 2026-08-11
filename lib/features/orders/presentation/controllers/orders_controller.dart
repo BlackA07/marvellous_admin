@@ -1059,7 +1059,10 @@ class OrdersController extends GetxController {
           _db
               .collection('products')
               .doc(pid)
-              .update({'stockOut': FieldValue.increment(qty)})
+              .update({
+                'stockOut': FieldValue.increment(qty), // Total Out
+                'stockQuantity': FieldValue.increment(-qty), // Left ghatega
+              })
               .catchError((e) {});
         }
       }

@@ -21,6 +21,7 @@
     }
   },
   "hosting": {
+    "site": "marvellous-admin", 
     "public": "build/web",
     "ignore": [
       "firebase.json",

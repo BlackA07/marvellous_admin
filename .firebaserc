@@ -1,5 +1,15 @@
 {
   "projects": {
     "default": "marvellous-e-commerce"
-  }
+  },
+  "targets": {
+    "marvellous-e-commerce": {
+      "hosting": {
+        "admin": [
+          "marvellous-admin"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

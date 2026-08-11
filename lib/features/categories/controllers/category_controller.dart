@@ -1,21 +1,31 @@
+import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // ✅ Imported
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'dart:typed_data';
 import 'package:get/get.dart';
-import '../models/category_model.dart'; // Yahan aapka original model import ho raha hai
+import 'package:image_picker/image_picker.dart';
+import 'package:image_cropper/image_cropper.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:cloudinary_public/cloudinary_public.dart';
+import '../models/category_model.dart';
 
 class CategoryController extends GetxController {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  // ✅ Cloudinary Setup
+  final cloudinary = CloudinaryPublic('dzluvpc34', 'marvellous', cache: false);
+
   // Observables
   var categories = <CategoryModel>[].obs;
   var isLoading = false.obs;
-  var selectedCategory = Rxn<CategoryModel>(); // Nullable initially
+  var isUploading = false.obs; // Image upload loading state
+  var selectedCategory = Rxn<CategoryModel>();
+  var tempSelectedImageBytes = Rxn<Uint8List>();
 
   @override
   void onInit() {
     super.onInit();
-    // ✅ FIX: Only fetch if user is logged in
     if (FirebaseAuth.instance.currentUser != null) {
       fetchCategories();
     }
@@ -29,13 +39,11 @@ class CategoryController extends GetxController {
           .map((doc) => CategoryModel.fromMap(doc.data(), doc.id))
           .toList();
 
-      // If a category is selected, keep it updated in real-time
       if (selectedCategory.value != null) {
         var updatedCat = categories.firstWhere(
           (c) => c.id == selectedCategory.value!.id,
           orElse: () => selectedCategory.value!,
         );
-        // Only update if it still exists in the list (wasn't deleted)
         if (categories.any((c) => c.id == updatedCat.id)) {
           selectedCategory.value = updatedCat;
         } else {
@@ -46,13 +54,85 @@ class CategoryController extends GetxController {
     });
   }
 
-  // --- ADD METHODS ---
+  // --- 1. PICK AND CROP (Web & Mobile Safe) ---
+  Future<void> pickAndCropImage() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
 
-  // Add Main Category
+    if (pickedFile != null) {
+      if (kIsWeb) {
+        tempSelectedImageBytes.value = await pickedFile.readAsBytes();
+        return;
+      }
+
+      CroppedFile? croppedFile = await ImageCropper().cropImage(
+        sourcePath: pickedFile.path,
+        aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+        uiSettings: [
+          AndroidUiSettings(
+            toolbarTitle: 'Crop Image',
+            toolbarColor: const Color(0xFF2A2D3E),
+            toolbarWidgetColor: Colors.white,
+            initAspectRatio: CropAspectRatioPreset.square,
+            lockAspectRatio: true,
+            cropStyle: CropStyle.circle,
+          ),
+          IOSUiSettings(
+            title: 'Crop Image',
+            aspectRatioLockEnabled: true,
+            cropStyle: CropStyle.circle,
+          ),
+        ],
+      );
+
+      if (croppedFile != null) {
+        tempSelectedImageBytes.value = await croppedFile.readAsBytes();
+      }
+    }
+  }
+
+  // --- 2. UPLOAD TO CLOUDINARY ---
+  Future<String?> uploadImageToCloudinary() async {
+    try {
+      if (tempSelectedImageBytes.value == null) return null;
+
+      final byteData = ByteData.view(tempSelectedImageBytes.value!.buffer);
+      CloudinaryResponse response = await cloudinary.uploadFile(
+        CloudinaryFile.fromByteData(
+          byteData,
+          identifier: 'cat_${DateTime.now().millisecondsSinceEpoch}',
+          folder: 'Categories',
+        ),
+      );
+      return response.secureUrl;
+    } catch (e) {
+      Get.snackbar(
+        "Upload Error",
+        "Image upload failed: $e",
+        backgroundColor: Colors.red,
+      );
+      return null;
+    }
+  }
+
+  // --- 3. ADD CATEGORY ---
   Future<void> addCategory(String name) async {
     try {
-      CategoryModel newCat = CategoryModel(name: name, subCategories: []);
+      isUploading.value = true;
+      String imageUrl = '';
+
+      if (tempSelectedImageBytes.value != null) {
+        imageUrl = await uploadImageToCloudinary() ?? '';
+      }
+
+      CategoryModel newCat = CategoryModel(
+        name: name,
+        imageUrl: imageUrl,
+        subCategories: [],
+      );
       await _firestore.collection('categories').add(newCat.toMap());
+
+      Get.back();
       Get.snackbar(
         "Success",
         "Category Added Successfully",
@@ -66,15 +146,25 @@ class CategoryController extends GetxController {
         backgroundColor: Colors.red,
         colorText: Colors.white,
       );
+    } finally {
+      isUploading.value = false;
+      tempSelectedImageBytes.value = null; // Clear bytes
     }
   }
 
-  // ✅ FIX: Now takes parentCategoryName so it knows exactly where to save it
+  // --- 4. ADD SUB-CATEGORY ---
   Future<void> addSubCategory(
     String parentCategoryName,
     String subCatName,
   ) async {
     try {
+      isUploading.value = true;
+      String imageUrl = '';
+
+      if (tempSelectedImageBytes.value != null) {
+        imageUrl = await uploadImageToCloudinary() ?? '';
+      }
+
       var query = await _firestore
           .collection('categories')
           .where('name', isEqualTo: parentCategoryName)
@@ -82,58 +172,49 @@ class CategoryController extends GetxController {
 
       if (query.docs.isNotEmpty) {
         String docId = query.docs.first.id;
-
         await _firestore.collection('categories').doc(docId).update({
-          'subCategories': FieldValue.arrayUnion([subCatName]),
+          'subCategories': FieldValue.arrayUnion([
+            {'name': subCatName, 'imageUrl': imageUrl},
+          ]),
         });
 
+        Get.back();
         Get.snackbar(
           "Success",
           "Sub-Category Added",
           backgroundColor: Colors.green,
           colorText: Colors.white,
         );
-      } else {
-        Get.snackbar(
-          "Error",
-          "Parent category not found.",
-          backgroundColor: Colors.red,
-        );
       }
     } catch (e) {
       Get.snackbar("Error", e.toString(), backgroundColor: Colors.red);
+    } finally {
+      isUploading.value = false;
+      tempSelectedImageBytes.value = null;
     }
   }
 
-  // --- EDIT METHODS ---
-
-  // Edit Main Category Name with Undo
+  // --- 5. UPDATE CATEGORY ---
   Future<void> updateCategory(CategoryModel cat, String newName) async {
     try {
-      String oldName = cat.name;
+      isUploading.value = true;
+      String updatedImageUrl = cat.imageUrl ?? '';
+
+      if (tempSelectedImageBytes.value != null) {
+        updatedImageUrl = await uploadImageToCloudinary() ?? updatedImageUrl;
+      }
+
       await _firestore.collection('categories').doc(cat.id).update({
         'name': newName,
+        'imageUrl': updatedImageUrl,
       });
 
+      Get.back();
       Get.snackbar(
         "Updated",
-        "Category renamed to $newName",
+        "Category Updated Successfully",
         backgroundColor: Colors.blueAccent,
         colorText: Colors.white,
-        duration: const Duration(seconds: 4),
-        mainButton: TextButton(
-          onPressed: () async {
-            // Undo: Revert to old name
-            await _firestore.collection('categories').doc(cat.id).update({
-              'name': oldName,
-            });
-            Get.back();
-          },
-          child: const Text(
-            "UNDO",
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-        ),
       );
     } catch (e) {
       Get.snackbar(
@@ -141,47 +222,52 @@ class CategoryController extends GetxController {
         "Could not update category",
         backgroundColor: Colors.red,
       );
+    } finally {
+      isUploading.value = false;
+      tempSelectedImageBytes.value = null;
     }
   }
 
-  // Edit Sub-Category Name with Undo
+  // --- 6. UPDATE SUB-CATEGORY (Duplicate Fix) ---
   Future<void> updateSubCategory(
     CategoryModel parentCat,
-    String oldSubName,
+    Map<String, dynamic> oldSubCat,
     String newSubName,
   ) async {
     try {
-      // Step 1: Remove old name
-      await _firestore.collection('categories').doc(parentCat.id).update({
-        'subCategories': FieldValue.arrayRemove([oldSubName]),
-      });
-      // Step 2: Add new name
-      await _firestore.collection('categories').doc(parentCat.id).update({
-        'subCategories': FieldValue.arrayUnion([newSubName]),
-      });
+      isUploading.value = true;
+      String updatedImageUrl = oldSubCat['imageUrl'] ?? '';
 
+      if (tempSelectedImageBytes.value != null) {
+        updatedImageUrl = await uploadImageToCloudinary() ?? updatedImageUrl;
+      }
+
+      Map<String, dynamic> newSubCat = {
+        'name': newSubName,
+        'imageUrl': updatedImageUrl,
+      };
+
+      // ✅ FIX: List fetch karke usi index pe replace kar rahe hain
+      List<Map<String, dynamic>> updatedList = List.from(
+        parentCat.subCategories,
+      );
+      int index = updatedList.indexWhere(
+        (sub) => sub['name'] == oldSubCat['name'],
+      );
+
+      if (index != -1) {
+        updatedList[index] = newSubCat; // Overwrite purani wali
+        await _firestore.collection('categories').doc(parentCat.id).update({
+          'subCategories': updatedList,
+        });
+      }
+
+      Get.back();
       Get.snackbar(
         "Updated",
-        "Sub-category renamed",
+        "Sub-category Updated",
         backgroundColor: Colors.blueAccent,
         colorText: Colors.white,
-        duration: const Duration(seconds: 4),
-        mainButton: TextButton(
-          onPressed: () async {
-            // Undo: Remove new, Add old back
-            await _firestore.collection('categories').doc(parentCat.id).update({
-              'subCategories': FieldValue.arrayRemove([newSubName]),
-            });
-            await _firestore.collection('categories').doc(parentCat.id).update({
-              'subCategories': FieldValue.arrayUnion([oldSubName]),
-            });
-            Get.back();
-          },
-          child: const Text(
-            "UNDO",
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-        ),
       );
     } catch (e) {
       Get.snackbar(
@@ -189,80 +275,41 @@ class CategoryController extends GetxController {
         "Could not update sub-category",
         backgroundColor: Colors.red,
       );
+    } finally {
+      isUploading.value = false;
+      tempSelectedImageBytes.value = null;
     }
   }
 
   // --- DELETE METHODS ---
-
-  // Delete Main Category with Undo
   Future<void> deleteCategory(CategoryModel cat) async {
     try {
-      // Delete
       await _firestore.collection('categories').doc(cat.id).delete();
-
-      // If selected was deleted, deselect it
       if (selectedCategory.value?.id == cat.id) {
         selectedCategory.value = null;
       }
-
-      // Undo Snackbar
       Get.snackbar(
         "Deleted",
         "${cat.name} removed",
         backgroundColor: Colors.orangeAccent,
-        colorText: Colors.black,
-        duration: const Duration(seconds: 4),
-        mainButton: TextButton(
-          onPressed: () async {
-            // Restore logic
-            await _firestore
-                .collection('categories')
-                .doc(cat.id)
-                .set(cat.toMap());
-            Get.back(); // Close snackbar
-          },
-          child: const Text(
-            "UNDO",
-            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
-          ),
-        ),
       );
     } catch (e) {
       Get.snackbar("Error", "Could not delete", backgroundColor: Colors.red);
     }
   }
 
-  // Delete Sub-Category with Undo
   Future<void> deleteSubCategory(
     CategoryModel parentCat,
-    String subCatName,
+    Map<String, dynamic> subCat,
   ) async {
     try {
-      // Remove from array
       await _firestore.collection('categories').doc(parentCat.id).update({
-        'subCategories': FieldValue.arrayRemove([subCatName]),
+        'subCategories': FieldValue.arrayRemove([subCat]),
       });
-
-      // Undo Snackbar
       Get.snackbar(
         "Deleted",
-        "$subCatName removed",
+        "${subCat['name']} removed",
         backgroundColor: Colors.orangeAccent,
-        colorText: Colors.black,
-        duration: const Duration(seconds: 4),
-        mainButton: TextButton(
-          onPressed: () async {
-            // Restore logic (Add back to array)
-            await _firestore.collection('categories').doc(parentCat.id).update({
-              'subCategories': FieldValue.arrayUnion([subCatName]),
-            });
-            Get.back();
-          },
-          child: const Text(
-            "UNDO",
-            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
-          ),
-        ),
       );
     } catch (e) {
       Get.snackbar(
@@ -273,7 +320,6 @@ class CategoryController extends GetxController {
     }
   }
 
-  // Select a category to view sub-categories
   void selectCategory(CategoryModel cat) {
     selectedCategory.value = cat;
   }

@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../controllers/category_controller.dart';
 import '../models/category_model.dart';
+import 'dart:io';
 
 class CategoriesScreen extends StatelessWidget {
   CategoriesScreen({Key? key}) : super(key: key);
@@ -13,16 +14,13 @@ class CategoriesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.transparent, // Assuming nested inside main layout
+      backgroundColor: Colors.transparent,
       body: Padding(
-        padding: const EdgeInsets.all(10.0), // Reduced padding for mobile
+        padding: const EdgeInsets.all(10.0),
         child: LayoutBuilder(
           builder: (context, constraints) {
-            // Check screen width to decide layout
             bool isMobile = constraints.maxWidth < 800;
-
             if (isMobile) {
-              // Mobile Layout: Column (Top: Main, Bottom: Sub)
               return Column(
                 children: [
                   Expanded(
@@ -34,7 +32,6 @@ class CategoriesScreen extends StatelessWidget {
                 ],
               );
             } else {
-              // Desktop/Tablet Layout: Row (Left: Main, Right: Sub)
               return Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -72,14 +69,14 @@ class CategoriesScreen extends StatelessWidget {
                   "All Categories",
                   style: GoogleFonts.orbitron(
                     color: Colors.white,
-                    fontSize: 16, // Slightly smaller for better fit
+                    fontSize: 16,
                     fontWeight: FontWeight.bold,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
               IconButton(
-                onPressed: () => _showAddDialog(context, isMain: true),
+                onPressed: () => _showFormDialog(context, isMain: true),
                 icon: const Icon(Icons.add_circle, color: Colors.cyanAccent),
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
@@ -125,7 +122,26 @@ class CategoriesScreen extends StatelessWidget {
                           ),
                           child: Row(
                             children: [
-                              // Category Name (Flexible to wrap)
+                              // ✅ Circular Image Display
+                              CircleAvatar(
+                                radius: 18,
+                                backgroundColor: Colors.white12,
+                                backgroundImage:
+                                    (cat.imageUrl != null &&
+                                        cat.imageUrl!.isNotEmpty)
+                                    ? NetworkImage(cat.imageUrl!)
+                                    : null,
+                                child:
+                                    (cat.imageUrl == null ||
+                                        cat.imageUrl!.isEmpty)
+                                    ? const Icon(
+                                        Icons.image,
+                                        size: 18,
+                                        color: Colors.white54,
+                                      )
+                                    : null,
+                              ),
+                              const SizedBox(width: 10),
                               Expanded(
                                 child: Text(
                                   cat.name,
@@ -136,42 +152,32 @@ class CategoriesScreen extends StatelessWidget {
                                     fontSize: 14,
                                     fontWeight: FontWeight.w500,
                                   ),
-                                  softWrap: true, // Allow wrapping
+                                  softWrap: true,
                                 ),
                               ),
-                              // Edit Button
                               IconButton(
                                 icon: const Icon(
                                   Icons.edit,
                                   color: Colors.orangeAccent,
                                   size: 18,
                                 ),
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(),
-                                onPressed: () {
-                                  _showEditDialog(context, category: cat);
-                                },
+                                onPressed: () => _showFormDialog(
+                                  context,
+                                  isMain: true,
+                                  category: cat,
+                                ),
                               ),
                               const SizedBox(width: 8),
-                              // Delete Button
                               IconButton(
                                 icon: const Icon(
                                   Icons.delete,
                                   color: Colors.redAccent,
                                   size: 18,
                                 ),
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(),
                                 onPressed: () {
-                                  // CONFIRMATION DIALOG
                                   Get.defaultDialog(
                                     title: "Delete Category?",
-                                    titleStyle: GoogleFonts.orbitron(
-                                      color: Colors.white,
-                                      fontSize: 16,
-                                    ),
                                     backgroundColor: const Color(0xFF2A2D3E),
-                                    contentPadding: const EdgeInsets.all(20),
                                     middleText:
                                         "Are you sure you want to delete '${cat.name}'?",
                                     middleTextStyle: const TextStyle(
@@ -181,9 +187,8 @@ class CategoriesScreen extends StatelessWidget {
                                     textCancel: "Cancel",
                                     confirmTextColor: Colors.white,
                                     buttonColor: Colors.redAccent,
-                                    cancelTextColor: Colors.cyanAccent,
                                     onConfirm: () {
-                                      Get.back(); // Close dialog
+                                      Get.back();
                                       controller.deleteCategory(cat);
                                     },
                                   );
@@ -207,7 +212,6 @@ class CategoriesScreen extends StatelessWidget {
   Widget _buildSubCategoriesSection(BuildContext context) {
     return Obx(() {
       final selectedCat = controller.selectedCategory.value;
-
       if (selectedCat == null) {
         return Container(
           decoration: BoxDecoration(
@@ -216,22 +220,14 @@ class CategoriesScreen extends StatelessWidget {
             border: Border.all(color: Colors.white10),
           ),
           child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Text(
-                "Select a Category to view Sub-Categories",
-                textAlign: TextAlign.center,
-                style: GoogleFonts.comicNeue(
-                  color: Colors.white54,
-                  fontSize: 14,
-                ),
-              ),
+            child: Text(
+              "Select a Category to view Sub-Categories",
+              style: GoogleFonts.comicNeue(color: Colors.white54, fontSize: 14),
             ),
           ),
         );
       }
 
-      // We need to find the latest version of the selected category from the list to see real-time subcat updates
       final liveCat = controller.categories.firstWhere(
         (c) => c.id == selectedCat.id,
         orElse: () => selectedCat,
@@ -264,7 +260,7 @@ class CategoriesScreen extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      Text(
+                      const Text(
                         "Sub-Categories",
                         style: TextStyle(color: Colors.white54, fontSize: 12),
                       ),
@@ -272,10 +268,8 @@ class CategoriesScreen extends StatelessWidget {
                   ),
                 ),
                 IconButton(
-                  onPressed: () => _showAddDialog(context, isMain: false),
+                  onPressed: () => _showFormDialog(context, isMain: false),
                   icon: const Icon(Icons.add_circle, color: Colors.greenAccent),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
                 ),
               ],
             ),
@@ -285,14 +279,16 @@ class CategoriesScreen extends StatelessWidget {
                   ? const Center(
                       child: Text(
                         "No Sub-Categories added yet",
-                        textAlign: TextAlign.center,
                         style: TextStyle(color: Colors.white54, fontSize: 13),
                       ),
                     )
                   : ListView.builder(
                       itemCount: liveCat.subCategories.length,
                       itemBuilder: (context, index) {
-                        final subName = liveCat.subCategories[index];
+                        final subCatMap = liveCat.subCategories[index];
+                        final subName = subCatMap['name'];
+                        final subImageUrl = subCatMap['imageUrl'];
+
                         return Card(
                           margin: const EdgeInsets.symmetric(vertical: 5),
                           color: Colors.white.withOpacity(0.05),
@@ -303,10 +299,24 @@ class CategoriesScreen extends StatelessWidget {
                             ),
                             child: Row(
                               children: [
-                                const Icon(
-                                  Icons.subdirectory_arrow_right,
-                                  color: Colors.white54,
-                                  size: 16,
+                                // ✅ Circular Image for Sub-category
+                                CircleAvatar(
+                                  radius: 16,
+                                  backgroundColor: Colors.white12,
+                                  backgroundImage:
+                                      (subImageUrl != null &&
+                                          subImageUrl.isNotEmpty)
+                                      ? NetworkImage(subImageUrl)
+                                      : null,
+                                  child:
+                                      (subImageUrl == null ||
+                                          subImageUrl.isEmpty)
+                                      ? const Icon(
+                                          Icons.subdirectory_arrow_right,
+                                          size: 16,
+                                          color: Colors.white54,
+                                        )
+                                      : null,
                                 ),
                                 const SizedBox(width: 10),
                                 Expanded(
@@ -319,43 +329,30 @@ class CategoriesScreen extends StatelessWidget {
                                     softWrap: true,
                                   ),
                                 ),
-                                // Edit Button
                                 IconButton(
                                   icon: const Icon(
                                     Icons.edit,
                                     color: Colors.orangeAccent,
                                     size: 18,
                                   ),
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(),
-                                  onPressed: () {
-                                    _showEditDialog(
-                                      context,
-                                      subCategoryName: subName,
-                                      parentCategory: liveCat,
-                                    );
-                                  },
+                                  onPressed: () => _showFormDialog(
+                                    context,
+                                    isMain: false,
+                                    subCategoryData: subCatMap,
+                                    parentCategory: liveCat,
+                                  ),
                                 ),
                                 const SizedBox(width: 8),
-                                // Delete Button
                                 IconButton(
                                   icon: const Icon(
                                     Icons.delete,
                                     color: Colors.redAccent,
                                     size: 18,
                                   ),
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(),
                                   onPressed: () {
-                                    // SUB CATEGORY CONFIRMATION
                                     Get.defaultDialog(
                                       title: "Delete Sub-Category?",
-                                      titleStyle: GoogleFonts.orbitron(
-                                        color: Colors.white,
-                                        fontSize: 16,
-                                      ),
                                       backgroundColor: const Color(0xFF2A2D3E),
-                                      contentPadding: const EdgeInsets.all(20),
                                       middleText:
                                           "Are you sure you want to delete '$subName'?",
                                       middleTextStyle: const TextStyle(
@@ -365,12 +362,11 @@ class CategoriesScreen extends StatelessWidget {
                                       textCancel: "Cancel",
                                       confirmTextColor: Colors.white,
                                       buttonColor: Colors.redAccent,
-                                      cancelTextColor: Colors.cyanAccent,
                                       onConfirm: () {
                                         Get.back();
                                         controller.deleteSubCategory(
                                           liveCat,
-                                          subName,
+                                          subCatMap,
                                         );
                                       },
                                     );
@@ -389,185 +385,222 @@ class CategoriesScreen extends StatelessWidget {
     });
   }
 
-  // --- ADD DIALOG ---
-  void _showAddDialog(BuildContext context, {required bool isMain}) {
-    _nameController.clear();
-    Get.defaultDialog(
-      title: isMain ? "Add Category" : "Add Sub-Category",
-      titleStyle: GoogleFonts.orbitron(color: Colors.white, fontSize: 18),
-      backgroundColor: const Color(0xFF2A2D3E),
-      contentPadding: const EdgeInsets.all(20),
-      content: Column(
-        children: [
-          TextField(
-            controller: _nameController,
-            autofocus: true,
-            style: const TextStyle(color: Colors.white),
-            decoration: InputDecoration(
-              hintText: isMain
-                  ? "Enter Category Name"
-                  : "Enter Sub-Category Name",
-              hintStyle: const TextStyle(color: Colors.white54),
-              filled: true,
-              fillColor: Colors.black26,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide.none,
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 15,
-                vertical: 15,
-              ),
-            ),
-            onSubmitted: (value) {
-              if (value.isNotEmpty) {
-                if (isMain) {
-                  controller.addCategory(value);
-                  Get.back();
-                } else {
-                  // ✅ FIX: Passed parent category name as first argument
-                  if (controller.selectedCategory.value != null) {
-                    controller.addSubCategory(
-                      controller.selectedCategory.value!.name,
-                      value,
-                    );
-                    Get.back();
-                  }
-                }
-              }
-            },
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.cyanAccent,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              onPressed: () {
-                if (_nameController.text.isNotEmpty) {
-                  if (isMain) {
-                    controller.addCategory(_nameController.text);
-                    Get.back();
-                  } else {
-                    // ✅ FIX: Passed parent category name as first argument
-                    if (controller.selectedCategory.value != null) {
-                      controller.addSubCategory(
-                        controller.selectedCategory.value!.name,
-                        _nameController.text,
-                      );
-                      Get.back();
-                    }
-                  }
-                }
-              },
-              child: const Text(
-                "Save",
-                style: TextStyle(
-                  color: Colors.black,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // --- EDIT DIALOG (NEW FEATURE) ---
-  void _showEditDialog(
+  // --- MERGED ADD/EDIT DIALOG ---
+  void _showFormDialog(
     BuildContext context, {
+    required bool isMain,
     CategoryModel? category,
-    String? subCategoryName,
+    Map<String, dynamic>? subCategoryData,
     CategoryModel? parentCategory,
   }) {
-    bool isMain = category != null;
-    _nameController.text = isMain ? category.name : subCategoryName ?? "";
+    bool isEditing = category != null || subCategoryData != null;
+    _nameController.text = isEditing
+        ? (isMain ? category!.name : subCategoryData!['name'])
+        : "";
+
+    // Clear temporary image state before opening dialog
+    controller.tempSelectedImageBytes.value = null;
+
+    String existingImageUrl = isEditing
+        ? (isMain
+              ? category?.imageUrl ?? ''
+              : subCategoryData?['imageUrl'] ?? '')
+        : "";
 
     Get.defaultDialog(
-      title: isMain ? "Edit Category" : "Edit Sub-Category",
+      title: isMain
+          ? (isEditing ? "Edit Category" : "Add Category")
+          : (isEditing ? "Edit Sub-Category" : "Add Sub-Category"),
       titleStyle: GoogleFonts.orbitron(color: Colors.white, fontSize: 18),
       backgroundColor: const Color(0xFF2A2D3E),
       contentPadding: const EdgeInsets.all(20),
-      content: Column(
-        children: [
-          TextField(
-            controller: _nameController,
-            autofocus: true,
-            style: const TextStyle(color: Colors.white),
-            decoration: InputDecoration(
-              hintText: "Enter New Name",
-              hintStyle: const TextStyle(color: Colors.white54),
-              filled: true,
-              fillColor: Colors.black26,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide.none,
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 15,
-                vertical: 15,
+      barrierDismissible: false, // Prevent dismissing while uploading
+      content: Obx(() {
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Column(
+              children: [
+                // ✅ Image Picker Circle
+                // ✅ Image Picker Circle (Updated for MemoryImage safely)
+                GestureDetector(
+                  onTap: () => controller.pickAndCropImage(),
+                  child: CircleAvatar(
+                    radius: 45,
+                    backgroundColor: Colors.white12,
+                    backgroundImage:
+                        controller.tempSelectedImageBytes.value != null
+                        ? MemoryImage(controller.tempSelectedImageBytes.value!)
+                              as ImageProvider
+                        : (existingImageUrl.isNotEmpty
+                              ? NetworkImage(existingImageUrl)
+                              : null),
+                    child:
+                        (controller.tempSelectedImageBytes.value == null &&
+                            existingImageUrl.isEmpty)
+                        ? const Icon(
+                            Icons.add_a_photo,
+                            size: 30,
+                            color: Colors.white54,
+                          )
+                        : null,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  "Tap to select image",
+                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+                const SizedBox(height: 20),
+
+                // Name Input
+                TextField(
+                  controller: _nameController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: isMain ? "Category Name" : "Sub-Category Name",
+                    hintStyle: const TextStyle(color: Colors.white54),
+                    filled: true,
+                    fillColor: Colors.black26,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 15,
+                      vertical: 15,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // ✅ NEW: Cancel + Save/Update Buttons side by side
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Colors.white24),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        onPressed: controller.isUploading.value
+                            ? null
+                            : () {
+                                controller.tempSelectedImageBytes.value = null;
+                                Get.back();
+                              },
+                        child: const Text(
+                          "Cancel",
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: isEditing
+                              ? Colors.orangeAccent
+                              : Colors.cyanAccent,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        onPressed: controller.isUploading.value
+                            ? null
+                            : () async {
+                                if (_nameController.text.isNotEmpty) {
+                                  if (isMain) {
+                                    if (isEditing) {
+                                      await controller.updateCategory(
+                                        category!,
+                                        _nameController.text,
+                                      );
+                                    } else {
+                                      await controller.addCategory(
+                                        _nameController.text,
+                                      );
+                                    }
+                                  } else {
+                                    if (isEditing) {
+                                      await controller.updateSubCategory(
+                                        parentCategory!,
+                                        subCategoryData!,
+                                        _nameController.text,
+                                      );
+                                    } else {
+                                      if (controller.selectedCategory.value !=
+                                          null) {
+                                        await controller.addSubCategory(
+                                          controller
+                                              .selectedCategory
+                                              .value!
+                                              .name,
+                                          _nameController.text,
+                                        );
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                        child: controller.isUploading.value
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  color: Colors.black,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Text(
+                                isEditing ? "Update" : "Save",
+                                style: const TextStyle(
+                                  color: Colors.black,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (controller.isUploading.value) ...[
+                  const SizedBox(height: 10),
+                  const Text(
+                    "Uploading Image...",
+                    style: TextStyle(color: Colors.cyanAccent, fontSize: 12),
+                  ),
+                ],
+              ],
+            ),
+
+            // ✅ NEW: Top-right X close icon — closes dialog directly,
+            // disabled while an image is uploading so it can't be
+            // interrupted mid-upload.
+            Positioned(
+              top: -12,
+              right: -12,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white70, size: 22),
+                onPressed: controller.isUploading.value
+                    ? null
+                    : () {
+                        controller.tempSelectedImageBytes.value = null;
+                        Get.back();
+                      },
               ),
             ),
-            onSubmitted: (value) {
-              if (value.isNotEmpty) {
-                if (isMain) {
-                  controller.updateCategory(category, value);
-                } else if (parentCategory != null && subCategoryName != null) {
-                  controller.updateSubCategory(
-                    parentCategory,
-                    subCategoryName,
-                    value,
-                  );
-                }
-                Get.back();
-              }
-            },
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orangeAccent,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              onPressed: () {
-                if (_nameController.text.isNotEmpty) {
-                  if (isMain) {
-                    controller.updateCategory(category, _nameController.text);
-                  } else if (parentCategory != null &&
-                      subCategoryName != null) {
-                    controller.updateSubCategory(
-                      parentCategory,
-                      subCategoryName,
-                      _nameController.text,
-                    );
-                  }
-                  Get.back();
-                }
-              },
-              child: const Text(
-                "Update",
-                style: TextStyle(
-                  color: Colors.black,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
+          ],
+        );
+      }),
     );
   }
 }

@@ -20,6 +20,8 @@ class CustomersController extends GetxController {
   // ✅ NEW: Location Filter Variables
   var selectedLocationFilter = 'All Locations'.obs;
   var availableLocations = <String>['All Locations'].obs;
+  // ✅ NEW: Platform Filter Variable
+  var selectedPlatformFilter = 'All Platforms'.obs;
 
   var isSelectionMode = false.obs;
   var selectedUids = <String>{}.obs;
@@ -119,18 +121,28 @@ class CustomersController extends GetxController {
     _applyAll();
   }
 
+  // ✅ NEW: Apply Platform Filter
+  void applyPlatformFilter(String platform) {
+    selectedPlatformFilter.value = platform;
+    _applyAll();
+  }
+
   // Returns list after applying BOTH status and location filters
   List<CustomerModel> _baseFilteredList() {
     List<CustomerModel> list = List.from(customersList);
 
-    // Apply Status
     if (statusFilter.value == 'active') {
       list = list.where((c) => c.isMLMActive).toList();
     } else if (statusFilter.value == 'inactive') {
-      list = list.where((c) => !c.isMLMActive).toList();
+      // ✅ CHANGED: guests ko "Inactive (No Sale)" mein mat gino
+      list = list.where((c) => !c.isMLMActive && !c.isGuest).toList();
+    } else if (statusFilter.value == 'downloaded') {
+      // ✅ CHANGED: Guest bhi "Downloaded" mein ginay jayenge — kyunki
+      // usne bhi app install/open ki hai, sirf signup nahi kiya
+      list = list.where((c) => c.hasDeviceInfo).toList();
     }
 
-    // ✅ Apply Location
+    // Apply Location
     if (selectedLocationFilter.value != 'All Locations') {
       String filterLower = selectedLocationFilter.value.toLowerCase();
       list = list
@@ -138,6 +150,17 @@ class CustomersController extends GetxController {
             (c) =>
                 c.city.toLowerCase() == filterLower ||
                 c.country.toLowerCase() == filterLower,
+          )
+          .toList();
+    }
+
+    // ✅ NEW: Apply Platform
+    if (selectedPlatformFilter.value != 'All Platforms') {
+      list = list
+          .where(
+            (c) =>
+                c.devicePlatform.toLowerCase() ==
+                selectedPlatformFilter.value.toLowerCase(),
           )
           .toList();
     }

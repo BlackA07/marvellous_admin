@@ -1,0 +1,416 @@
+Folder PATH listing for volume Flutter
+Volume serial number is 000000E3 F669:43D1
+E:\MARVELLOUS\MARVELLOUS_ADMIN\LIB
+³   firebase_options.dart
+³   main.dart
+³   migration_service.dart
+³   
+ÃÄÄÄcore
+³   ³   failure.dart
+³   ³   type_defs.dart
+³   ³   
+³   ÃÄÄÄcommon
+³   ³   ³   utils.dart
+³   ³   ³   
+³   ³   ÀÄÄÄwidgets
+³   ³           error_text.dart
+³   ³           loader.dart
+³   ³           metallic_button.dart
+³   ³           metallic_card.dart
+³   ³           metallic_textfield.dart
+³   ³           trapezoid_button.dart
+³   ³           
+³   ÃÄÄÄconstants
+³   ³       asset_constants.dart
+³   ³       firebase_constants.dart
+³   ³       global_variables.dart
+³   ³       
+³   ÃÄÄÄroutes
+³   ³       app_router.dart
+³   ³       
+³   ÀÄÄÄtheme
+³           app_theme.dart
+³           pallete.dart
+³           
+ÀÄÄÄfeatures
+    ÃÄÄÄauth
+    ³   ÃÄÄÄcontroller
+    ³   ³       auth_controller.dart
+    ³   ³       signup_controller.dart
+    ³   ³       
+    ³   ÃÄÄÄpresentation
+    ³   ³       login_screen.dart
+    ³   ³       signup_screen.dart
+    ³   ³       
+    ³   ÀÄÄÄrepository
+    ³           auth_repository.dart
+    ³           
+    ÃÄÄÄcategories
+    ³   ÃÄÄÄcontrollers
+    ³   ³       category_controller.dart
+    ³   ³       
+    ³   ÃÄÄÄmodels
+    ³   ³       category_model.dart
+    ³   ³       
+    ³   ÀÄÄÄscreens
+    ³           categories_screen.dart
+    ³           
+    ÃÄÄÄcustomers
+    ³   ÃÄÄÄcomponents
+    ³   ³       customer_bottom_sheets.dart
+    ³   ³       customer_dialogs.dart
+    ³   ³       helper_widgets.dart
+    ³   ³       mlm_tree_components.dart
+    ³   ³       
+    ³   ÃÄÄÄcontroller
+    ³   ³       customers_controller.dart
+    ³   ³       customer_detail_controller.dart
+    ³   ³       
+    ³   ÃÄÄÄmodels
+    ³   ³       customer_model.dart
+    ³   ³       
+    ³   ÃÄÄÄpresentation
+    ³   ³   ÀÄÄÄscreens
+    ³   ³           customers_screen.dart
+    ³   ³           customer_detail_screen.dart
+    ³   ³           login_detail_screen.dart
+    ³   ³           login_list_screen.dart
+    ³   ³           
+    ³   ÀÄÄÄrepository
+    ³           customers_repository.dart
+    ³           
+    ÃÄÄÄdashboard
+    ³   ÃÄÄÄcontroller
+    ³   ³       dashboard_controller.dart
+    ³   ³       
+    ³   ÃÄÄÄmodels
+    ³   ³       dashboard_model.dart
+    ³   ³       dashboard_stats_model.dart
+    ³   ³       recent_activity_model.dart
+    ³   ³       
+    ³   ÃÄÄÄpresentation
+    ³   ³   ÃÄÄÄscreens
+    ³   ³   ³       dashboard_screen.dart
+    ³   ³   ³       
+    ³   ³   ÀÄÄÄwidgets
+    ³   ³           recent_activity_table.dart
+    ³   ³           sales_chart_card.dart
+    ³   ³           stat_summary_card.dart
+    ³   ³           
+    ³   ÀÄÄÄrepository
+    ³           dashboard_repository.dart
+    ³           
+    ÃÄÄÄfinance
+    ³   ÃÄÄÄcontroller
+    ³   ³       admin_finance_controller.dart
+    ³   ³       finance_controller.dart
+    ³   ³       salary_display_controller.dart
+    ³   ³       
+    ³   ÃÄÄÄmodels
+    ³   ³       finance_models.dart
+    ³   ³       ledger_transaction_model.dart
+    ³   ³       
+    ³   ÃÄÄÄrepository
+    ³   ³       admin_finance_repository.dart
+    ³   ³       finance_repository.dart
+    ³   ³       
+    ³   ÃÄÄÄscreens
+    ³   ³       admin_finance_home_screen.dart
+    ³   ³       banks_screen.dart
+    ³   ³       expenses_screen.dart
+    ³   ³       taxes_screen.dart
+    ³   ³       
+    ³   ÀÄÄÄtabs
+    ³           customer_rewards_tab.dart
+    ³           fines_history_tab.dart
+    ³           master_ledger_tab.dart
+    ³           overview_tab.dart
+    ³           sadqa_tab.dart
+    ³           salaries_tab.dart
+    ³           
+    ÃÄÄÄlayout
+    ³   ÃÄÄÄcontroller
+    ³   ³       layout_controller.dart
+    ³   ³       
+    ³   ÃÄÄÄmodels
+    ³   ³       layout_model.dart
+    ³   ³       
+    ³   ÃÄÄÄpresentation
+    ³   ³   ÃÄÄÄscreens
+    ³   ³   ³       main_layout_screen.dart
+    ³   ³   ³       
+    ³   ³   ÀÄÄÄwidgets
+    ³   ³           admin_app_bar.dart
+    ³   ³           admin_drawer.dart
+    ³   ³           
+    ³   ÀÄÄÄrepository
+    ³           layout_repository.dart
+    ³           
+    ÃÄÄÄmlm
+    ³   ÃÄÄÄdata
+    ³   ³   ÃÄÄÄmodels
+    ³   ³   ³       mlm_global_settings_model.dart
+    ³   ³   ³       mlm_models.dart
+    ³   ³   ³       
+    ³   ³   ÀÄÄÄrepositories
+    ³   ³           mlm_repository.dart
+    ³   ³           
+    ³   ÀÄÄÄpresentation
+    ³       ÃÄÄÄcontrollers
+    ³       ³       mlm_controller.dart
+    ³       ³       
+    ³       ÃÄÄÄscreens
+    ³       ³       commission_setup_screen.dart
+    ³       ³       mlm_tree_view.dart
+    ³       ³       
+    ³       ÀÄÄÄwidgets
+    ³               mlm_node_widget.dart
+    ³               sync_inputs.dart
+    ³               
+    ÃÄÄÄorders
+    ³   ÃÄÄÄdata
+    ³   ³   ÃÄÄÄmodels
+    ³   ³   ³       order_model.dart
+    ³   ³   ³       vendor_request_model.dart
+    ³   ³   ³       
+    ³   ³   ÀÄÄÄrepositories
+    ³   ³           orders_repository.dart
+    ³   ³           
+    ³   ÀÄÄÄpresentation
+    ³       ÃÄÄÄcontrollers
+    ³       ³       orders_controller.dart
+    ³       ³       
+    ³       ÃÄÄÄscreens
+    ³       ³       all_orders_history_screen.dart
+    ³       ³       all_orders_screen.dart
+    ³       ³       orders_dashboard_screen.dart
+    ³       ³       order_detail_screen.dart
+    ³       ³       order_history_screen.dart
+    ³       ³       request_detail_screen.dart
+    ³       ³       vendor_account_detail_screen.dart
+    ³       ³       
+    ³       ÀÄÄÄwidgets
+    ³               order_card.dart
+    ³               request_card.dart
+    ³               
+    ÃÄÄÄpackages
+    ³   ÀÄÄÄpresentation
+    ³       ÀÄÄÄscreens
+    ³               add_package_screen.dart
+    ³               packages_home_screen.dart
+    ³               package_details_form.dart
+    ³               package_detail_screen.dart
+    ³               package_pricing_section.dart
+    ³               package_product_table.dart
+    ³               
+    ÃÄÄÄproducts
+    ³   ÃÄÄÄcomponents
+    ³   ³       product_inventory_table.dart
+    ³   ³       product_search_bar.dart
+    ³   ³       product_stats_section.dart
+    ³   ³       
+    ³   ÃÄÄÄcontroller
+    ³   ³       products_controller.dart
+    ³   ³       
+    ³   ÃÄÄÄmodels
+    ³   ³       product_model.dart
+    ³   ³       
+    ³   ÃÄÄÄpresentation
+    ³   ³   ÃÄÄÄscreens
+    ³   ³   ³       add_product_screen.dart
+    ³   ³   ³       pending_requests_screen.dart
+    ³   ³   ³       products_home_screen.dart
+    ³   ³   ³       product_detail_screen.dart
+    ³   ³   ³       
+    ³   ³   ÀÄÄÄwidgets
+    ³   ³           add_category_dialog.dart
+    ³   ³           add_product_info.dart
+    ³   ³           add_product_logistics.dart
+    ³   ³           add_product_media.dart
+    ³   ³           add_product_pricing.dart
+    ³   ³           product_filter_bar.dart
+    ³   ³           product_filter_dialog.dart
+    ³   ³           product_form_section.dart
+    ³   ³           product_media_picker.dart
+    ³   ³           product_stats_card.dart
+    ³   ³           product_table.dart
+    ³   ³           smart_dropdown_field.dart
+    ³   ³           video_preview_widget.dart
+    ³   ³           
+    ³   ÀÄÄÄrepository
+    ³           products_repository.dart
+    ³           
+    ÃÄÄÄprofile
+    ³   ÃÄÄÄdata
+    ³   ³       profile_repository.dart
+    ³   ³       
+    ³   ÀÄÄÄpresentation
+    ³       ÃÄÄÄcontrollers
+    ³       ³       profile_controller.dart
+    ³       ³       
+    ³       ÀÄÄÄscreens
+    ³               admin_profile_screen.dart
+    ³               
+    ÃÄÄÄreports
+    ³   ÃÄÄÄcustomers
+    ³   ³   ÃÄÄÄcontroller
+    ³   ³   ³       customer_report_controller.dart
+    ³   ³   ³       
+    ³   ³   ÃÄÄÄmodel
+    ³   ³   ³       customer_report_model.dart
+    ³   ³   ³       
+    ³   ³   ÃÄÄÄrepository
+    ³   ³   ³       customer_report_repository.dart
+    ³   ³   ³       
+    ³   ³   ÀÄÄÄscreens
+    ³   ³           customer_report_screen.dart
+    ³   ³           
+    ³   ÃÄÄÄfinance
+    ³   ³   ÃÄÄÄcontroller
+    ³   ³   ³       finance_report_controller.dart
+    ³   ³   ³       
+    ³   ³   ÃÄÄÄmodel
+    ³   ³   ³       finance_report_model.dart
+    ³   ³   ³       
+    ³   ³   ÃÄÄÄrepository
+    ³   ³   ³       finance_report_repository.dart
+    ³   ³   ³       
+    ³   ³   ÀÄÄÄscreens
+    ³   ³           finance_report_screen.dart
+    ³   ³           
+    ³   ÃÄÄÄproducts
+    ³   ³   ÃÄÄÄcontroller
+    ³   ³   ³       product_report_controller.dart
+    ³   ³   ³       
+    ³   ³   ÃÄÄÄmodel
+    ³   ³   ³       product_report_model.dart
+    ³   ³   ³       
+    ³   ³   ÃÄÄÄrepository
+    ³   ³   ³       product_report_repository.dart
+    ³   ³   ³       
+    ³   ³   ÀÄÄÄscreens
+    ³   ³           product_report_screen.dart
+    ³   ³           
+    ³   ÃÄÄÄshared
+    ³   ³   ÃÄÄÄmodels
+    ³   ³   ³       report_filter_model.dart
+    ³   ³   ³       
+    ³   ³   ÃÄÄÄservices
+    ³   ³   ³       report_export_service.dart
+    ³   ³   ³       
+    ³   ³   ÀÄÄÄwidgets
+    ³   ³           column_selector_widget.dart
+    ³   ³           report_data_table.dart
+    ³   ³           report_export_sheet.dart
+    ³   ³           report_filter_bar.dart
+    ³   ³           report_summary_cards.dart
+    ³   ³           
+    ³   ÃÄÄÄstaff
+    ³   ³   ÃÄÄÄcontroller
+    ³   ³   ³       staff_report_controller.dart
+    ³   ³   ³       
+    ³   ³   ÃÄÄÄmodel
+    ³   ³   ³       staff_report_model.dart
+    ³   ³   ³       
+    ³   ³   ÃÄÄÄrepository
+    ³   ³   ³       staff_report_repository.dart
+    ³   ³   ³       
+    ³   ³   ÀÄÄÄscreens
+    ³   ³           staff_report_screen.dart
+    ³   ³           
+    ³   ÀÄÄÄvendors
+    ³       ÃÄÄÄcontroller
+    ³       ³       vendor_report_controller.dart
+    ³       ³       
+    ³       ÃÄÄÄmodel
+    ³       ³       vendor_report_model.dart
+    ³       ³       
+    ³       ÃÄÄÄrepository
+    ³       ³       vendor_report_repository.dart
+    ³       ³       
+    ³       ÀÄÄÄscreens
+    ³               vendor_report_screen.dart
+    ³               
+    ÃÄÄÄsettings
+    ³   ÀÄÄÄpresentation
+    ³       ÀÄÄÄscreens
+    ³               variables_screen.dart
+    ³               
+    ÃÄÄÄstaff
+    ³   ÃÄÄÄcontroller
+    ³   ³       add_staff_controller.dart
+    ³   ³       staff_list_controller.dart
+    ³   ³       
+    ³   ÃÄÄÄmodel
+    ³   ³       staff_model.dart
+    ³   ³       
+    ³   ÃÄÄÄpresentation
+    ³   ³   ³   add_staff_screen.dart
+    ³   ³   ³   
+    ³   ³   ÃÄÄÄadd_staff
+    ³   ³   ³   ³   map_picker_screen.dart
+    ³   ³   ³   ³   staff_ui_helpers.dart
+    ³   ³   ³   ³   
+    ³   ³   ³   ÀÄÄÄwidgets
+    ³   ³   ³           add_staff_sections.dart
+    ³   ³   ³           
+    ³   ³   ÀÄÄÄstaff_list
+    ³   ³           staff_detail_screen.dart
+    ³   ³           staff_list_screen.dart
+    ³   ³           
+    ³   ÀÄÄÄrepository
+    ³           staff_repository.dart
+    ³           
+    ÃÄÄÄuser_settings
+    ³   ÃÄÄÄcontroller
+    ³   ³       user_settings_controller.dart
+    ³   ³       
+    ³   ÃÄÄÄmodel
+    ³   ³       user_settings_model.dart
+    ³   ³       
+    ³   ÃÄÄÄrepository
+    ³   ³       user_settings_repository.dart
+    ³   ³       
+    ³   ÀÄÄÄviews
+    ³           user_settings_screen.dart
+    ³           
+    ÃÄÄÄvendors
+    ³   ÃÄÄÄcontrollers
+    ³   ³       vendor_controller.dart
+    ³   ³       
+    ³   ÃÄÄÄmodels
+    ³   ³       vendor_model.dart
+    ³   ³       
+    ³   ÀÄÄÄscreens
+    ³           add_vendor_screen.dart
+    ³           vendors_list_screen.dart
+    ³           vendor_detail_screen.dart
+    ³           
+    ÀÄÄÄvendor_purchase_product
+        ÃÄÄÄcontroller
+        ³       order_request_controller.dart
+        ³       purchase_controller.dart
+        ³       vendor_payment_controller.dart
+        ³       
+        ÃÄÄÄmodels
+        ³       order_request_model.dart
+        ³       payment_transaction_model.dart
+        ³       purchase_model.dart
+        ³       
+        ÃÄÄÄpresentation
+        ³   ÃÄÄÄscreens
+        ³   ³       admin_order_requests_screen.dart
+        ³   ³       ApproveChequesScreen.dart
+        ³   ³       create_order_request_screen.dart
+        ³   ³       vendor_dues_history_screen.dart
+        ³   ³       vendor_manage_bills_screen.dart
+        ³   ³       vendor_payment_dashboard.dart
+        ³   ³       vendor_purchase_screen.dart
+        ³   ³       
+        ³   ÀÄÄÄwidgets
+        ³           payment_terms_section.dart
+        ³           searchable_selection_field.dart
+        ³           
+        ÀÄÄÄrepository
+                purchase_repository.dart
+                
