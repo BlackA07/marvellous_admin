@@ -8,6 +8,7 @@ import 'package:marvellous_admin/core/common/widgets/metallic_textfield.dart';
 import 'package:marvellous_admin/core/common/widgets/trapezoid_button.dart';
 import 'package:marvellous_admin/features/auth/presentation/signup_screen.dart';
 import '../../../../core/theme/pallete.dart';
+import 'package:flutter/services.dart';
 import '../controller/auth_controller.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -136,10 +137,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         ]
                       : null,
                 ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
+                child: Focus(
+  autofocus: true,
+  onKeyEvent: (node, event) {
+    if (event is KeyDownEvent &&
+        (event.logicalKey == LogicalKeyboardKey.enter ||
+            event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
+      if (!isLoading) {
+        login();
+      }
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  },
+  child: Column(
+    mainAxisAlignment: MainAxisAlignment.center,
+    mainAxisSize: MainAxisSize.min,
+    children: [
                     // --- LOGO ---
                     SizedBox(
                       height: 140,
@@ -289,6 +303,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           ),
         ),
       ),
-    );
+    ),);
   }
 }

@@ -112,14 +112,14 @@ class OverviewTab extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: _miniStatCard(
-                    label: 'Fees Received',
-                    value: 'Rs. ${_fmt(controller.totalPaidFees.value)}',
-                    color: Colors.greenAccent,
-                    icon: Icons.verified_user_outlined,
-                    verticalLayout: true,
-                  ),
-                ),
+  child: _miniStatCard(
+    label: 'Fees Received',
+    value: 'Rs. ${_fmt(controller.totalPaidFees.value - 300000)}',
+    color: Colors.greenAccent,
+    icon: Icons.verified_user_outlined,
+    verticalLayout: true,
+  ),
+),
                 const SizedBox(width: 8),
                 Expanded(
                   child: _miniStatCard(

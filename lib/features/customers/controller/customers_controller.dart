@@ -127,19 +127,20 @@ class CustomersController extends GetxController {
     _applyAll();
   }
 
-  // Returns list after applying BOTH status and location filters
   List<CustomerModel> _baseFilteredList() {
     List<CustomerModel> list = List.from(customersList);
 
     if (statusFilter.value == 'active') {
       list = list.where((c) => c.isMLMActive).toList();
     } else if (statusFilter.value == 'inactive') {
-      // ✅ CHANGED: guests ko "Inactive (No Sale)" mein mat gino
+      // guests ko "Inactive (No Sale)" mein mat gino
       list = list.where((c) => !c.isMLMActive && !c.isGuest).toList();
     } else if (statusFilter.value == 'downloaded') {
-      // ✅ CHANGED: Guest bhi "Downloaded" mein ginay jayenge — kyunki
-      // usne bhi app install/open ki hai, sirf signup nahi kiya
-      list = list.where((c) => c.hasDeviceInfo).toList();
+      // ✅ FIX: sirf wo users jo abhi tak "guest" hain (signup nahi kiya)
+      // magar app install/open kar chuke hain. Jo active ya inactive
+      // member ban chuke hain unhe yahan se exclude kar diya — taake
+      // Active/Inactive aur Downloaded ka overlap na ho.
+      list = list.where((c) => c.hasDeviceInfo && c.isGuest).toList();
     }
 
     // Apply Location
@@ -154,7 +155,7 @@ class CustomersController extends GetxController {
           .toList();
     }
 
-    // ✅ NEW: Apply Platform
+    // Apply Platform
     if (selectedPlatformFilter.value != 'All Platforms') {
       list = list
           .where(
