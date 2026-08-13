@@ -160,33 +160,135 @@ class CustomersScreen extends StatelessWidget {
           ),
           const SizedBox(height: 8),
 
-          // ── Location row (centered, responsive wrap) ────────────────
+          // ── Location rows: Country -> State -> City (cascading) ─────
           Obx(() {
-            if (controller.availableLocations.length <= 1) {
+            if (controller.availableCountries.isEmpty) {
               return const SizedBox.shrink();
             }
+
+            final states = controller.statesForSelectedCountries;
+            final cities = controller.citiesForSelectedStates;
+            final hasAnyLocationSelected = controller
+                    .selectedCountries.isNotEmpty ||
+                controller.selectedStates.isNotEmpty ||
+                controller.selectedCities.isNotEmpty;
+
             return Column(
               children: [
-                Center(
-                  child: Padding(
+                // Countries
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 15),
+                  child: Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      ...controller.availableCountries.map(
+                        (country) => _chip(
+                          label: country,
+                          icon: Icons.public,
+                          color: Colors.deepPurple,
+                          selected:
+                              controller.selectedCountries.contains(country),
+                          onTap: () => controller.toggleCountry(country),
+                          onRemove: () => controller.toggleCountry(country),
+                        ),
+                      ),
+                      if (hasAnyLocationSelected)
+                        GestureDetector(
+                          onTap: controller.clearLocationFilters,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 13,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade50,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: Colors.red.shade300,
+                                width: 1.4,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.clear_all,
+                                  size: 14,
+                                  color: Colors.red.shade700,
+                                ),
+                                const SizedBox(width: 5),
+                                Text(
+                                  "Clear Location",
+                                  style: GoogleFonts.comicNeue(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.red.shade700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+
+                // States — sirf tab jab kam se kam 1 country selected ho
+                if (controller.selectedCountries.isNotEmpty &&
+                    states.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 15),
                     child: Wrap(
                       alignment: WrapAlignment.center,
                       spacing: 8,
                       runSpacing: 8,
-                      children: controller.availableLocations.map((loc) {
-                        return _chip(
-                          label: loc,
-                          icon: Icons.location_on,
-                          color: Colors.indigo,
-                          selected:
-                              controller.selectedLocationFilter.value == loc,
-                          onTap: () => controller.applyLocationFilter(loc),
-                        );
-                      }).toList(),
+                      children: states
+                          .map(
+                            (state) => _chip(
+                              label: state,
+                              icon: Icons.map,
+                              color: Colors.teal.shade700,
+                              selected:
+                                  controller.selectedStates.contains(state),
+                              onTap: () => controller.toggleState(state),
+                              onRemove: () => controller.toggleState(state),
+                            ),
+                          )
+                          .toList(),
                     ),
                   ),
-                ),
+                ],
+
+                // Cities — sirf tab jab kam se kam 1 state selected ho
+                if (controller.selectedStates.isNotEmpty &&
+                    cities.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 15),
+                    child: Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: cities
+                          .map(
+                            (city) => _chip(
+                              label: city,
+                              icon: Icons.location_city,
+                              color: Colors.orange.shade800,
+                              selected:
+                                  controller.selectedCities.contains(city),
+                              onTap: () => controller.toggleCity(city),
+                              onRemove: () => controller.toggleCity(city),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ),
+                ],
+
                 const SizedBox(height: 8),
               ],
             );
@@ -232,7 +334,7 @@ class CustomersScreen extends StatelessWidget {
               final inactive = controller.filteredList
                   .where((c) => !c.isMLMActive && !c.isGuest)
                   .length;
-              // ✅ FIX: Downloaded ab sirf guests (jinhone signup nahi
+              // ✅ Downloaded ab sirf guests (jinhone signup nahi
               // kiya) ko count karta hai — Active/Inactive se overlap
               // nahi hoga.
               final downloaded = controller.filteredList
@@ -313,22 +415,49 @@ class CustomersScreen extends StatelessWidget {
     );
   }
 
+  // ── Helper: darken a color a bit for a nicer, more defined border ────
+  Color _darken(Color color, [double amount = .18]) {
+    final hsl = HSLColor.fromColor(color);
+    final darker = hsl.withLightness(
+      (hsl.lightness - amount).clamp(0.0, 1.0),
+    );
+    return darker.toColor();
+  }
+
   // ── Unified pill chip for Sort / Status / Location / Platform ────────
+  // ✅ Border ab hamesha visible hai (selected/unselected dono states mein)
+  // aur selected chips par ek chota "x" bhi dikhta hai jise tap karke
+  // hataya ja sakta hai (onRemove) — multi-select filters ke liye.
   Widget _chip({
     required String label,
     required Color color,
     required bool selected,
     required VoidCallback onTap,
     IconData? icon,
+    VoidCallback? onRemove,
   }) {
+    final Color borderColor = selected
+        ? _darken(color, .14)
+        : color.withOpacity(0.45);
+
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
         padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? color : color.withOpacity(0.08),
+          color: selected ? color : color.withOpacity(0.10),
           borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: borderColor, width: 1.4),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: color.withOpacity(0.35),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -345,6 +474,24 @@ class CustomersScreen extends StatelessWidget {
                 color: selected ? Colors.white : color,
               ),
             ),
+            if (selected && onRemove != null) ...[
+              const SizedBox(width: 6),
+              GestureDetector(
+                onTap: onRemove,
+                child: Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white.withOpacity(0.25),
+                  ),
+                  child: const Icon(
+                    Icons.close,
+                    size: 12,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),

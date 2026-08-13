@@ -17,9 +17,14 @@ class CustomersController extends GetxController {
   var currentFilter = 'All'.obs;
   var statusFilter = 'all'.obs; // 'all' | 'active' | 'inactive'
 
-  // ✅ NEW: Location Filter Variables
-  var selectedLocationFilter = 'All Locations'.obs;
-  var availableLocations = <String>['All Locations'].obs;
+  // ✅ NEW: Cascading Location Filters (Country -> State -> City)
+  // Har level pe multiple select allowed hai.
+  var availableCountries = <String>[].obs;
+  var selectedCountries = <String>{}.obs;
+
+  var selectedStates = <String>{}.obs;
+  var selectedCities = <String>{}.obs;
+
   // ✅ NEW: Platform Filter Variable
   var selectedPlatformFilter = 'All Platforms'.obs;
 
@@ -44,7 +49,7 @@ class CustomersController extends GetxController {
       // ✅ Compute Referrals for all customers efficiently
       _computeReferrals();
 
-      // ✅ Extract unique locations from data
+      // ✅ Extract unique countries from data
       _extractAvailableLocations();
 
       _applyAll();
@@ -71,21 +76,97 @@ class CustomersController extends GetxController {
     return referralsCountCache[uid] ?? 0;
   }
 
+  // ✅ Only real countries (N/A / empty / null excluded)
   void _extractAvailableLocations() {
-    Set<String> locations = {'All Locations'};
+    Set<String> countries = {};
     for (var customer in customersList) {
-      // ✅ Using city and country from your data
-      String city = customer.city.trim();
       String country = customer.country.trim();
-
-      if (city.isNotEmpty && city != 'null') {
-        locations.add(city);
-      }
-      if (country.isNotEmpty && country != 'null') {
-        locations.add(country);
+      final lower = country.toLowerCase();
+      if (country.isNotEmpty && lower != 'n/a' && lower != 'null') {
+        countries.add(country);
       }
     }
-    availableLocations.assignAll(locations.toList()..sort());
+    availableCountries.assignAll(countries.toList()..sort());
+  }
+
+  // ✅ States available for currently selected countries only
+  List<String> get statesForSelectedCountries {
+    if (selectedCountries.isEmpty) return [];
+    Set<String> states = {};
+    for (var customer in customersList) {
+      final country = customer.country.trim();
+      final state = customer.state.trim();
+      final stateLower = state.toLowerCase();
+      if (selectedCountries.contains(country) &&
+          state.isNotEmpty &&
+          stateLower != 'n/a' &&
+          stateLower != 'null') {
+        states.add(state);
+      }
+    }
+    return states.toList()..sort();
+  }
+
+  // ✅ Cities available for currently selected states (within selected countries)
+  List<String> get citiesForSelectedStates {
+    if (selectedStates.isEmpty) return [];
+    Set<String> cities = {};
+    for (var customer in customersList) {
+      final country = customer.country.trim();
+      final state = customer.state.trim();
+      final city = customer.city.trim();
+      final cityLower = city.toLowerCase();
+      if (selectedCountries.contains(country) &&
+          selectedStates.contains(state) &&
+          city.isNotEmpty &&
+          cityLower != 'n/a' &&
+          cityLower != 'null') {
+        cities.add(city);
+      }
+    }
+    return cities.toList()..sort();
+  }
+
+  void toggleCountry(String country) {
+    if (selectedCountries.contains(country)) {
+      selectedCountries.remove(country);
+    } else {
+      selectedCountries.add(country);
+    }
+    // Country badalne se purane states/cities invalid ho sakte hain — clean up karo
+    final validStates = statesForSelectedCountries.toSet();
+    selectedStates.removeWhere((s) => !validStates.contains(s));
+    final validCities = citiesForSelectedStates.toSet();
+    selectedCities.removeWhere((c) => !validCities.contains(c));
+    _applyAll();
+  }
+
+  void toggleState(String state) {
+    if (selectedStates.contains(state)) {
+      selectedStates.remove(state);
+    } else {
+      selectedStates.add(state);
+    }
+    // State badalne se purani cities invalid ho sakti hain — clean up karo
+    final validCities = citiesForSelectedStates.toSet();
+    selectedCities.removeWhere((c) => !validCities.contains(c));
+    _applyAll();
+  }
+
+  void toggleCity(String city) {
+    if (selectedCities.contains(city)) {
+      selectedCities.remove(city);
+    } else {
+      selectedCities.add(city);
+    }
+    _applyAll();
+  }
+
+  void clearLocationFilters() {
+    selectedCountries.clear();
+    selectedStates.clear();
+    selectedCities.clear();
+    _applyAll();
   }
 
   void searchCustomer(String query) {
@@ -115,12 +196,6 @@ class CustomersController extends GetxController {
     _applyAll();
   }
 
-  // ✅ NEW: Apply Location Filter
-  void applyLocationFilter(String location) {
-    selectedLocationFilter.value = location;
-    _applyAll();
-  }
-
   // ✅ NEW: Apply Platform Filter
   void applyPlatformFilter(String platform) {
     selectedPlatformFilter.value = platform;
@@ -136,22 +211,25 @@ class CustomersController extends GetxController {
       // guests ko "Inactive (No Sale)" mein mat gino
       list = list.where((c) => !c.isMLMActive && !c.isGuest).toList();
     } else if (statusFilter.value == 'downloaded') {
-      // ✅ FIX: sirf wo users jo abhi tak "guest" hain (signup nahi kiya)
-      // magar app install/open kar chuke hain. Jo active ya inactive
-      // member ban chuke hain unhe yahan se exclude kar diya — taake
-      // Active/Inactive aur Downloaded ka overlap na ho.
+      // ✅ sirf wo users jo abhi tak "guest" hain (signup nahi kiya)
+      // magar app install/open kar chuke hain.
       list = list.where((c) => c.hasDeviceInfo && c.isGuest).toList();
     }
 
-    // Apply Location
-    if (selectedLocationFilter.value != 'All Locations') {
-      String filterLower = selectedLocationFilter.value.toLowerCase();
+    // ✅ Cascading Location filter: Country -> State -> City
+    if (selectedCountries.isNotEmpty) {
       list = list
-          .where(
-            (c) =>
-                c.city.toLowerCase() == filterLower ||
-                c.country.toLowerCase() == filterLower,
-          )
+          .where((c) => selectedCountries.contains(c.country.trim()))
+          .toList();
+    }
+    if (selectedStates.isNotEmpty) {
+      list = list
+          .where((c) => selectedStates.contains(c.state.trim()))
+          .toList();
+    }
+    if (selectedCities.isNotEmpty) {
+      list = list
+          .where((c) => selectedCities.contains(c.city.trim()))
           .toList();
     }
 
@@ -170,27 +248,45 @@ class CustomersController extends GetxController {
   }
 
   void _applyAll() {
+    // Priority 1: Filter
     List<CustomerModel> list = _baseFilteredList();
 
+    // Priority 2: Sort (filtered result ke upar hi sort hota hai)
     switch (currentFilter.value) {
       case 'Newest':
-        list.sort(
-          (a, b) => (b.createdAt ?? DateTime.now()).compareTo(
+        list.sort((a, b) {
+          final cmp = (b.createdAt ?? DateTime.now()).compareTo(
             a.createdAt ?? DateTime.now(),
-          ),
-        );
+          );
+          // ✅ Tie ho to name A->Z se sort
+          if (cmp != 0) return cmp;
+          return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+        });
         break;
       case 'High Rank/Points':
-        list.sort((a, b) => b.totalPoints.compareTo(a.totalPoints));
+        list.sort((a, b) {
+          final cmp = b.totalPoints.compareTo(a.totalPoints);
+          // ✅ Points barabar hon to name A->Z se sort
+          if (cmp != 0) return cmp;
+          return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+        });
         break;
       case 'Most Refers':
         list.sort((a, b) {
           int aRefers = getReferralsCount(a.uid);
           int bRefers = getReferralsCount(b.uid);
-          return bRefers.compareTo(aRefers);
+          final cmp = bRefers.compareTo(aRefers);
+          // ✅ Refers barabar hon to name A->Z se sort
+          if (cmp != 0) return cmp;
+          return a.name.toLowerCase().compareTo(b.name.toLowerCase());
         });
         break;
       default:
+        // ✅ 'All' filter ke case mein bhi list khaali/random na rahe —
+        // default sorting hamesha A -> Z (name) hogi, filters ke baad.
+        list.sort(
+          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+        );
         break;
     }
 
