@@ -1179,25 +1179,26 @@ class ProductsController extends GetxController {
       // Apply latest decimal settings during update
       product.showDecimalPoints = showDecimals.value;
 
-      // ✅ SMART APPROVE LOGIC FOR PENDING VENDOR REQUESTS
       if (product.status == 'pending') {
         // ✅ Vendor ki images (jo base64 ho sakti hain) ko pehle
         // Cloudinary pe upload karo — agar pehle se http URL hai to
         // uploadImagesToCloudinary khud usay skip kar deta hai.
-        // Isi missing step ki wajah se approved product ki notification
-        // mein image nahi ja rahi thi.
         List<String> uploadedUrls = await uploadImagesToCloudinary(
           product.images,
         );
         product.images = uploadedUrls;
 
-        _showNotificationAudienceDialog(product, isUpdate: false);
         product.status = 'approved';
         String requestId = product.id!;
 
         // 1. Save to original 'products' collection (Repo handles new ID generation)
         product.id = null;
         await _repository.addProduct(product);
+        // ✅ FIX: product.id ab final/confirmed ID hai. Dialog ab isi ke
+        // baad dikhaya jayega — pehle dialog turant show hota tha jabke
+        // product.id us waqt null tha, isi beech agar admin jaldi
+        // "Notification Bhejo" dabata to notification mein
+        // productId: null chala jata tha (random error ki wajah).
 
         // 2. Mark the request doc as 'approved' so vendor sees status change
         await _db.collection('product_requests').doc(requestId).update({
@@ -1213,8 +1214,12 @@ class ProductsController extends GetxController {
           backgroundColor: Colors.green,
           colorText: Colors.white,
         );
-        // NOTE: No notification dialog for vendor approval flow (intentional)
-        // Vendor ko notification bhejo
+
+        // ✅ Ab dialog product.id confirm/finalize hone ke baad dikhta hai
+        await Future.delayed(const Duration(milliseconds: 400));
+        _showNotificationAudienceDialog(product, isUpdate: false);
+
+        // Vendor ko notification
         await _db
             .collection('vendors')
             .doc(product.vendorId)

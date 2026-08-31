@@ -59,6 +59,7 @@ class CustomersScreen extends StatelessWidget {
         ],
       ),
       body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // ── Search Bar ───────────────────────────────────────────────
           Padding(
@@ -69,229 +70,289 @@ class CustomersScreen extends StatelessWidget {
               decoration: InputDecoration(
                 hintText: "Search by Name, Phone, or Code...",
                 hintStyle: GoogleFonts.comicNeue(color: Colors.black54),
-                prefixIcon: const Icon(Icons.search, color: Colors.blue),
+                prefixIcon: const Icon(Icons.search, color: Colors.indigo),
                 filled: true,
                 fillColor: Colors.white,
                 contentPadding: const EdgeInsets.symmetric(vertical: 0),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(15),
-                  borderSide: const BorderSide(color: Colors.black, width: 1.5),
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
                 ),
                 enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(15),
-                  borderSide: const BorderSide(color: Colors.black, width: 1.5),
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: const BorderSide(color: Colors.indigo, width: 1.5),
                 ),
               ),
             ),
           ),
 
-          // ── Sort Filters ─────────────────────────────────────────────
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 15),
-            child: Obx(
-              () => Row(
-                children: ['All', 'Newest', 'High Rank/Points', 'Most Refers']
-                    .map((filter) {
-                      bool isSel = controller.currentFilter.value == filter;
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: ChoiceChip(
-                          label: Text(
-                            filter,
-                            style: TextStyle(
-                              color: isSel ? Colors.white : Colors.black,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          selected: isSel,
-                          selectedColor: Colors.black,
-                          backgroundColor: Colors.grey.shade300,
-                          onSelected: (_) => controller.applyFilter(filter),
+          // ── Sort row (centered, responsive wrap) ────────────────────
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 15),
+              child: Obx(
+                () => Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: ['All', 'Newest', 'High Rank/Points', 'Most Refers']
+                      .map(
+                        (filter) => _chip(
+                          label: filter,
+                          color: Colors.indigo,
+                          selected: controller.currentFilter.value == filter,
+                          onTap: () => controller.applyFilter(filter),
                         ),
-                      );
-                    })
-                    .toList(),
+                      )
+                      .toList(),
+                ),
               ),
             ),
           ),
           const SizedBox(height: 8),
 
-          // ── Active / Inactive Status Filters ───────────────────
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 15),
-            child: Obx(
-              () => Row(
-                children: [
-                  _statusChip(
-                    label: "All Users",
-                    icon: Icons.people,
-                    color: Colors.blueGrey,
-                    selected: controller.statusFilter.value == 'all',
-                    onTap: () => controller.applyStatusFilter('all'),
-                  ),
-                  const SizedBox(width: 8),
-                  _statusChip(
-                    label: "Active (MLM ON)",
-                    icon: Icons.check_circle,
-                    color: Colors.green.shade700,
-                    selected: controller.statusFilter.value == 'active',
-                    onTap: () => controller.applyStatusFilter('active'),
-                  ),
-                  const SizedBox(width: 8),
-                  _statusChip(
-                    label: "Inactive (No Sale)",
-                    icon: Icons.cancel,
-                    color: Colors.red.shade700,
-                    selected: controller.statusFilter.value == 'inactive',
-                    onTap: () => controller.applyStatusFilter('inactive'),
-                  ),
-                  const SizedBox(width: 8),
-                  // ✅ NEW: Downloaded App filter chip
-                  _statusChip(
-                    label: "Downloaded",
-                    icon: Icons.download_done,
-                    color: Colors.purple.shade700,
-                    selected: controller.statusFilter.value == 'downloaded',
-                    onTap: () => controller.applyStatusFilter('downloaded'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-
-          // ── ✅ NEW: Location Filter ───────────────────
-          Obx(() {
-            if (controller.availableLocations.length <= 1)
-              return const SizedBox.shrink();
-            return SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
+          // ── Status row (centered, responsive wrap) ──────────────────
+          Center(
+            child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 15),
-              child: Row(
-                children: controller.availableLocations.map((location) {
-                  bool isSel =
-                      controller.selectedLocationFilter.value == location;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(
-                      label: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.location_on,
-                            size: 14,
-                            color: isSel ? Colors.white : Colors.indigo,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            location,
-                            style: TextStyle(
-                              color: isSel ? Colors.white : Colors.indigo,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                      selected: isSel,
-                      selectedColor: Colors.indigo,
-                      backgroundColor: Colors.indigo.shade50,
-                      side: BorderSide(color: Colors.indigo.shade200),
-                      onSelected: (_) =>
-                          controller.applyLocationFilter(location),
-                    ),
-                  );
-                }).toList(),
-              ),
-            );
-          }),
-          // ✅ NEW: Platform Filter (Android / iOS)
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 15),
-            child: Obx(
-              () => Row(
-                children: ['All Platforms', 'Android', 'iOS'].map((platform) {
-                  bool isSel =
-                      controller.selectedPlatformFilter.value == platform;
-                  IconData icon = platform == 'Android'
-                      ? Icons.android
-                      : platform == 'iOS'
-                      ? Icons.apple
-                      : Icons.devices;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(
-                      label: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            icon,
-                            size: 14,
-                            color: isSel ? Colors.white : Colors.teal,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            platform,
-                            style: TextStyle(
-                              color: isSel ? Colors.white : Colors.teal,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                      selected: isSel,
-                      selectedColor: Colors.teal,
-                      backgroundColor: Colors.teal.shade50,
-                      side: BorderSide(color: Colors.teal.shade200),
-                      onSelected: (_) =>
-                          controller.applyPlatformFilter(platform),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-
-          // ── Count indicator ──────────────────────────────────────────
-          Obx(() {
-            final total = controller.filteredList.length;
-            final active = controller.filteredList
-                .where((c) => c.isMLMActive)
-                .length;
-            // ✅ CHANGED: guests "Inactive" count mein shamil nahi
-            final inactive = controller.filteredList
-                .where((c) => !c.isMLMActive && !c.isGuest)
-                .length;
-            // ✅ CHANGED: Downloaded count — ab guests bhi shamil
-            final downloaded = controller.filteredList
-                .where((c) => c.hasDeviceInfo)
-                .length;
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 15),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
+              child: Obx(
+                () => Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 8,
+                  runSpacing: 8,
                   children: [
-                    _countBadge("Total: $total", Colors.blueGrey),
-                    const SizedBox(width: 8),
-                    _countBadge("Active: $active", Colors.green.shade700),
-                    const SizedBox(width: 8),
-                    _countBadge("Inactive: $inactive", Colors.red.shade700),
-                    const SizedBox(width: 8),
-                    _countBadge(
-                      "Downloaded: $downloaded",
-                      Colors.purple.shade700,
+                    _chip(
+                      label: "All Users",
+                      icon: Icons.people,
+                      color: Colors.blueGrey,
+                      selected: controller.statusFilter.value == 'all',
+                      onTap: () => controller.applyStatusFilter('all'),
+                    ),
+                    _chip(
+                      label: "Active",
+                      icon: Icons.check_circle,
+                      color: Colors.green.shade700,
+                      selected: controller.statusFilter.value == 'active',
+                      onTap: () => controller.applyStatusFilter('active'),
+                    ),
+                    _chip(
+                      label: "Inactive",
+                      icon: Icons.remove_circle,
+                      color: Colors.indigo.shade400,
+                      selected: controller.statusFilter.value == 'inactive',
+                      onTap: () => controller.applyStatusFilter('inactive'),
+                    ),
+                    _chip(
+                      label: "Downloaded",
+                      icon: Icons.download_done,
+                      color: Colors.red.shade400,
+                      selected: controller.statusFilter.value == 'downloaded',
+                      onTap: () => controller.applyStatusFilter('downloaded'),
                     ),
                   ],
                 ),
               ),
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // ── Location rows: Country -> State -> City (cascading) ─────
+          Obx(() {
+            if (controller.availableCountries.isEmpty) {
+              return const SizedBox.shrink();
+            }
+
+            final states = controller.statesForSelectedCountries;
+            final cities = controller.citiesForSelectedStates;
+            final hasAnyLocationSelected = controller
+                    .selectedCountries.isNotEmpty ||
+                controller.selectedStates.isNotEmpty ||
+                controller.selectedCities.isNotEmpty;
+
+            return Column(
+              children: [
+                // Countries
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 15),
+                  child: Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      ...controller.availableCountries.map(
+                        (country) => _chip(
+                          label: country,
+                          icon: Icons.public,
+                          color: Colors.deepPurple,
+                          selected:
+                              controller.selectedCountries.contains(country),
+                          onTap: () => controller.toggleCountry(country),
+                          onRemove: () => controller.toggleCountry(country),
+                        ),
+                      ),
+                      if (hasAnyLocationSelected)
+                        GestureDetector(
+                          onTap: controller.clearLocationFilters,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 13,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade50,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: Colors.red.shade300,
+                                width: 1.4,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.clear_all,
+                                  size: 14,
+                                  color: Colors.red.shade700,
+                                ),
+                                const SizedBox(width: 5),
+                                Text(
+                                  "Clear Location",
+                                  style: GoogleFonts.comicNeue(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.red.shade700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+
+                // States — sirf tab jab kam se kam 1 country selected ho
+                if (controller.selectedCountries.isNotEmpty &&
+                    states.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 15),
+                    child: Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: states
+                          .map(
+                            (state) => _chip(
+                              label: state,
+                              icon: Icons.map,
+                              color: Colors.teal.shade700,
+                              selected:
+                                  controller.selectedStates.contains(state),
+                              onTap: () => controller.toggleState(state),
+                              onRemove: () => controller.toggleState(state),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ),
+                ],
+
+                // Cities — sirf tab jab kam se kam 1 state selected ho
+                if (controller.selectedStates.isNotEmpty &&
+                    cities.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 15),
+                    child: Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: cities
+                          .map(
+                            (city) => _chip(
+                              label: city,
+                              icon: Icons.location_city,
+                              color: Colors.orange.shade800,
+                              selected:
+                                  controller.selectedCities.contains(city),
+                              onTap: () => controller.toggleCity(city),
+                              onRemove: () => controller.toggleCity(city),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ),
+                ],
+
+                const SizedBox(height: 8),
+              ],
             );
           }),
+
+          // ── Platform row (centered, responsive wrap) ────────────────
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 15),
+              child: Obx(
+                () => Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: ['All Platforms', 'Android', 'iOS'].map((p) {
+                    IconData icon = p == 'Android'
+                        ? Icons.android
+                        : p == 'iOS'
+                        ? Icons.apple
+                        : Icons.devices;
+                    return _chip(
+                      label: p,
+                      icon: icon,
+                      color: Colors.teal.shade700,
+                      selected: controller.selectedPlatformFilter.value == p,
+                      onTap: () => controller.applyPlatformFilter(p),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          // ── Counts — oval pill badges, left aligned ─────────────────
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Obx(() {
+              final total = controller.filteredList.length;
+              final active = controller.filteredList
+                  .where((c) => c.isMLMActive)
+                  .length;
+              final inactive = controller.filteredList
+                  .where((c) => !c.isMLMActive && !c.isGuest)
+                  .length;
+              // ✅ Downloaded ab sirf guests (jinhone signup nahi
+              // kiya) ko count karta hai — Active/Inactive se overlap
+              // nahi hoga.
+              final downloaded = controller.filteredList
+                  .where((c) => c.hasDeviceInfo && c.isGuest)
+                  .length;
+              return Wrap(
+                alignment: WrapAlignment.start,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _countBadge("Total: $total", Colors.blueGrey),
+                  _countBadge("Active: $active", Colors.green.shade700),
+                  _countBadge("Inactive: $inactive", Colors.indigo.shade400),
+                  _countBadge("Downloaded: $downloaded", Colors.red.shade400),
+                ],
+              );
+            }),
+          ),
           const SizedBox(height: 8),
 
           // ── List ─────────────────────────────────────────────────────
@@ -354,57 +415,96 @@ class CustomersScreen extends StatelessWidget {
     );
   }
 
-  Widget _statusChip({
+  // ── Helper: darken a color a bit for a nicer, more defined border ────
+  Color _darken(Color color, [double amount = .18]) {
+    final hsl = HSLColor.fromColor(color);
+    final darker = hsl.withLightness(
+      (hsl.lightness - amount).clamp(0.0, 1.0),
+    );
+    return darker.toColor();
+  }
+
+  // ── Unified pill chip for Sort / Status / Location / Platform ────────
+  // ✅ Border ab hamesha visible hai (selected/unselected dono states mein)
+  // aur selected chips par ek chota "x" bhi dikhta hai jise tap karke
+  // hataya ja sakta hai (onRemove) — multi-select filters ke liye.
+  Widget _chip({
     required String label,
-    required IconData icon,
     required Color color,
     required bool selected,
     required VoidCallback onTap,
+    IconData? icon,
+    VoidCallback? onRemove,
   }) {
+    final Color borderColor = selected
+        ? _darken(color, .14)
+        : color.withOpacity(0.45);
+
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? color : Colors.white,
+          color: selected ? color : color.withOpacity(0.10),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: color, width: 1.5),
+          border: Border.all(color: borderColor, width: 1.4),
           boxShadow: selected
               ? [
                   BoxShadow(
-                    color: color.withOpacity(0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 3),
+                    color: color.withOpacity(0.35),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
                   ),
                 ]
-              : [],
+              : null,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 16, color: selected ? Colors.white : color),
-            const SizedBox(width: 6),
+            if (icon != null) ...[
+              Icon(icon, size: 14, color: selected ? Colors.white : color),
+              const SizedBox(width: 5),
+            ],
             Text(
               label,
               style: GoogleFonts.comicNeue(
                 fontSize: 13,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w800,
                 color: selected ? Colors.white : color,
               ),
             ),
+            if (selected && onRemove != null) ...[
+              const SizedBox(width: 6),
+              GestureDetector(
+                onTap: onRemove,
+                child: Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white.withOpacity(0.25),
+                  ),
+                  child: const Icon(
+                    Icons.close,
+                    size: 12,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
     );
   }
 
+  // ── Oval count badge (bordered pill) ──────────────────────────────────
   Widget _countBadge(String text, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(30),
         border: Border.all(color: color.withOpacity(0.5)),
       ),
       child: Text(
@@ -418,6 +518,26 @@ class CustomersScreen extends StatelessWidget {
     );
   }
 
+  // ── 3-way theme: Active = green, real Inactive = indigo/purple,
+  // Guest/Downloaded = red ───────────────────────────────────────────────
+  Color _themeColor(CustomerModel c) {
+    if (c.isMLMActive) return Colors.green.shade500;
+    if (c.isGuest) return Colors.red.shade400;
+    return Colors.indigo.shade400;
+  }
+
+  Color _themeColorLight(CustomerModel c) {
+    if (c.isMLMActive) return Colors.green.shade50;
+    if (c.isGuest) return Colors.red.shade50;
+    return Colors.indigo.shade50;
+  }
+
+  Color _cardBgColor(CustomerModel c) {
+    if (c.isMLMActive) return Colors.white;
+    if (c.isGuest) return const Color(0xFFFFF8F8);
+    return const Color(0xFFF6F5FF);
+  }
+
   Widget _buildCustomerCard(
     CustomerModel customer,
     CustomersController controller,
@@ -429,8 +549,10 @@ class CustomersScreen extends StatelessWidget {
         : customer.referralCode;
 
     final bool isActive = customer.isMLMActive;
+    final Color themeColor = _themeColor(customer);
+    final Color themeLight = _themeColorLight(customer);
+    final Color cardBg = _cardBgColor(customer);
 
-    // ✅ Retrieve Pre-computed referrals count
     int referralsCount = controller.getReferralsCount(customer.uid);
 
     return Obx(() {
@@ -448,18 +570,10 @@ class CustomersScreen extends StatelessWidget {
           margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: isSelected
-                ? Colors.indigo.shade50
-                : isActive
-                ? Colors.white
-                : const Color(0xFFFFF8F8), // light red tint for inactive
+            color: isSelected ? Colors.indigo.shade50 : cardBg,
             borderRadius: BorderRadius.circular(15),
             border: Border.all(
-              color: isSelected
-                  ? Colors.indigo
-                  : isActive
-                  ? Colors.green.shade400
-                  : Colors.red.shade300,
+              color: isSelected ? Colors.indigo : themeColor,
               width: 1.5,
             ),
             boxShadow: [
@@ -483,7 +597,6 @@ class CustomersScreen extends StatelessWidget {
                           controller.toggleUserSelection(customer.uid),
                     ),
 
-                  // Profile Image with Lazy Loading from Subcollection
                   Stack(
                     children: [
                       Container(
@@ -492,12 +605,7 @@ class CustomersScreen extends StatelessWidget {
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: Colors.white,
-                          border: Border.all(
-                            color: isActive
-                                ? Colors.green.shade500
-                                : Colors.red.shade400,
-                            width: 2.5,
-                          ),
+                          border: Border.all(color: themeColor, width: 2.5),
                         ),
                         child: ClipOval(child: _buildProfileImage(customer)),
                       ),
@@ -509,9 +617,7 @@ class CustomersScreen extends StatelessWidget {
                           height: 14,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: isActive
-                                ? Colors.green.shade500
-                                : Colors.red.shade400,
+                            color: themeColor,
                             border: Border.all(color: Colors.white, width: 1.5),
                           ),
                         ),
@@ -520,7 +626,6 @@ class CustomersScreen extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
 
-                  // Info
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -541,7 +646,6 @@ class CustomersScreen extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            // ✅ NEW: Guest badge
                             if (customer.isGuest)
                               Container(
                                 margin: const EdgeInsets.only(right: 6),
@@ -565,31 +669,22 @@ class CustomersScreen extends StatelessWidget {
                                   ),
                                 ),
                               ),
-                            // Active/Inactive pill
                             Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 8,
                                 vertical: 2,
                               ),
                               decoration: BoxDecoration(
-                                color: isActive
-                                    ? Colors.green.shade50
-                                    : Colors.red.shade50,
+                                color: themeLight,
                                 borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: isActive
-                                      ? Colors.green.shade400
-                                      : Colors.red.shade400,
-                                ),
+                                border: Border.all(color: themeColor),
                               ),
                               child: Text(
                                 isActive ? "Active" : "Inactive",
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w900,
-                                  color: isActive
-                                      ? Colors.green.shade700
-                                      : Colors.red.shade700,
+                                  color: themeColor,
                                 ),
                               ),
                             ),
@@ -659,7 +754,6 @@ class CustomersScreen extends StatelessWidget {
 
               const SizedBox(height: 8),
 
-              // ✅ NEW: Points, Join Date & Referrals Row
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -694,7 +788,6 @@ class CustomersScreen extends StatelessWidget {
                     ),
                   ),
 
-                  // ✅ NEW: Total Referrals Badge
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -736,7 +829,6 @@ class CustomersScreen extends StatelessWidget {
                   ),
                 ],
               ),
-              // ✅ CHANGED: Device Info — poora rich block, sirf jab available ho
               if (customer.hasDeviceInfo) ...[
                 const SizedBox(height: 8),
                 Container(
@@ -817,13 +909,8 @@ class CustomersScreen extends StatelessWidget {
                 ),
               ],
 
-              // ✅ CHANGED: Guest ke liye referral row ki jagah simple note
               if (!customer.isGuest) ...[
-                Divider(
-                  color: isActive ? Colors.green.shade200 : Colors.red.shade200,
-                  thickness: 1,
-                  height: 15,
-                ),
+                Divider(color: themeColor.withOpacity(0.3), thickness: 1, height: 15),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -883,7 +970,7 @@ class CustomersScreen extends StatelessWidget {
       ),
     );
   }
-  // ✅ NEW: Device info ke liye chhota tag/chip
+
   Widget _miniTag(IconData icon, String text) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
@@ -1070,7 +1157,6 @@ class CustomersScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 15),
 
-                  // Image section
                   selectedImageBase64 != null
                       ? Stack(
                           alignment: Alignment.topRight,

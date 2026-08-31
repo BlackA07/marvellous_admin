@@ -93,35 +93,35 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
   }
 
   void _sortInOut(int columnIndex) {
-    setState(() {
-      sortColumnIndex = columnIndex;
-      ascending = false;
+  setState(() {
+    sortColumnIndex = columnIndex;
+    ascending = false;
 
-      if (inOutSortState == 0 || inOutSortState == 2) {
-        inOutSortState = 1;
-        widget.filteredList.sort(
-          (a, b) => b.stockQuantity.compareTo(a.stockQuantity),
-        );
-        Get.snackbar(
-          "Sorting Applied",
-          "Sorted by Left (Available Stock) - Highest to Lowest",
-          backgroundColor: Colors.green.shade800,
-          colorText: Colors.white,
-          duration: const Duration(seconds: 1),
-        );
-      } else {
-        inOutSortState = 2;
-        widget.filteredList.sort((a, b) => b.stockIn.compareTo(a.stockIn));
-        Get.snackbar(
-          "Sorting Applied",
-          "Sorted by Total Bought (IN) - Highest to Lowest",
-          backgroundColor: Colors.blueAccent,
-          colorText: Colors.white,
-          duration: const Duration(seconds: 1),
-        );
-      }
-    });
-  }
+    if (inOutSortState == 0 || inOutSortState == 2) {
+      inOutSortState = 1;
+      widget.filteredList.sort(
+        (a, b) => b.stockOut.compareTo(a.stockOut),
+      );
+      Get.snackbar(
+        "Sorting Applied",
+        "Sorted by Total Out (Sold) - Highest to Lowest",
+        backgroundColor: Colors.green.shade800,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 1),
+      );
+    } else {
+      inOutSortState = 2;
+      widget.filteredList.sort((a, b) => b.stockIn.compareTo(a.stockIn));
+      Get.snackbar(
+        "Sorting Applied",
+        "Sorted by Total Bought (IN) - Highest to Lowest",
+        backgroundColor: Colors.blueAccent,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 1),
+      );
+    }
+  });
+}
 
   double _calculatePoints(ProductModel product) {
     double sale = product.salePrice;
@@ -598,9 +598,10 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                                     ),
                                   ],
                                   rows: currentDisplayList.map((product) {
-                                    int stockIn = product.stockIn;
-                                    int stockOut = product.stockOut;
-                                    int stockLeft = product.stockQuantity;
+                                    // ✅ FIX: Negative stockIn ko kabhi na dikhao — clamp at 0
+int stockIn = product.stockIn > 0 ? product.stockIn : 0;
+int stockOut = product.stockOut;
+int stockLeft = product.stockQuantity;
                                     double dynamicPoints = _calculatePoints(
                                       product,
                                     );
@@ -740,35 +741,25 @@ class _ProductInventoryTableState extends ConsumerState<ProductInventoryTable> {
                                           product.deliveryLocation,
                                           _fontSize,
                                         ),
-                                        // ✅ NEW: Shows Total In, Total Out and Current Left properly
-                                        DataCell(
-                                          Column(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                "In: $stockIn | Out: $stockOut",
-                                                style: GoogleFonts.comicNeue(
-                                                  fontSize: 11,
-                                                  color: Colors.black54,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                              Text(
-                                                "Left: $stockLeft",
-                                                style: GoogleFonts.comicNeue(
-                                                  fontSize: 13,
-                                                  color: stockLeft < 10
-                                                      ? Colors.red
-                                                      : Colors.green.shade800,
-                                                  fontWeight: FontWeight.w900,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
+                                        // ✅ Shows Total In, Total Out (Left hidden from display)
+DataCell(
+  Column(
+    mainAxisAlignment:
+        MainAxisAlignment.center,
+    crossAxisAlignment:
+        CrossAxisAlignment.start,
+    children: [
+      Text(
+        "In: $stockIn | Out: $stockOut",
+        style: GoogleFonts.comicNeue(
+          fontSize: 11,
+          color: Colors.black54,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    ],
+  ),
+),
                                         DataCell(
                                           Text(
                                             showDecimals

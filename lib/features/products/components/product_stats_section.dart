@@ -20,9 +20,18 @@ class ProductStatsSection extends StatelessWidget {
   }
 
   // 2. Total Units Bought Ever (Total IN)
-  int get totalUnitsBought {
-    return controller.productsOnly.fold(0, (sum, p) => sum + p.stockIn);
-  }
+  // ✅ FIX: Total In = sirf positive stockIn values ka sum.
+// Negative/corrupt stockIn wale products 0 count honge, total ko kharab nahi karenge.
+int get totalUnitsBought {
+  return controller.productsOnly.fold(
+    0,
+    (sum, p) => sum + (p.stockIn > 0 ? p.stockIn : 0),
+  );
+}
+  // ✅ NEW: Total Units Sold/Out Ever (Total OUT)
+int get totalUnitsOut {
+  return controller.productsOnly.fold(0, (sum, p) => sum + p.stockOut);
+}
 
   // 3. Current Inventory Value (Remaining Stock * Sale Price)
   double get totalInventoryValue {
@@ -54,8 +63,8 @@ class ProductStatsSection extends StatelessWidget {
     const Color cardColor = Color.fromARGB(255, 231, 225, 225);
 
     String productStats = "${controller.totalProducts} Items";
-    String productSubTitle =
-        "($totalUnitsAvailable Left / $totalUnitsBought Bought)";
+String productSubTitle =
+    "(In: $totalUnitsBought / Out: $totalUnitsOut)";
 
     String valueStats = "PKR ${totalInventoryValue.toStringAsFixed(0)}";
     String valueSubTitle =
