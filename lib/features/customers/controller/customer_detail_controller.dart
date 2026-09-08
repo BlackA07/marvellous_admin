@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../mlm/data/models/mlm_models.dart';
+import '../../../core/common/widgets/user_avatar.dart';
 import '../models/customer_model.dart';
 
 class CustomerDetailController extends GetxController {
@@ -157,23 +158,13 @@ class CustomerDetailController extends GetxController {
       if (doc.exists) {
         var data = doc.data() as Map<String, dynamic>;
 
-        // ✅ FIX: Image Fetching Logic from Subcollection for Detail Screen
-        String userImage = data['faceImage'] ?? '';
-        if (userImage.isEmpty) {
-          try {
-            var imgDoc = await _db
-                .collection('users')
-                .doc(uid)
-                .collection('profile_data')
-                .doc('image')
-                .get();
-            if (imgDoc.exists && imgDoc.data() != null) {
-              userImage = imgDoc.data()!['faceImage'] ?? '';
-            }
-          } catch (_) {}
-        }
-        // Override faceImage in data so the model gets the correct image
-        data['faceImage'] = userImage;
+        // Photos live either on the user doc or in profile_data/image, and
+        // some old docs hold the string 'null'. UserImage checks all of that
+        // and caches the result for the avatar widget.
+        data['faceImage'] = await UserImage.resolve(
+          uid,
+          known: UserImage.fromMap(data),
+        );
 
         customer.value = CustomerModel.fromMap(data, doc.id);
         _paidFee = (data['paidFees'] ?? 0.0).toDouble();
@@ -244,7 +235,7 @@ class CustomerDetailController extends GetxController {
           directList.add({
             'uid': doc.id,
             'name': data['name'] ?? data['username'] ?? 'User',
-            'image': data['faceImage'] ?? '',
+            'image': UserImage.fromMap(data),
             'amount': directCommMap[doc.id] ?? 0.0,
             'isMLMActive': true,
           });
@@ -264,7 +255,7 @@ class CustomerDetailController extends GetxController {
             directList.add({
               'uid': doc.id,
               'name': data['name'] ?? data['username'] ?? 'User',
-              'image': data['faceImage'] ?? '',
+              'image': UserImage.fromMap(data),
               'amount': directCommMap[doc.id] ?? 0.0,
               'isMLMActive': true,
             });
@@ -382,7 +373,7 @@ class CustomerDetailController extends GetxController {
           final childNode = await _buildAdminTree(
             nodeUid: childUid,
             name: childData['name'] ?? childData['username'] ?? 'User',
-            image: childData['faceImage'] ?? '',
+            image: UserImage.fromMap(childData),
             myReferralCode: childMyCode,
             level: level + 1,
             totalPoints: childPoints,
@@ -569,7 +560,7 @@ class CustomerDetailController extends GetxController {
             final mDoc = await _db.collection('users').doc(mUid).get();
             if (mDoc.exists) {
               final mData = mDoc.data() as Map<String, dynamic>;
-              memberDetailMap[mUid]!['image'] = mData['faceImage'] ?? '';
+              memberDetailMap[mUid]!['image'] = UserImage.fromMap(mData);
               memberDetailMap[mUid]!['name'] =
                   mData['name'] ??
                   mData['username'] ??

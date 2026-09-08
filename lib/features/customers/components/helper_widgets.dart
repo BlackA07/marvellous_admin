@@ -1,9 +1,10 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+
+import '../../../core/common/widgets/user_avatar.dart';
 
 Widget buildDivider() => const Divider(height: 1, indent: 16, endIndent: 16);
 
@@ -265,30 +266,14 @@ Widget buildBadge(String text, Color textColor, Color bgColor) {
   );
 }
 
+/// Kept for the screens that already call it — the real work now lives in
+/// UserImage so every avatar in the panel decodes the same way (URL, data URI,
+/// unpadded base64, scheme-less Cloudinary link).
 Widget buildBase64Image(String imageData) {
-  if (imageData.trim().isEmpty)
-    return const Icon(Icons.person, color: Colors.grey, size: 80);
-  try {
-    String cleanData = imageData.trim();
-    if (cleanData.startsWith('http')) {
-      return Image.network(
-        cleanData,
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) =>
-            const Icon(Icons.person, color: Colors.grey, size: 80),
-      );
-    }
-    if (cleanData.contains(',')) cleanData = cleanData.split(',').last;
-    cleanData = cleanData.replaceAll(RegExp(r'\s+'), '');
-    return Image.memory(
-      base64Decode(cleanData),
-      fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) =>
-          const Icon(Icons.person, color: Colors.grey, size: 80),
-    );
-  } catch (_) {
-    return const Icon(Icons.person, color: Colors.grey, size: 80);
-  }
+  return UserImage.render(
+    imageData,
+    fallback: const Icon(Icons.person, color: Colors.grey, size: 80),
+  );
 }
 
 Widget buildDatePickerBtn(

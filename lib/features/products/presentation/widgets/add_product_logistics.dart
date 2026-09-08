@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:image_cropper/image_cropper.dart';
 import '../../../../features/categories/controllers/category_controller.dart';
 import '../../../categories/models/category_model.dart';
+import '../../controller/products_controller.dart';
 
 class AddProductLogistics extends StatefulWidget {
   final CategoryController categoryController;
@@ -26,6 +27,19 @@ class AddProductLogistics extends StatefulWidget {
   final Function(Map<String, double>, Map<String, String>, double)
   onDetailsChanged;
 
+  /// ✅ NAYA: Quality field. Optional — null hone par field dikhti hi nahi,
+  /// is liye purane callers (packages waghera) bilkul waise hi chalte rahenge.
+  final TextEditingController? qualityCtrl;
+
+  /// Pehle add ki gayi qualities — field par click karte hi list khul jati hai.
+  final List<String> qualityHistory;
+
+  /// ✅ NAYA: purana Karachi/Pakistan/Worldwide shipping block dikhana hai ya
+  /// nahi. Add Product screen ab naya per-zone system use karti hai, is liye
+  /// wahan `false` bheja jata hai. Default `true` — baqi purane callers
+  /// (packages waghera) bilkul waise hi chalte rahenge.
+  final bool showShippingSection;
+
   const AddProductLogistics({
     Key? key,
     required this.categoryController,
@@ -41,6 +55,9 @@ class AddProductLogistics extends StatefulWidget {
     required this.onSubCategoryChanged,
     required this.onLocationChanged,
     required this.onDetailsChanged,
+    this.showShippingSection = true,
+    this.qualityCtrl,
+    this.qualityHistory = const [],
   }) : super(key: key);
 
   @override
@@ -51,6 +68,8 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
   Map<String, double> deliveryFees = {};
   Map<String, String> deliveryTimes = {};
   double codFee = 0.0;
+
+  final FocusNode _qualityFocus = FocusNode();
 
   Map<String, TextEditingController> feeControllers = {};
   Map<String, TextEditingController> timeControllers = {};
@@ -123,6 +142,7 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
       ctrl.dispose();
     }
     codController.dispose();
+    _qualityFocus.dispose();
     super.dispose();
   }
 
@@ -199,6 +219,13 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
             ),
           ],
         ),
+        // ✅ NAYA: Quality (history ke saath)
+        if (widget.qualityCtrl != null) ...[
+          const SizedBox(height: 15),
+          _buildQualityField(),
+        ],
+
+        if (widget.showShippingSection) ...[
         const SizedBox(height: 30),
         _buildHeader("Shipping Logistics"),
         _buildDropdown(
@@ -233,6 +260,7 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
           codFee = double.tryParse(val) ?? 0.0;
           _updateParent();
         }, isNumber: true),
+        ],
       ],
     );
   }
@@ -257,6 +285,143 @@ class _AddProductLogisticsState extends State<AddProductLogistics> {
           ),
         ],
       ),
+    );
+  }
+
+  // ✅ Quality field — click karte hi purani saari qualities dikh jati hain,
+  // type karne par filter ho jati hain, aur ✕ se history se hat bhi sakti hain.
+  Widget _buildQualityField() {
+    final ProductsController pController = Get.find<ProductsController>();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              "Quality",
+              style: GoogleFonts.comicNeue(
+                color: widget.textColor,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(width: 8),
+            if (widget.qualityHistory.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 7,
+                  vertical: 2,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.deepPurple.shade50,
+                  borderRadius: BorderRadius.circular(5),
+                ),
+                child: Text(
+                  "${widget.qualityHistory.length} saved",
+                  style: GoogleFonts.comicNeue(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.deepPurple,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 5),
+        RawAutocomplete<String>(
+          textEditingController: widget.qualityCtrl,
+          focusNode: _qualityFocus,
+          optionsBuilder: (TextEditingValue value) {
+            final q = value.text.trim().toLowerCase();
+            // Khaali field par bhi POORI history dikhani hai.
+            if (q.isEmpty) return widget.qualityHistory;
+            return widget.qualityHistory.where(
+              (e) => e.toLowerCase().contains(q),
+            );
+          },
+          onSelected: (selection) {
+            widget.qualityCtrl!.text = selection;
+          },
+          fieldViewBuilder: (context, textController, focusNode, _) {
+            return TextFormField(
+              controller: textController,
+              focusNode: focusNode,
+              style: const TextStyle(color: Colors.black, fontSize: 14),
+              cursorColor: Colors.black,
+              decoration: InputDecoration(
+                hintText: "e.g. A Grade / Original / Copy",
+                hintStyle: const TextStyle(color: Colors.grey, fontSize: 13),
+                filled: true,
+                fillColor: widget.cardColor,
+                prefixIcon: const Icon(
+                  Icons.workspace_premium_outlined,
+                  color: Colors.deepPurple,
+                  size: 20,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+              ),
+            );
+          },
+          optionsViewBuilder: (context, onSelected, options) {
+            return Align(
+              alignment: Alignment.topLeft,
+              child: Material(
+                elevation: 4,
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 240),
+                  child: ListView(
+                    padding: EdgeInsets.zero,
+                    shrinkWrap: true,
+                    children: options.map((opt) {
+                      return ListTile(
+                        dense: true,
+                        visualDensity: VisualDensity.compact,
+                        leading: const Icon(
+                          Icons.history,
+                          size: 17,
+                          color: Colors.deepPurple,
+                        ),
+                        title: Text(
+                          opt,
+                          style: GoogleFonts.comicNeue(
+                            color: Colors.black87,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        trailing: IconButton(
+                          tooltip: "History se hatayen",
+                          icon: const Icon(
+                            Icons.close,
+                            size: 15,
+                            color: Colors.red,
+                          ),
+                          onPressed: () {
+                            pController.removeSpecificHistoryItem(
+                              opt,
+                              'quality',
+                            );
+                            (context as Element).markNeedsBuild();
+                          },
+                        ),
+                        onTap: () => onSelected(opt),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ],
     );
   }
 

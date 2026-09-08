@@ -1,5 +1,84 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+/// Product kis kis jagah available hai — ek "unit".
+/// level: 'country' (poori country) | 'state' (poora state) | 'city' (sirf city)
+class ProductAvailabilityUnit {
+  final String level;
+  final String countryId;
+  final String countryName;
+  final String? stateId;
+  final String? stateName;
+  final String? cityId;
+  final String? cityName;
+
+  ProductAvailabilityUnit({
+    required this.level,
+    required this.countryId,
+    required this.countryName,
+    this.stateId,
+    this.stateName,
+    this.cityId,
+    this.cityName,
+  });
+
+  /// Delivery fee/time maps mein isi key se entry hoti hai.
+  String get key => [
+    countryId,
+    if (stateId != null) stateId,
+    if (cityId != null) cityId,
+  ].join('|');
+
+  /// Sab se choti unit ka naam (city > state > country).
+  String get label => cityName ?? stateName ?? countryName;
+
+  /// "Pakistan › Sindh › Karachi"
+  String get pathLabel => [
+    countryName,
+    if (stateName != null) stateName,
+    if (cityName != null) cityName,
+  ].join(' › ');
+
+  ProductAvailabilityUnit copyWith({String? level}) => ProductAvailabilityUnit(
+    level: level ?? this.level,
+    countryId: countryId,
+    countryName: countryName,
+    stateId: stateId,
+    stateName: stateName,
+    cityId: cityId,
+    cityName: cityName,
+  );
+
+  Map<String, dynamic> toMap() => {
+    'level': level,
+    'countryId': countryId,
+    'countryName': countryName,
+    'stateId': stateId,
+    'stateName': stateName,
+    'cityId': cityId,
+    'cityName': cityName,
+    'key': key,
+  };
+
+  factory ProductAvailabilityUnit.fromMap(Map<String, dynamic> map) {
+    return ProductAvailabilityUnit(
+      level: map['level']?.toString() ?? 'country',
+      countryId: map['countryId']?.toString() ?? '',
+      countryName: map['countryName']?.toString() ?? '',
+      stateId: map['stateId']?.toString(),
+      stateName: map['stateName']?.toString(),
+      cityId: map['cityId']?.toString(),
+      cityName: map['cityName']?.toString(),
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is ProductAvailabilityUnit && other.key == key;
+
+  @override
+  int get hashCode => key.hashCode;
+}
+
 class ProductModel {
   String? id;
   String name;
@@ -30,6 +109,25 @@ class ProductModel {
   double codFee;
   double averageRating;
   int totalReviews;
+
+  // ── NAYE FIELDS (purane products par koi asar nahi — sab optional) ──
+  /// Admin ki live location jahan se product add kiya gaya.
+  Map<String, dynamic>? adminLiveLocation;
+
+  /// Product kin kin countries/states/cities mein available hai.
+  List<ProductAvailabilityUnit> availabilityUnits;
+
+  /// Har availability unit ki apni delivery fee (base currency: PKR).
+  Map<String, double> regionFeesMap;
+
+  /// Har availability unit ka apna delivery time.
+  Map<String, String> regionTimeMap;
+
+  /// Product khareedne mein jo extra kharcha aaya (transport, packing waghera).
+  double goodsExpense;
+
+  /// Product ki quality (admin khud type karta hai — e.g. "A Grade", "Original").
+  String quality;
 
   bool isPackage;
   List<String> includedItemIds;
@@ -68,6 +166,12 @@ class ProductModel {
     this.codFee = 0.0,
     this.averageRating = 0.0,
     this.totalReviews = 0,
+    this.adminLiveLocation,
+    this.availabilityUnits = const [],
+    this.regionFeesMap = const {},
+    this.regionTimeMap = const {},
+    this.goodsExpense = 0.0,
+    this.quality = '',
     this.isPackage = false,
     this.includedItemIds = const [],
     this.showDecimalPoints = true,
@@ -107,6 +211,12 @@ class ProductModel {
       'codFee': codFee,
       'averageRating': averageRating,
       'totalReviews': totalReviews,
+      'adminLiveLocation': adminLiveLocation,
+      'availabilityUnits': availabilityUnits.map((e) => e.toMap()).toList(),
+      'regionFeesMap': regionFeesMap,
+      'regionTimeMap': regionTimeMap,
+      'goodsExpense': goodsExpense,
+      'quality': quality,
       'isPackage': isPackage,
       'includedItemIds': includedItemIds,
       'showDecimalPoints': showDecimalPoints,
@@ -160,6 +270,34 @@ class ProductModel {
       codFee: (map['codFee'] as num?)?.toDouble() ?? 0.0,
       averageRating: (map['averageRating'] as num?)?.toDouble() ?? 0.0,
       totalReviews: (map['totalReviews'] as num?)?.toInt() ?? 0,
+      adminLiveLocation: map['adminLiveLocation'] is Map
+          ? (map['adminLiveLocation'] as Map).cast<String, dynamic>()
+          : null,
+      availabilityUnits: map['availabilityUnits'] is List
+          ? (map['availabilityUnits'] as List)
+                .whereType<Map>()
+                .map(
+                  (e) => ProductAvailabilityUnit.fromMap(
+                    e.cast<String, dynamic>(),
+                  ),
+                )
+                .toList()
+          : const [],
+      regionFeesMap: map['regionFeesMap'] is Map
+          ? (map['regionFeesMap'] as Map).map(
+              (key, value) => MapEntry(
+                key.toString(),
+                (value as num?)?.toDouble() ?? 0.0,
+              ),
+            )
+          : const {},
+      regionTimeMap: map['regionTimeMap'] is Map
+          ? (map['regionTimeMap'] as Map).map(
+              (key, value) => MapEntry(key.toString(), value.toString()),
+            )
+          : const {},
+      goodsExpense: (map['goodsExpense'] as num?)?.toDouble() ?? 0.0,
+      quality: map['quality']?.toString() ?? '',
       isPackage: map['isPackage'] ?? false,
       includedItemIds: map['includedItemIds'] is List
           ? (map['includedItemIds'] as List).map((e) => e.toString()).toList()

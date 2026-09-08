@@ -512,14 +512,22 @@ Future<Map<String, dynamic>> _ensureUserInTree(
 
 /// Atomic placement — Firestore transaction ke andar count check +
 /// write karta hai, isliye race condition kabhi nahi hogi.
+///
+/// ⚠️ NOTE: MLM tree mein user ko place karne ka ye WAHID (only) raasta hai.
+/// Customer app se placement jaan bujh kar hata di gayi hai — do jagah se
+/// place hone par counters out-of-sync ho jate the aur 8th bachcha ban jata tha.
 Future<void> _placeUserAtomic({
   required String newUserUid,
   required String referrerUid,
   required String fallbackName,
 }) async {
   Set<String> excludedFull = {};
+  int attempts = 0;
+  const int maxAttempts = 60; // infinite loop se bachao (slow net / heavy contention)
 
-  while (true) {
+  while (attempts < maxAttempts) {
+    attempts++;
+
     final candidateUid = await _findAvailableSpotBFS(referrerUid, excludedFull);
     if (candidateUid == null) return; // tree mein jagah nahi mili (bohot rare)
 
@@ -528,6 +536,10 @@ Future<void> _placeUserAtomic({
       await _db.runTransaction((tx) async {
         final buyerRef = _db.collection('users').doc(newUserUid);
         final buyerSnap = await tx.get(buyerRef);
+        if (!buyerSnap.exists) {
+          done = true;
+          return;
+        }
         final buyerData = buyerSnap.data() as Map<String, dynamic>? ?? {};
 
         // ✅ Guard: agar buyer already kahin place ho chuka hai
@@ -540,15 +552,24 @@ Future<void> _placeUserAtomic({
 
         final parentRef = _db.collection('users').doc(candidateUid);
         final parentSnap = await tx.get(parentRef);
+
+        // Parent doc gayab ho gaya — is candidate ko chhod kar agla dekho
+        if (!parentSnap.exists) {
+          throw Exception('SLOT_TAKEN');
+        }
+
         final parentData = parentSnap.data() as Map<String, dynamic>? ?? {};
-        final currentCount = (parentData['downlineCount'] ?? 0) as int;
+
+        // num -> int (agar kisi wajah se field double ban gaya ho to crash na ho)
+        final currentCount =
+            (parentData['downlineCount'] as num?)?.toInt() ?? 0;
 
         if (currentCount >= 7) {
           // ✅ Kisi aur ne isi waqt ye slot le liya — retry hoga
           throw Exception('SLOT_TAKEN');
         }
 
-        final parentLevel = (parentData['mlmLevel'] ?? 0) as int;
+        final parentLevel = (parentData['mlmLevel'] as num?)?.toInt() ?? 0;
 
         final childRef = parentRef.collection('mlm_downline').doc(newUserUid);
         tx.set(childRef, {
@@ -581,8 +602,20 @@ Future<void> _placeUserAtomic({
   }
 }
 
-/// BFS ab downlineCount field dekhta hai — subcollection count nahi
-/// (jo transaction ke bahar hota hai isliye stale/race-prone tha).
+/// Tree mein pehli khali jagah dhoondta hai (BFS, referrer se shuru).
+///
+/// 🔴 PEHLE KA BUG: ye sirf user doc ka `downlineCount` field parhta tha.
+/// Wo field kisi bhi purane/manual placement se peeche reh jata tha
+/// (mesalan manual-place.js ne bachcha to daala magar counter nahi barhaya),
+/// to BFS bhari hui node ko "khali" samajh kar 8th bachcha daal deta tha.
+///
+/// ✅ AB: asal `mlm_downline` subcollection ki ginti hi faisla karti hai, aur
+/// field ko us ke mutabiq SELF-HEAL kar diya jata hai — magar sirf UPAR ki
+/// taraf (kabhi ghataya nahi jata). Ye upar-only rule zaroori hai: do
+/// deliveries ek sath aayen to ghatane wala heal doosre process ka barhaya
+/// hua counter wapas girake bilkul wahi 8-wala bug dobara bana deta.
+/// Is se invariant pakka rehta hai: downlineCount >= asal bachche,
+/// yani transaction ka `>= 7` check kabhi dhoka nahi khayega.
 Future<String?> _findAvailableSpotBFS(
   String startUid,
   Set<String> exclude,
@@ -595,21 +628,46 @@ Future<String?> _findAvailableSpotBFS(
     if (visited.contains(currentUid)) continue;
     visited.add(currentUid);
 
-    if (!exclude.contains(currentUid)) {
-      final doc = await _db.collection('users').doc(currentUid).get();
-      final data = doc.data() as Map<String, dynamic>?;
-      final count = (data?['downlineCount'] ?? 0) as int;
-      if (count < 7) return currentUid;
-    }
-
+    // ⚠️ orderBy('joinedAt') jaan bujh kar nahi lagaya: Firestore us query se
+    // wo docs chup-chaap nikal deta hai jin mein ye field missing ho — is se
+    // poori branch BFS se gayab ho sakti thi. Sorting client-side ki hai.
     final childrenSnap = await _db
         .collection('users')
         .doc(currentUid)
         .collection('mlm_downline')
-        .orderBy('joinedAt', descending: false)
         .get();
 
-    for (var d in childrenSnap.docs) {
+    final docs = childrenSnap.docs.toList()
+      ..sort((a, b) {
+        final at = a.data()['joinedAt'];
+        final bt = b.data()['joinedAt'];
+        if (at is! Timestamp && bt is! Timestamp) return 0;
+        if (at is! Timestamp) return 1; // missing joinedAt hamesha aakhir mein
+        if (bt is! Timestamp) return -1;
+        return at.compareTo(bt);
+      });
+
+    final int actualChildren = docs.length;
+
+    final userDoc = await _db.collection('users').doc(currentUid).get();
+    final int storedCount =
+        (userDoc.data()?['downlineCount'] as num?)?.toInt() ?? 0;
+
+    // ✅ SELF-HEAL — sirf upar ki taraf
+    if (storedCount < actualChildren) {
+      await _db.collection('users').doc(currentUid).set({
+        'downlineCount': actualChildren,
+      }, SetOptions(merge: true));
+    }
+
+    final int effectiveCount =
+        storedCount > actualChildren ? storedCount : actualChildren;
+
+    if (!exclude.contains(currentUid) && effectiveCount < 7) {
+      return currentUid;
+    }
+
+    for (var d in docs) {
       if (!visited.contains(d.id)) queue.add(d.id);
     }
   }

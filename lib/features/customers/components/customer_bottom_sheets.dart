@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../controller/customer_detail_controller.dart';
+import '../../../core/common/widgets/user_avatar.dart';
 import 'helper_widgets.dart';
 
 Widget buildDirectReferralRow(
@@ -243,16 +244,13 @@ Widget _buildNetworkMemberTile(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.indigo.shade200, width: 2),
-            ),
-            child: ClipOval(
-              child: buildBase64Image(member['image'] as String? ?? ''),
-            ),
+          UserAvatar(
+            uid: member['uid'] as String? ?? '',
+            name: member['name'] as String? ?? 'User',
+            imageData: member['image'] as String?,
+            size: 52,
+            borderColor: Colors.indigo.shade200,
+            borderWidth: 2,
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -588,17 +586,13 @@ void showMemberCommissionHistory(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               child: Row(
                 children: [
-                  Container(
-                    width: 56,
-                    height: 56,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Colors.indigo.shade200,
-                        width: 2.5,
-                      ),
-                    ),
-                    child: ClipOval(child: buildBase64Image(memberImage)),
+                  UserAvatar(
+                    uid: memberUid,
+                    name: memberName,
+                    imageData: memberImage,
+                    size: 56,
+                    borderColor: Colors.indigo.shade200,
+                    borderWidth: 2.5,
                   ),
                   const SizedBox(width: 14),
                   Expanded(

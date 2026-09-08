@@ -36,6 +36,8 @@ class ProductsController extends GetxController {
   // --- NEW: Specific History Lists (for Add Product Screen) ---
   var brandHistoryList = <String>[].obs;
   var productNameHistoryList = <String>[].obs;
+  // ✅ NAYA: Quality suggestions (purane products se banti hai)
+  var qualityHistoryList = <String>[].obs;
 
   var showHistory = false.obs;
 
@@ -129,6 +131,36 @@ class ProductsController extends GetxController {
     return results
         .where((url) => url.isNotEmpty)
         .toList(); // Sirf valid URLs wapas bhejen
+  }
+
+  /// ✅ NAYA: Video Cloudinary par upload (resourceType: Video).
+  /// Agar pehle se URL hai to waisa hi wapas — dobara upload nahi hota.
+  Future<String?> uploadVideoToCloudinary(String? base64Video) async {
+    if (base64Video == null || base64Video.trim().isEmpty) return null;
+    if (base64Video.startsWith('http')) return base64Video;
+
+    try {
+      Uint8List bytes = base64Decode(base64Video);
+      final byteData = ByteData.view(bytes.buffer);
+
+      CloudinaryResponse response = await cloudinary.uploadFile(
+        CloudinaryFile.fromByteData(
+          byteData,
+          identifier: 'prod_vid_${DateTime.now().millisecondsSinceEpoch}.mp4',
+          resourceType: CloudinaryResourceType.Video,
+        ),
+      );
+      return response.secureUrl;
+    } catch (e) {
+      debugPrint("Video upload error: $e");
+      Get.snackbar(
+        "Video Upload Failed",
+        "Video upload nahi ho saka: $e",
+        backgroundColor: Colors.redAccent,
+        colorText: Colors.white,
+      );
+      return null;
+    }
   }
 
   // --- ✨ MIGRATION FUNCTION: Add averageRating & totalReviews to old products ---
@@ -339,6 +371,7 @@ class ProductsController extends GetxController {
       // --- Add to Specific History Lists ---
       addToSpecificHistory(product.name, 'product');
       addToSpecificHistory(product.brand, 'brand');
+      addToSpecificHistory(product.quality, 'quality');
 
       Get.snackbar(
         "Success",
@@ -1261,6 +1294,7 @@ class ProductsController extends GetxController {
       addToHistory(product.brand);
       addToSpecificHistory(product.name, 'product');
       addToSpecificHistory(product.brand, 'brand');
+      addToSpecificHistory(product.quality, 'quality');
 
       return true;
     } catch (e) {
@@ -1405,9 +1439,17 @@ class ProductsController extends GetxController {
         .toSet()
         .toList();
 
+    // ✅ Unique qualities
+    var qualities = productList
+        .map((p) => p.quality)
+        .where((q) => q.trim().isNotEmpty)
+        .toSet()
+        .toList();
+
     // Update Observables
     brandHistoryList.assignAll(brands);
     productNameHistoryList.assignAll(names);
+    qualityHistoryList.assignAll(qualities);
   }
 
   // --- PUBLIC GETTERS ---
@@ -1507,7 +1549,11 @@ class ProductsController extends GetxController {
   void addToSpecificHistory(String term, String type) {
     if (term.trim().isEmpty) return;
 
-    if (type == 'brand') {
+    if (type == 'quality') {
+      if (!qualityHistoryList.contains(term)) {
+        qualityHistoryList.add(term);
+      }
+    } else if (type == 'brand') {
       // Avoid duplicates
       if (!brandHistoryList.contains(term)) {
         brandHistoryList.add(term);
@@ -1520,7 +1566,9 @@ class ProductsController extends GetxController {
   }
 
   void removeSpecificHistoryItem(String term, String type) {
-    if (type == 'brand') {
+    if (type == 'quality') {
+      qualityHistoryList.remove(term);
+    } else if (type == 'brand') {
       brandHistoryList.remove(term);
     } else {
       productNameHistoryList.remove(term);

@@ -41,6 +41,15 @@ class UserSettingsController extends GetxController {
       'title': 'Customers',
       'subItems': ['Customers Details', 'Login List'],
     },
+    {'title': 'Banners', 'subItems': <String>[]},
+    {
+      'title': 'Coupons',
+      'subItems': ['All Coupons', 'Create Coupon', 'Coupon Designs'],
+    },
+    {
+      'title': 'Announcements',
+      'subItems': ['All Announcements', 'Add Announcement'],
+    },
     {'title': 'Orders', 'subItems': <String>[]},
     {
       'title': 'MLM Network',
