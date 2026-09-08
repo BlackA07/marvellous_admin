@@ -7,6 +7,11 @@ class AddProductPricing extends StatefulWidget {
       saleCtrl,
       originalCtrl,
       warrantyCtrl;
+
+  /// ✅ NAYA: Goods Expense (product khareedne ka extra kharcha).
+  /// Optional rakha gaya hai taake purane callers (jaise packages screen)
+  /// bina kisi tabdeeli ke chalte rahen — null hone par field dikhti hi nahi.
+  final TextEditingController? goodsExpenseCtrl;
   // calculatedPoints hataya diya kyunke ab hum live calculate karenge
   final Color cardColor, textColor, accentColor;
 
@@ -16,6 +21,7 @@ class AddProductPricing extends StatefulWidget {
     required this.saleCtrl,
     required this.originalCtrl,
     required this.warrantyCtrl,
+    this.goodsExpenseCtrl,
     required this.cardColor,
     required this.textColor,
     required this.accentColor,
@@ -38,12 +44,14 @@ class _AddProductPricingState extends State<AddProductPricing> {
     // Jab user price change kare to UI update ho
     widget.purchaseCtrl.addListener(_updateUI);
     widget.saleCtrl.addListener(_updateUI);
+    widget.goodsExpenseCtrl?.addListener(_updateUI);
   }
 
   @override
   void dispose() {
     widget.purchaseCtrl.removeListener(_updateUI);
     widget.saleCtrl.removeListener(_updateUI);
+    widget.goodsExpenseCtrl?.removeListener(_updateUI);
     super.dispose();
   }
 
@@ -51,11 +59,20 @@ class _AddProductPricingState extends State<AddProductPricing> {
     if (mounted) setState(() {});
   }
 
-  double get grossProfit {
-    final purchase = double.tryParse(widget.purchaseCtrl.text) ?? 0;
-    final sale = double.tryParse(widget.saleCtrl.text) ?? 0;
-    return sale - purchase;
-  }
+  double get purchasePrice =>
+      double.tryParse(widget.purchaseCtrl.text) ?? 0;
+
+  double get salePrice => double.tryParse(widget.saleCtrl.text) ?? 0;
+
+  /// ✅ Goods Expense — purchase ke saath jamaa hota hai.
+  double get goodsExpense =>
+      double.tryParse(widget.goodsExpenseCtrl?.text ?? '') ?? 0;
+
+  /// Total cost = Purchase + Goods Expense
+  double get totalCost => purchasePrice + goodsExpense;
+
+  /// Gross Profit = Sale − (Purchase + Goods Expense)
+  double get grossProfit => salePrice - totalCost;
 
   @override
   Widget build(BuildContext context) {
@@ -113,6 +130,15 @@ class _AddProductPricingState extends State<AddProductPricing> {
               ],
             ),
 
+            if (widget.goodsExpenseCtrl != null) ...[
+              const SizedBox(height: 15),
+              _buildTextField(
+                "Goods Expense (Optional)",
+                widget.goodsExpenseCtrl!,
+                isNumber: true,
+              ),
+            ],
+
             const SizedBox(height: 15),
             _buildTextField("Sale Price", widget.saleCtrl, isNumber: true),
 
@@ -137,6 +163,17 @@ class _AddProductPricingState extends State<AddProductPricing> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
+                  if (widget.goodsExpenseCtrl != null)
+                    Text(
+                      "Sale ${_fmt(salePrice, showDecimals)} − "
+                      "(Purchase ${_fmt(purchasePrice, showDecimals)} + "
+                      "Goods Expense ${_fmt(goodsExpense, showDecimals)})",
+                      style: GoogleFonts.comicNeue(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.black54,
+                      ),
+                    ),
                   Text(
                     showDecimals
                         ? grossProfit.toStringAsFixed(2)
@@ -217,6 +254,9 @@ class _AddProductPricingState extends State<AddProductPricing> {
       },
     );
   }
+
+  String _fmt(double v, bool showDecimals) =>
+      showDecimals ? v.toStringAsFixed(2) : v.toInt().toString();
 
   Widget _buildTextField(
     String label,

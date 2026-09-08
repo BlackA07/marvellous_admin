@@ -31,6 +31,13 @@ import '../../../staff/presentation/add_staff_screen.dart';
 import '../../../staff/presentation/staff_list/staff_list_screen.dart';
 import '../../../user_settings/views/user_settings_screen.dart';
 import '../../../banners/screens/banner_list_screen.dart';
+import '../../../banners/screens/announcement_list_screen.dart';
+import '../../../banners/screens/add_announcement_screen.dart';
+
+// --- COUPONS IMPORTS ---
+import '../../../coupons/screens/coupon_list_screen.dart';
+import '../../../coupons/screens/add_coupon_screen.dart';
+import '../../../coupons/screens/coupon_designs_screen.dart';
 
 // --- VENDOR IMPORTS ---
 import '../../../vendor_purchase_product/presentation/screens/admin_order_requests_screen.dart';
@@ -48,6 +55,7 @@ import '../../../customers/presentation/screens/login_list_screen.dart';
 import '../../../products/presentation/screens/products_home_screen.dart';
 import '../../../products/presentation/screens/add_product_screen.dart';
 import '../../../products/presentation/screens/pending_requests_screen.dart';
+import '../../../products/presentation/screens/add_locations_screen.dart';
 
 // --- PACKAGES IMPORTS ---
 import '../../../packages/presentation/screens/packages_home_screen.dart'
@@ -95,6 +103,7 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
         "Pending Requests",
         "Categories",
         "Top Trending",
+        "Add Locations",
       ], // ✅ "Vendors" removed from here
     ),
     // ✅ NEW DEDICATED VENDORS MENU ADDED
@@ -125,6 +134,18 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
       subItems: ["Customers Details", "Login List", "App Update"], // ✅ NEW
     ),
     AdminMenuItem(title: "Banners", icon: Icons.campaign_outlined),
+    AdminMenuItem(
+      title: "Coupons",
+      icon: Icons.local_activity_outlined,
+      hasSubmenu: true,
+      subItems: ["All Coupons", "Create Coupon", "Coupon Designs"],
+    ),
+    AdminMenuItem(
+      title: "Announcements",
+      icon: Icons.notifications_active_outlined,
+      hasSubmenu: true,
+      subItems: ["All Announcements", "Add Announcement"],
+    ),
     AdminMenuItem(title: "Orders", icon: Icons.shopping_bag_outlined),
     AdminMenuItem(
       title: "MLM Network",
@@ -467,6 +488,8 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
                                       targetScreen = CategoriesScreen();
                                     } else if (subItem == "Top Trending") {
                                       targetScreen = const TopTrendingScreen();
+                                    } else if (subItem == "Add Locations") {
+                                      targetScreen = const AddLocationsScreen();
                                     }
                                   }
                                   // ─── VENDORS (✅ NAYA SECTION) ───────────────
@@ -562,6 +585,27 @@ class _AdminDrawerState extends ConsumerState<AdminDrawer> {
                                           const FinanceReportScreen();
                                     } else if (subItem == "Staff Report") {
                                       targetScreen = const StaffReportScreen();
+                                    }
+                                  }
+                                  // ─── COUPONS ───────────────────────────────
+                                  else if (item.title == "Coupons") {
+                                    if (subItem == "All Coupons") {
+                                      targetScreen = const CouponListScreen();
+                                    } else if (subItem == "Create Coupon") {
+                                      targetScreen = const AddCouponScreen();
+                                    } else if (subItem == "Coupon Designs") {
+                                      targetScreen =
+                                          const CouponDesignsScreen();
+                                    }
+                                  }
+                                  // ─── ANNOUNCEMENTS ─────────────────────────
+                                  else if (item.title == "Announcements") {
+                                    if (subItem == "All Announcements") {
+                                      targetScreen =
+                                          const AnnouncementListScreen();
+                                    } else if (subItem == "Add Announcement") {
+                                      targetScreen =
+                                          const AddAnnouncementScreen();
                                     }
                                   }
                                   // ─── ORDERS ───────────────────────────────

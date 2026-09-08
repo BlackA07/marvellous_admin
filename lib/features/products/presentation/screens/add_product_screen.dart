@@ -21,6 +21,10 @@ import '../widgets/add_product_media.dart';
 import '../widgets/add_product_info.dart';
 import '../widgets/add_product_logistics.dart';
 import '../widgets/add_product_pricing.dart';
+import '../widgets/add_product_live_location.dart';
+import '../widgets/add_product_availability.dart';
+import '../widgets/add_product_region_delivery.dart';
+import '../../services/live_location_service.dart';
 
 // SCREEN IMPORT
 import 'products_home_screen.dart';
@@ -66,6 +70,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final TextEditingController saleCtrl = TextEditingController();
   final TextEditingController originalCtrl = TextEditingController();
   final TextEditingController warrantyCtrl = TextEditingController();
+  // ✅ NAYA: Goods Expense
+  final TextEditingController goodsExpenseCtrl = TextEditingController();
+  // ✅ NAYA: Quality
+  final TextEditingController qualityCtrl = TextEditingController();
 
   // State
   DateTime selectedDate = DateTime.now();
@@ -73,12 +81,28 @@ class _AddProductScreenState extends State<AddProductScreen> {
   String? selectedSubCategory;
   String selectedLocation = "Pakistan";
   List<String> selectedImagesBase64 = [];
+
+  // ── ✅ MEDIA LIMITS ─────────────────────────────────────────────────
+  static const int kMaxImages = 9;
+  static const int kMaxImageBytes = 3 * 1024 * 1024; // 3 MB per image
+  static const int kMaxVideoBytes = 25 * 1024 * 1024; // 25 MB
+  static const int kMaxVideoSeconds = 30;
+  static const List<String> kAllowedImageExt = ['jpg', 'jpeg', 'png', 'webp'];
+  static const List<String> kAllowedVideoExt = ['mp4'];
+
+  /// Ek hi video allowed — base64 ya (edit mode mein) Cloudinary URL.
+  String? selectedVideo;
+  int selectedVideoBytes = 0;
   double calculatedPoints = 0.0;
   bool _isSuccess = false;
   bool _isMobile = false;
 
   // ✅ Key to reset Logistics controllers when form is cleared
   Key logisticsKey = UniqueKey();
+
+  // ✅ Availability selector ko "Add Another" par reset karne ke liye
+  // (uski selection widget ke andar rehti hai).
+  Key availabilityKey = UniqueKey();
 
   // Warranty Checkboxes State
   bool hasCompanyWarranty = false;
@@ -97,6 +121,17 @@ class _AddProductScreenState extends State<AddProductScreen> {
   };
   double codFee = 0.0;
 
+  // ── ✅ NAYE FIELDS ──────────────────────────────────────────────────
+  /// Admin ki live location (screen open hote hi auto aati hai).
+  LiveLocationResult? liveLocation;
+
+  /// Product kin kin countries/states/cities mein available hai.
+  List<ProductAvailabilityUnit> availabilityUnits = [];
+
+  /// Har zone ki apni delivery fee / time (key = unit.key).
+  Map<String, double> regionFeesMap = {};
+  Map<String, String> regionTimeMap = {};
+
   // Colors
   final Color bgColor = const Color(0xFFF5F7FA);
   final Color cardColor = Colors.white;
@@ -113,6 +148,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
     purchaseCtrl.addListener(_calculatePoints);
     saleCtrl.addListener(_calculatePoints);
+    goodsExpenseCtrl.addListener(_calculatePoints);
     nameCtrl.addListener(() {
       _currentName = nameCtrl.text;
       _checkIfMobile(nameCtrl.text);
@@ -132,6 +168,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
     saleCtrl.dispose();
     originalCtrl.dispose();
     warrantyCtrl.dispose();
+    goodsExpenseCtrl.dispose();
+    qualityCtrl.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -171,8 +209,13 @@ class _AddProductScreenState extends State<AddProductScreen> {
   void _calculatePoints() {
     double buy = double.tryParse(purchaseCtrl.text) ?? 0;
     double sell = double.tryParse(saleCtrl.text) ?? 0;
+    double expense = double.tryParse(goodsExpenseCtrl.text) ?? 0;
     setState(() {
-      calculatedPoints = productController.calculatePoints(buy, sell);
+      // ✅ Goods Expense purchase ke saath jamaa — gross profit usi se banta hai.
+      calculatedPoints = productController.calculatePoints(
+        buy + expense,
+        sell,
+      );
     });
   }
 
@@ -222,8 +265,22 @@ class _AddProductScreenState extends State<AddProductScreen> {
     }
 
     selectedImagesBase64 = List.from(product.images);
+    selectedVideo = product.video;
+    selectedVideoBytes = 0; // URL hai to size dikhane ki zaroorat nahi
     selectedDate = product.dateAdded;
     calculatedPoints = product.productPoints;
+
+    // ✅ Naye fields
+    goodsExpenseCtrl.text = product.goodsExpense == 0.0
+        ? ""
+        : product.goodsExpense.toString();
+    qualityCtrl.text = product.quality;
+    availabilityUnits = List.from(product.availabilityUnits);
+    regionFeesMap = Map.from(product.regionFeesMap);
+    regionTimeMap = Map.from(product.regionTimeMap);
+    if (product.adminLiveLocation != null) {
+      liveLocation = LiveLocationResult.fromMap(product.adminLiveLocation!);
+    }
 
     // ✅ State update wrap karke setState mein daal diya
     setState(() {
@@ -243,9 +300,30 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
   // ... (rest of the file stays same)
 
+  // ── ✅ Media helpers ──────────────────────────────────────────────
+  String _extOf(String fileName) {
+    final i = fileName.lastIndexOf('.');
+    if (i < 0 || i == fileName.length - 1) return '';
+    return fileName.substring(i + 1).toLowerCase();
+  }
+
+  String _mb(int bytes) => (bytes / (1024 * 1024)).toStringAsFixed(1);
+
+  void _mediaError(String title, String msg) {
+    Get.snackbar(
+      title,
+      msg,
+      backgroundColor: Colors.redAccent,
+      colorText: Colors.white,
+      snackPosition: SnackPosition.BOTTOM,
+      margin: const EdgeInsets.all(20),
+      duration: const Duration(seconds: 4),
+    );
+  }
+
   Future<void> _handleImagePicker() async {
-    if (selectedImagesBase64.length >= 3) {
-      Get.snackbar("Limit Reached", "Max 3 images allowed.");
+    if (selectedImagesBase64.length >= kMaxImages) {
+      _mediaError("Limit Reached", "Max $kMaxImages images allowed.");
       return;
     }
 
@@ -303,13 +381,33 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
   Future<void> _pickImages(ImageSource source) async {
     try {
-      if (selectedImagesBase64.length >= 3) return;
+      if (selectedImagesBase64.length >= kMaxImages) return;
 
       final XFile? file = await _picker.pickImage(source: source);
       if (file == null) return;
 
+      // ── ✅ Format check ────────────────────────────────────────
+      final String ext = _extOf(file.name);
+      if (ext.isNotEmpty && !kAllowedImageExt.contains(ext)) {
+        _mediaError(
+          "Format not allowed",
+          "Sirf ${kAllowedImageExt.join(', ').toUpperCase()} images allowed hain. "
+              "Aapne .$ext select ki.",
+        );
+        return;
+      }
+
       if (kIsWeb) {
         final bytes = await file.readAsBytes();
+        // ── ✅ Size check ────────────────────────────────────────
+        if (bytes.lengthInBytes > kMaxImageBytes) {
+          _mediaError(
+            "Image bohat bari hai",
+            "Max ${kMaxImageBytes ~/ (1024 * 1024)}MB allowed — "
+                "ye image ${_mb(bytes.lengthInBytes)}MB ki hai.",
+          );
+          return;
+        }
         setState(() => selectedImagesBase64.add(base64Encode(bytes)));
         return;
       }
@@ -331,6 +429,15 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
       if (croppedFile != null) {
         final bytes = await File(croppedFile.path).readAsBytes();
+        // ── ✅ Size check (crop ke baad) ──────────────────────────
+        if (bytes.lengthInBytes > kMaxImageBytes) {
+          _mediaError(
+            "Image bohat bari hai",
+            "Max ${kMaxImageBytes ~/ (1024 * 1024)}MB allowed — "
+                "ye image ${_mb(bytes.lengthInBytes)}MB ki hai.",
+          );
+          return;
+        }
         setState(() {
           selectedImagesBase64.add(base64Encode(bytes));
         });
@@ -345,6 +452,44 @@ class _AddProductScreenState extends State<AddProductScreen> {
     }
   }
 
+  // ── ✅ Video picker (sirf 1 video, MP4, size + duration limit) ────
+  Future<void> _pickVideo() async {
+    try {
+      final XFile? file = await _picker.pickVideo(
+        source: ImageSource.gallery,
+        maxDuration: const Duration(seconds: kMaxVideoSeconds),
+      );
+      if (file == null) return;
+
+      final String ext = _extOf(file.name);
+      if (ext.isNotEmpty && !kAllowedVideoExt.contains(ext)) {
+        _mediaError(
+          "Format not allowed",
+          "Sirf MP4 video allowed hai. Aapne .$ext select ki.",
+        );
+        return;
+      }
+
+      final bytes = await file.readAsBytes();
+      if (bytes.lengthInBytes > kMaxVideoBytes) {
+        _mediaError(
+          "Video bohat bari hai",
+          "Max ${kMaxVideoBytes ~/ (1024 * 1024)}MB allowed — "
+              "ye video ${_mb(bytes.lengthInBytes)}MB ki hai. "
+              "Choti (~$kMaxVideoSeconds sec) clip use karein.",
+        );
+        return;
+      }
+
+      setState(() {
+        selectedVideo = base64Encode(bytes);
+        selectedVideoBytes = bytes.lengthInBytes;
+      });
+    } catch (e) {
+      _mediaError("Error", "Video pick failed: $e");
+    }
+  }
+
   void _clearForm() {
     nameCtrl.clear();
     modelCtrl.clear();
@@ -354,10 +499,14 @@ class _AddProductScreenState extends State<AddProductScreen> {
     saleCtrl.clear();
     originalCtrl.clear();
     warrantyCtrl.clear();
+    goodsExpenseCtrl.clear();
+    qualityCtrl.clear();
     ramCtrl.clear();
     storageCtrl.clear();
     setState(() {
       selectedImagesBase64.clear();
+      selectedVideo = null;
+      selectedVideoBytes = 0;
       selectedSubCategory = null;
       calculatedPoints = 0.0;
       _isMobile = false;
@@ -374,8 +523,12 @@ class _AddProductScreenState extends State<AddProductScreen> {
         "Worldwide": "7-15 Days",
       };
       codFee = 0.0;
+      availabilityUnits = [];
+      regionFeesMap = {};
+      regionTimeMap = {};
       logisticsKey =
           UniqueKey(); // ✅ Completely resets logistics controllers on clear
+      availabilityKey = UniqueKey(); // ✅ selection bhi reset
     });
   }
 
@@ -393,8 +546,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
   void _saveProduct() async {
     if (_formKey.currentState!.validate()) {
-      List<String> uploadedUrls = await productController
-          .uploadImagesToCloudinary(selectedImagesBase64);
+      // ── Basic checks (image upload se PEHLE, taake fail hone par
+      //    Cloudinary par bekaar upload na ho) ─────────────────────────
       if (selectedCategory == null) {
         Get.snackbar(
           "Required",
@@ -404,49 +557,119 @@ class _AddProductScreenState extends State<AddProductScreen> {
         );
         return;
       }
-      if (deliveryFeesMap["Karachi"] == null ||
-          deliveryFeesMap["Karachi"] == 0.0) {
+
+      // ── ✅ NAYA: Availability zones ────────────────────────────────
+      if (availabilityUnits.isEmpty) {
         Get.snackbar(
           "Required",
-          "Karachi shipping fee fill karein",
+          "Kam az kam ek location select karein (Available Locations).",
           backgroundColor: Colors.red,
           colorText: Colors.white,
         );
         return;
       }
-      if (selectedLocation != "Karachi Only") {
-        if (deliveryFeesMap["Pakistan"] == null ||
-            deliveryFeesMap["Pakistan"] == 0.0) {
-          Get.snackbar(
-            "Required",
-            "Pakistan shipping fee fill karein",
-            backgroundColor: Colors.red,
-            colorText: Colors.white,
-          );
-          return;
-        }
+
+      final List<ProductAvailabilityUnit> incomplete = availabilityUnits
+          .where(
+            (u) =>
+                (regionFeesMap[u.key] ?? 0) <= 0 ||
+                (regionTimeMap[u.key] ?? '').trim().isEmpty,
+          )
+          .toList();
+
+      if (incomplete.isNotEmpty) {
+        Get.snackbar(
+          "Delivery details baqi hain",
+          "In zones ki fee/time bhareain: "
+              "${incomplete.take(3).map((u) => u.label).join(', ')}"
+              "${incomplete.length > 3 ? ' +${incomplete.length - 3} aur' : ''}",
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 5),
+        );
+        return;
       }
-      if (selectedLocation == "Worldwide") {
-        if (deliveryFeesMap["Worldwide"] == null ||
-            deliveryFeesMap["Worldwide"] == 0.0) {
-          Get.snackbar(
-            "Required",
-            "Worldwide shipping fee fill karein",
-            backgroundColor: Colors.red,
-            colorText: Colors.white,
-          );
-          return;
-        }
+
+      // ── Legacy shipping fields derive karo taake purani customer app
+      //    aur purane screens bilkul waise hi chalte rahen ────────────
+      bool isPk(ProductAvailabilityUnit u) =>
+          u.countryName.trim().toLowerCase() == 'pakistan';
+
+      final pkUnits = availabilityUnits.where(isPk).toList();
+      final otherUnits = availabilityUnits.where((u) => !isPk(u)).toList();
+
+      double minFeeOf(List<ProductAvailabilityUnit> list) {
+        final fees = list
+            .map((u) => regionFeesMap[u.key] ?? 0.0)
+            .where((f) => f > 0)
+            .toList();
+        if (fees.isEmpty) return 0.0;
+        return fees.reduce((a, b) => a < b ? a : b);
       }
-      if (codFee == 0.0) {
+
+      String firstTimeOf(
+        List<ProductAvailabilityUnit> list,
+        String fallback,
+      ) {
+        for (final u in list) {
+          final t = (regionTimeMap[u.key] ?? '').trim();
+          if (t.isNotEmpty) return t;
+        }
+        return fallback;
+      }
+
+      final karachiUnits = pkUnits
+          .where((u) => (u.cityName ?? '').trim().toLowerCase() == 'karachi')
+          .toList();
+
+      final bool onlyKarachi =
+          otherUnits.isEmpty &&
+          pkUnits.isNotEmpty &&
+          pkUnits.length == karachiUnits.length;
+
+      final String legacyLocation = otherUnits.isNotEmpty
+          ? "Worldwide"
+          : onlyKarachi
+          ? "Karachi Only"
+          : "Pakistan";
+
+      final double pkFee = minFeeOf(pkUnits);
+      final double karachiFee = karachiUnits.isNotEmpty
+          ? minFeeOf(karachiUnits)
+          : pkFee;
+
+      final Map<String, double> legacyFees = {
+        "Karachi": karachiFee,
+        "Pakistan": pkFee,
+        "Worldwide": minFeeOf(otherUnits),
+      };
+
+      final Map<String, String> legacyTimes = {
+        "Karachi": karachiUnits.isNotEmpty
+            ? firstTimeOf(karachiUnits, "1-2 Days")
+            : firstTimeOf(pkUnits, "1-2 Days"),
+        "Pakistan": firstTimeOf(pkUnits, "3-5 Days"),
+        "Worldwide": firstTimeOf(otherUnits, "7-15 Days"),
+      };
+
+      // COD sirf Pakistan par lagti hai.
+      final double finalCodFee = pkUnits.isEmpty ? 0.0 : codFee;
+      if (pkUnits.isNotEmpty && finalCodFee == 0.0) {
         Get.snackbar(
           "Required",
-          "COD fee fill karein",
+          "Pakistan select hai — COD fee fill karein.",
           backgroundColor: Colors.red,
           colorText: Colors.white,
         );
         return;
       }
+
+      List<String> uploadedUrls = await productController
+          .uploadImagesToCloudinary(selectedImagesBase64);
+
+      // ✅ Video upload (agar hai to) — pehle se URL ho to skip ho jata hai.
+      final String? uploadedVideoUrl = await productController
+          .uploadVideoToCloudinary(selectedVideo);
 
       productController.isLoading.value = true;
 
@@ -467,16 +690,24 @@ class _AddProductScreenState extends State<AddProductScreen> {
         vendorName: _vendorName,
         status: _productStatus,
         images: uploadedUrls,
+        video: uploadedVideoUrl, // ✅ NAYA
         dateAdded: selectedDate,
-        deliveryLocation: selectedLocation,
+        deliveryLocation: legacyLocation,
         warranty: _getCombinedWarranty(),
         productPoints: calculatedPoints,
         showDecimalPoints: true,
         ram: _isMobile ? ramCtrl.text : null,
         storage: _isMobile ? storageCtrl.text : null,
-        deliveryFeesMap: deliveryFeesMap,
-        deliveryTimeMap: deliveryTimeMap,
-        codFee: codFee,
+        deliveryFeesMap: legacyFees,
+        deliveryTimeMap: legacyTimes,
+        codFee: finalCodFee,
+        // ✅ Naye fields
+        adminLiveLocation: liveLocation?.toMap(),
+        availabilityUnits: availabilityUnits,
+        regionFeesMap: regionFeesMap,
+        regionTimeMap: regionTimeMap,
+        goodsExpense: double.tryParse(goodsExpenseCtrl.text) ?? 0,
+        quality: qualityCtrl.text.trim(),
         averageRating: widget.productToEdit?.averageRating ?? 0.0,
         totalReviews: widget.productToEdit?.totalReviews ?? 0,
       );
@@ -594,6 +825,17 @@ class _AddProductScreenState extends State<AddProductScreen> {
                           ),
                         ),
 
+                        // ✅ NAYA: Live Location (auto)
+                        AddProductLiveLocation(
+                          cardColor: cardColor,
+                          textColor: textColor,
+                          accentColor: accentColor,
+                          initialValue: liveLocation,
+                          onChanged: (loc) =>
+                              setState(() => liveLocation = loc),
+                        ),
+                        const SizedBox(height: 30),
+
                         AddProductMedia(
                           images: selectedImagesBase64,
                           onPickImages: _handleImagePicker,
@@ -603,6 +845,18 @@ class _AddProductScreenState extends State<AddProductScreen> {
                           cardColor: cardColor,
                           accentColor: accentColor,
                           textColor: textColor,
+                          // ✅ 9 images + 1 video
+                          maxImages: kMaxImages,
+                          video: selectedVideo,
+                          videoSizeBytes: selectedVideoBytes,
+                          onPickVideo: _pickVideo,
+                          onRemoveVideo: () => setState(() {
+                            selectedVideo = null;
+                            selectedVideoBytes = 0;
+                          }),
+                          maxImageMb: kMaxImageBytes ~/ (1024 * 1024),
+                          maxVideoMb: kMaxVideoBytes ~/ (1024 * 1024),
+                          maxVideoSeconds: kMaxVideoSeconds,
                         ),
                         const SizedBox(height: 30),
 
@@ -662,6 +916,54 @@ class _AddProductScreenState extends State<AddProductScreen> {
                               codFee = cod;
                             });
                           },
+                          // ✅ Purana Karachi/Pakistan/Worldwide block ab
+                          // yahan nahi — uski jagah neeche wala naya
+                          // per-zone system hai.
+                          showShippingSection: false,
+                          // ✅ NAYA: Quality field (history ke saath)
+                          qualityCtrl: qualityCtrl,
+                          qualityHistory:
+                              productController.qualityHistoryList,
+                        ),
+                        const SizedBox(height: 30),
+
+                        // ✅ NAYA: Available Locations (multi-select)
+                        AddProductAvailability(
+                          key: availabilityKey,
+                          initialUnits: availabilityUnits,
+                          cardColor: cardColor,
+                          textColor: textColor,
+                          accentColor: accentColor,
+                          onChanged: (units) {
+                            setState(() {
+                              availabilityUnits = units;
+                              // Hataye gaye zones ki purani fee/time saaf karo
+                              final live = units.map((u) => u.key).toSet();
+                              regionFeesMap.removeWhere(
+                                (k, _) => !live.contains(k),
+                              );
+                              regionTimeMap.removeWhere(
+                                (k, _) => !live.contains(k),
+                              );
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 30),
+
+                        // ✅ NAYA: Har zone ki apni delivery fee + time + COD
+                        AddProductRegionDelivery(
+                          units: availabilityUnits,
+                          initialFees: regionFeesMap,
+                          initialTimes: regionTimeMap,
+                          initialCodFee: codFee,
+                          cardColor: cardColor,
+                          textColor: textColor,
+                          accentColor: accentColor,
+                          onChanged: (fees, times, cod) {
+                            regionFeesMap = fees;
+                            regionTimeMap = times;
+                            codFee = cod;
+                          },
                         ),
                         const SizedBox(height: 30),
 
@@ -670,6 +972,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                           saleCtrl: saleCtrl,
                           originalCtrl: originalCtrl,
                           warrantyCtrl: warrantyCtrl,
+                          goodsExpenseCtrl: goodsExpenseCtrl, // ✅ NAYA
                           cardColor: cardColor,
                           textColor: textColor,
                           accentColor: accentColor,

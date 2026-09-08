@@ -1,4 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+
+import '../../../core/common/widgets/user_avatar.dart';
 import '../models/customer_model.dart';
 
 class CustomersRepository {
@@ -18,16 +20,18 @@ class CustomersRepository {
           )
           .toList();
 
-      // Ab har user ki image resolve karo (subcollection fallback ke saath)
+      // Resolve every missing photo in parallel. UserImage knows all the
+      // places a photo can live and, importantly, treats junk values like the
+      // string 'null' as missing — that is why some avatars used to stay blank
+      // even though profile_data/image held a perfectly good Cloudinary URL.
       list = await Future.wait(
         list.map((customer) async {
-          if (customer.faceImage.isNotEmpty && customer.faceImage != 'null') {
-            return customer; // Already hai, skip
-          }
-          // profile_data subcollection se try karo
-          final img = await _resolveImageFromSubcollection(customer.uid);
-          if (img.isEmpty) return customer;
-          return customer.copyWith(faceImage: img);
+          final image = await UserImage.resolve(
+            customer.uid,
+            known: customer.faceImage,
+          );
+          if (image.isEmpty || image == customer.faceImage) return customer;
+          return customer.copyWith(faceImage: image);
         }),
       );
 
@@ -40,21 +44,5 @@ class CustomersRepository {
     } catch (e) {
       throw e.toString();
     }
-  }
-
-  Future<String> _resolveImageFromSubcollection(String uid) async {
-    try {
-      final doc = await _db
-          .collection('users')
-          .doc(uid)
-          .collection('profile_data')
-          .doc('image')
-          .get();
-      if (doc.exists && doc.data() != null) {
-        // ✅ FIX: 'image' ki jagah 'faceImage' fetch karna hai
-        return doc.data()!['faceImage']?.toString() ?? '';
-      }
-    } catch (_) {}
-    return '';
   }
 }

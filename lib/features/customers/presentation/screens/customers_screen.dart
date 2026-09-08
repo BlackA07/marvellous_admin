@@ -1,10 +1,10 @@
 import 'dart:convert';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import '../../../../core/common/widgets/user_avatar.dart';
 import '../../controller/customers_controller.dart';
 import '../../models/customer_model.dart';
 import 'customer_detail_screen.dart';
@@ -599,15 +599,14 @@ class CustomersScreen extends StatelessWidget {
 
                   Stack(
                     children: [
-                      Container(
-                        height: 65,
-                        width: 65,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white,
-                          border: Border.all(color: themeColor, width: 2.5),
-                        ),
-                        child: ClipOval(child: _buildProfileImage(customer)),
+                      UserAvatar(
+                        uid: customer.uid,
+                        name: customer.name,
+                        imageData: customer.faceImage,
+                        size: 65,
+                        background: Colors.white,
+                        borderColor: themeColor,
+                        borderWidth: 2.5,
                       ),
                       Positioned(
                         bottom: 2,
@@ -997,76 +996,6 @@ class CustomersScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildProfileImage(CustomerModel customer) {
-    if (customer.faceImage.isNotEmpty) {
-      return _buildSmartImage(customer.faceImage);
-    }
-
-    return FutureBuilder<DocumentSnapshot>(
-      future: FirebaseFirestore.instance
-          .collection('users')
-          .doc(customer.uid)
-          .collection('profile_data')
-          .doc('image')
-          .get(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: SizedBox(
-              height: 20,
-              width: 20,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.black26,
-              ),
-            ),
-          );
-        }
-
-        String fetchedImage = '';
-        if (snapshot.hasData && snapshot.data!.exists) {
-          final data = snapshot.data!.data() as Map<String, dynamic>?;
-          fetchedImage = data?['faceImage'] ?? '';
-        }
-        return _buildSmartImage(fetchedImage);
-      },
-    );
-  }
-
-  Widget _buildSmartImage(String imageData) {
-    if (imageData.trim().isEmpty) {
-      return const Icon(Icons.person, color: Colors.black26, size: 35);
-    }
-    try {
-      String cleanData = imageData.trim();
-
-      if (cleanData.startsWith('http')) {
-        return Image.network(
-          cleanData,
-          fit: BoxFit.cover,
-          cacheWidth: 150,
-          errorBuilder: (_, __, ___) =>
-              const Icon(Icons.person, color: Colors.black26, size: 35),
-        );
-      } else {
-        if (cleanData.contains(',')) {
-          cleanData = cleanData.split(',').last;
-        }
-        cleanData = cleanData.replaceAll(RegExp(r'\s+'), '');
-
-        return Image.memory(
-          base64Decode(cleanData),
-          fit: BoxFit.cover,
-          cacheWidth: 150,
-          errorBuilder: (_, __, ___) =>
-              const Icon(Icons.person, color: Colors.black26, size: 35),
-        );
-      }
-    } catch (_) {
-      return const Icon(Icons.person, color: Colors.black26, size: 35);
-    }
-  }
-
   void _showMessageDialog(
     BuildContext context,
     CustomersController controller,
@@ -1173,7 +1102,7 @@ class CustomersScreen extends StatelessWidget {
                               ),
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(10),
-                                child: _buildSmartImage(selectedImageBase64!),
+                                child: UserImage.render(selectedImageBase64!),
                               ),
                             ),
                             Positioned(

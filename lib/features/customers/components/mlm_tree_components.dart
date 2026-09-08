@@ -1,6 +1,7 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+
+import '../../../core/common/widgets/user_avatar.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../mlm/data/models/mlm_models.dart';
 import '../presentation/screens/customer_detail_screen.dart';
@@ -242,32 +243,6 @@ class AdminTreeNodeWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildImage(String data) {
-    if (data.trim().isEmpty)
-      return const Icon(Icons.person, color: Colors.grey, size: 36);
-    try {
-      String cleanData = data.trim();
-      if (cleanData.startsWith('http')) {
-        return Image.network(
-          cleanData,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) =>
-              const Icon(Icons.person, color: Colors.grey),
-        );
-      }
-      if (cleanData.contains(',')) cleanData = cleanData.split(',').last;
-      cleanData = cleanData.replaceAll(RegExp(r'\s+'), '');
-      return Image.memory(
-        base64Decode(cleanData),
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) =>
-            const Icon(Icons.person, color: Colors.grey),
-      );
-    } catch (_) {
-      return const Icon(Icons.person, color: Colors.grey, size: 36);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final bool hasChildren = node.children.isNotEmpty;
@@ -287,22 +262,29 @@ class AdminTreeNodeWidget extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // UserAvatar resolves the photo for this uid on its own (user
+              // doc, then profile_data/image) and caches it, so tree nodes
+              // show a picture even when the node data carried none.
               Container(
-                width: 76,
-                height: 76,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.white,
-                  border: Border.all(color: borderClr, width: 3),
                   boxShadow: [
                     BoxShadow(
-                      color: borderClr.withOpacity(0.25),
+                      color: borderClr.withValues(alpha: 0.25),
                       blurRadius: 10,
                       offset: const Offset(0, 3),
                     ),
                   ],
                 ),
-                child: ClipOval(child: _buildImage(node.image)),
+                child: UserAvatar(
+                  uid: node.uid,
+                  name: node.name,
+                  imageData: node.image,
+                  size: 76,
+                  background: Colors.white,
+                  borderColor: borderClr,
+                  borderWidth: 3,
+                ),
               ),
               const SizedBox(height: 6),
               Container(

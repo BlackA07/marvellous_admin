@@ -1,4 +1,3 @@
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,6 +8,7 @@ import '../../components/customer_bottom_sheets.dart';
 import '../../components/customer_dialogs.dart';
 import '../../components/helper_widgets.dart';
 import '../../components/mlm_tree_components.dart';
+import '../../../../core/common/widgets/user_avatar.dart';
 import '../../controller/customer_detail_controller.dart';
 
 class CustomerDetailScreen extends StatelessWidget {
@@ -78,17 +78,16 @@ class CustomerDetailScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     GestureDetector(
-                      onTap: () =>
-                          showFullImageDialog(context, customer.faceImage),
+                      // Open whatever actually resolved, not the raw field:
+                      // for most accounts the photo lives in the
+                      // profile_data/image subcollection.
+                      onTap: () => showFullImageDialog(
+                        context,
+                        UserImage.cached(customer.uid) ?? customer.faceImage,
+                      ),
                       child: Container(
-                        height: 140,
-                        width: 140,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          border: Border.all(
-                            color: Colors.indigo.shade200,
-                            width: 4,
-                          ),
                           boxShadow: [
                             BoxShadow(
                               color: Colors.indigo.withOpacity(0.15),
@@ -97,8 +96,14 @@ class CustomerDetailScreen extends StatelessWidget {
                             ),
                           ],
                         ),
-                        child: ClipOval(
-                          child: _buildSmartImage(customer.faceImage),
+                        child: UserAvatar(
+                          uid: customer.uid,
+                          name: customer.name,
+                          imageData: customer.faceImage,
+                          size: 140,
+                          background: Colors.white,
+                          borderColor: Colors.indigo.shade200,
+                          borderWidth: 4,
                         ),
                       ),
                     ),
@@ -569,32 +574,4 @@ class CustomerDetailScreen extends StatelessWidget {
     );
   }
 
-  // ✅ SMART IMAGE BUILDER FOR DETAIL SCREEN
-  Widget _buildSmartImage(String imageData) {
-    if (imageData.trim().isEmpty) {
-      return const Icon(Icons.person, color: Colors.black26, size: 60);
-    }
-    try {
-      String cleanData = imageData.trim();
-      if (cleanData.startsWith('http')) {
-        return Image.network(
-          cleanData,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) =>
-              const Icon(Icons.person, color: Colors.black26, size: 60),
-        );
-      } else {
-        if (cleanData.contains(',')) cleanData = cleanData.split(',').last;
-        cleanData = cleanData.replaceAll(RegExp(r'\s+'), '');
-        return Image.memory(
-          base64Decode(cleanData),
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) =>
-              const Icon(Icons.person, color: Colors.black26, size: 60),
-        );
-      }
-    } catch (_) {
-      return const Icon(Icons.person, color: Colors.black26, size: 60);
-    }
-  }
 }

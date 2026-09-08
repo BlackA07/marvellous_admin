@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../../core/common/widgets/user_avatar.dart';
+
 class CustomerModel {
   final String uid;
   final String name;
@@ -183,7 +185,9 @@ class CustomerModel {
       myReferralCode: map['myReferralCode'] ?? '',
       referralCode:
           map['referralCode'] ?? map['mlmReferrerUid'] ?? 'Top / Direct',
-      faceImage: map['faceImage'] ?? '',
+      // Cleaned here so the literal strings 'null' / 'undefined' that some old
+      // records hold never masquerade as a real photo.
+      faceImage: UserImage.fromMap(map),
       cnicNumber: map['cnicNumber'] ?? 'N/A',
       walletBalance: (map['walletBalance'] ?? 0.0).toDouble(),
       shoppingWalletBalance: (map['shoppingWalletBalance'] ?? 0.0).toDouble(),
